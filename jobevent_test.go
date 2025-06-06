@@ -1,3 +1,6 @@
+//go:build integration
+// +build integration
+
 package orbital_test
 
 import (

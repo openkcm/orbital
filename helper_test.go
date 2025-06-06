@@ -1,6 +1,10 @@
+//go:build integration
+// +build integration
+
 package orbital_test
 
 import (
+	stdsql "database/sql"
 	"fmt"
 	"os"
 	"testing"
@@ -9,8 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/lib/pq"
-
-	stdsql "database/sql"
 
 	"github.com/openkcm/orbital/store/sql"
 )
