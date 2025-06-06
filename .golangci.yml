@@ -1,0 +1,71 @@
+version: "2"
+linters:
+  default: all
+  disable:
+    - depguard
+    - exhaustruct
+    - ginkgolinter
+    - gochecknoglobals
+    - gochecknoinits
+    - godox
+    - lll
+    - musttag
+    - nlreturn
+    - protogetter
+    - tagalign
+    - varnamelen
+    - wrapcheck
+    - wsl
+    - mnd
+    - ireturn
+  settings:
+    paralleltest:
+      ignore-missing: true
+      ignore-missing-subtests: true
+    tagliatelle:
+      case:
+        rules:
+          json: camel
+        use-field-name: true
+    testifylint:
+      disable:
+        - require-error
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - dupl
+          - funlen
+          - goconst
+          - maintidx
+        path: _test.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - goimports
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/openkcm/orbital)
+        - blank
+        - dot
+        - alias
+        - localmodule
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
