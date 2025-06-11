@@ -50,7 +50,7 @@ type (
 		Done bool
 		// IsAborted indicates whether the job needs to be aborted.
 		IsAborted bool
-		// AbortedErrorMessage is the error message if the job was aborted.
+		// AbortedErrorMessage provides an error message if the job is aborted.
 		AbortedErrorMessage string
 	}
 
