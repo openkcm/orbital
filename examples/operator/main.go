@@ -47,7 +47,7 @@ func main() {
 func handleExample(_ context.Context, _ orbital.HandlerRequest) (orbital.HandlerResponse, error) {
 	return orbital.HandlerResponse{
 		WorkingState:      []byte("not done yet"),
-		Result:            orbital.ResultContinue,
+		Result:            orbital.ResultProcessing,
 		ReconcileAfterSec: 10,
 	}, nil
 }

@@ -6,7 +6,7 @@ package orbital;
 enum TaskStatus {
   PROCESSING = 0;   // operator is still working on the task
   DONE       = 1;   // operator has completed the task
-  ERROR      = 2;   // operator encountered an error
+  FAILED      = 2;   // operator encountered an error
 }
 
 // TaskResponse is the response object received from the operator.

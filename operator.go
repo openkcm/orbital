@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	ResultFailed   Result = "FAILED"
-	ResultContinue Result = "CONTINUE"
-	ResultDone     Result = "DONE"
+	ResultFailed     Result = "FAILED"
+	ResultProcessing Result = "PROCESSING"
+	ResultDone       Result = "DONE"
 )
 
 type (
