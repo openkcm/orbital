@@ -48,6 +48,10 @@ type (
 		Cursor TaskResolverCursor
 		// Done indicates whether the resolution process is complete.
 		Done bool
+		// IsAborted indicates whether the job needs to be aborted.
+		IsAborted bool
+		// AbortedErrorMessage provides an error message if the job is aborted.
+		AbortedErrorMessage string
 	}
 
 	// TaskResolverFunc is a  function type that resolves targets for the creation tasks for a job and the cursor.
@@ -307,6 +311,12 @@ func (m *Manager) createTask(ctx context.Context) error {
 			// NOTE: here we update the job to change the updated_at timestamp in order to spread the fetching of jobs.
 			return repo.updateJob(ctx, job)
 		}
+		if resolverResult.IsAborted {
+			job.Status = JobStatusAborted
+			job.ErrorMessage = resolverResult.AbortedErrorMessage
+			return repo.updateJob(ctx, job)
+		}
+
 		jobCursor.Cursor = resolverResult.Cursor
 		_, err = repo.createTasks(ctx, newTasks(job.ID, resolverResult.TaskInfos))
 		if err != nil {
