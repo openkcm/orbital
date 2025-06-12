@@ -42,9 +42,10 @@ type TestEnvironment struct {
 
 // ManagerConfig holds configuration for the manager.
 type ManagerConfig struct {
-	TaskResolver   orbital.TaskResolverFunc
-	JobConfirmFunc orbital.JobConfirmFunc
-	TargetClients  map[string]orbital.Initiator
+	TaskResolver         orbital.TaskResolverFunc
+	JobConfirmFunc       orbital.JobConfirmFunc
+	TargetClients        map[string]orbital.Initiator
+	TerminationEventFunc orbital.TerminationEventFunc
 }
 
 // OperatorConfig holds configuration for the operator.
@@ -174,6 +175,10 @@ func createManager(t *testing.T, ctx context.Context, env *TestEnvironment, conf
 	manager, err := orbital.NewManager(repo, config.TaskResolver, managerOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create manager: %w", err)
+	}
+
+	if config.TerminationEventFunc != nil {
+		manager.JobTerminationEventFunc = config.TerminationEventFunc
 	}
 
 	manager.Config.ConfirmJobWorkerConfig.ExecInterval = 200 * time.Millisecond
@@ -343,7 +348,6 @@ func waitForTaskExecution(ctx context.Context, manager *orbital.Manager, jobID u
 			return ctx.Err()
 		case <-ticker.C:
 			if time.Since(startTime) > timeout {
-				// Get task details for debugging
 				tasks, err := manager.ListTasks(ctx, orbital.ListTasksQuery{
 					JobID: jobID,
 					Limit: 10,
@@ -381,6 +385,38 @@ func waitForTaskExecution(ctx context.Context, manager *orbital.Manager, jobID u
 			}
 
 			if allTasksReady {
+				return nil
+			}
+		}
+	}
+}
+
+// waitForJobEventProcessed waits for a job event to be created and processed (isNotified = true).
+func waitForJobEventProcessed(ctx context.Context, env *TestEnvironment, jobID uuid.UUID, timeout time.Duration) error {
+	startTime := time.Now()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	repo := orbital.NewRepository(env.Store)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if time.Since(startTime) > timeout {
+				return fmt.Errorf("timeout after %v waiting for job event to be processed for job %s", timeout, jobID)
+			}
+
+			isNotified := true
+			_, found, err := orbital.GetRepoJobEvent(repo)(ctx, orbital.JobEventQuery{
+				ID:         jobID,
+				IsNotified: &isNotified,
+			})
+			if err != nil {
+				continue
+			}
+			if found {
 				return nil
 			}
 		}
