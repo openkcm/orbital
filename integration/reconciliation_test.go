@@ -1,62 +1,63 @@
+//go:build integration
+// +build integration
+
 package integration
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/openkcm/orbital"
 )
 
-// TestMinimalFlow tests the basic flow: create job → create 1 task → job processing → job done
-func TestMinimalFlow(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	defer cancel()
+// TestReconciliationFlows runs all reconciliation tests as subtests.
+func TestReconciliationFlows(t *testing.T) {
+	tests := []struct {
+		name string
+		test func(t *testing.T, ctx context.Context, env *TestEnvironment)
+	}{
+		{"Reconcile", testReconcile},
+		{"Reconcile With MultipleTasks", testReconcileWithMultipleTasks},
+		{"TaskFailureScenario", testTaskFailureScenario},
+		{"ReconcileAfterSec", testReconcileAfterSec},
+		{"MultipleRequestResponseCycles", testMultipleRequestResponseCycles},
+	}
 
-	// Setup test environment
-	env, err := setupTestEnvironment(t, ctx)
-	require.NoError(t, err, "failed to setup test environment")
-	defer func() {
-		// Cancel context first to stop all operations
-		cancel()
-		// Give time for graceful shutdown
-		time.Sleep(500 * time.Millisecond)
-		// Then cleanup containers
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cleanupCancel()
-		env.Cleanup(cleanupCtx)
-	}()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runTestWithEnvironment(t, tt.test)
+		})
+	}
+}
 
-	// Define task type and target
+// testReconcile tests the basic flow: create job → create 1 task → job processing → job done.
+func testReconcile(t *testing.T, ctx context.Context, env *TestEnvironment) {
 	const (
 		taskType   = "test-task"
 		taskTarget = "test-target"
 	)
 
-	// Create unique queue names for this test to avoid conflicts
-	tasksQueue := "tasks-queue-minimal"
-	responsesQueue := "responses-queue-minimal"
+	tasksQueue := fmt.Sprintf("tasks-minimal-%d", time.Now().UnixNano())
+	responsesQueue := fmt.Sprintf("responses-minimal-%d", time.Now().UnixNano())
 
-	// Create AMQP clients for manager and operator
-	// Manager sends to tasks queue, receives from responses queue
 	managerClient, err := createAMQPClient(ctx, env, env.RabbitMQURL, tasksQueue, responsesQueue)
-	require.NoError(t, err, "failed to create manager AMQP client")
+	require.NoError(t, err)
 
-	// Operator receives from tasks queue, sends to responses queue
 	operatorClient, err := createAMQPClient(ctx, env, env.RabbitMQURL, responsesQueue, tasksQueue)
-	require.NoError(t, err, "failed to create operator AMQP client")
+	require.NoError(t, err)
 
-	// Create a channel to track operator execution (use once to avoid multiple calls)
 	operatorDone := make(chan struct{})
 	var operatorOnce sync.Once
 
-	// Configure and create manager
 	managerConfig := ManagerConfig{
 		TaskResolver: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			t.Logf("TaskResolver called for job %s", job.ID)
@@ -68,14 +69,12 @@ func TestMinimalFlow(t *testing.T) {
 						Target: taskTarget,
 					},
 				},
-				Done: true, // All tasks resolved
+				Done: true,
 			}, nil
 		},
 		JobConfirmFunc: func(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
 			t.Logf("JobConfirmFunc called for job %s", job.ID)
-			return orbital.JobConfirmResult{
-				Confirmed: true,
-			}, nil
+			return orbital.JobConfirmResult{Confirmed: true}, nil
 		},
 		TargetClients: map[string]orbital.Initiator{
 			taskTarget: managerClient,
@@ -83,13 +82,11 @@ func TestMinimalFlow(t *testing.T) {
 	}
 
 	manager, err := createManager(t, ctx, env, managerConfig)
-	require.NoError(t, err, "failed to create manager")
+	require.NoError(t, err)
 
-	// Configure and create operator
 	operatorConfig := OperatorConfig{
 		Handlers: map[string]orbital.Handler{
 			taskType: func(ctx context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
-				// Use sync.Once to ensure we only signal completion once, even if called multiple times
 				operatorOnce.Do(func() {
 					close(operatorDone)
 				})
@@ -98,12 +95,8 @@ func TestMinimalFlow(t *testing.T) {
 				assert.Equal(t, taskType, req.Type)
 				assert.Equal(t, []byte("task-data"), req.Data)
 
-				// Simulate some work
-				select {
-				case <-ctx.Done():
-					return orbital.HandlerResponse{}, ctx.Err()
-				case <-time.After(100 * time.Millisecond):
-				}
+				// Add delay to avoid race condition with reconcile transaction
+				time.Sleep(100 * time.Millisecond)
 
 				return orbital.HandlerResponse{
 					WorkingState: []byte("task completed"),
@@ -114,13 +107,11 @@ func TestMinimalFlow(t *testing.T) {
 	}
 
 	_, err = createOperator(t, ctx, operatorClient, operatorConfig)
-	require.NoError(t, err, "failed to create operator")
+	require.NoError(t, err)
 
-	// Create a test job
 	job, err := createTestJob(t, ctx, manager, "test-job", []byte("job-data"))
-	require.NoError(t, err, "failed to create job")
+	require.NoError(t, err)
 
-	// Wait for operator to be called (with timeout)
 	select {
 	case <-operatorDone:
 		t.Log("Operator completed successfully")
@@ -128,53 +119,39 @@ func TestMinimalFlow(t *testing.T) {
 		t.Fatal("Operator was not called within timeout")
 	}
 
-	// Wait for job to complete
-	err = waitForJobStatus(t, ctx, manager, job.ID, orbital.JobStatusDone, 30*time.Second)
-	require.NoError(t, err, "job did not complete in time")
+	err = waitForJobStatus(ctx, manager, job.ID, orbital.JobStatusDone, 30*time.Second)
+	require.NoError(t, err)
 
-	// Verify final job state
+	err = waitForTaskExecution(ctx, manager, job.ID, 1, 15*time.Second)
+	require.NoError(t, err)
+
 	finalJob, found, err := manager.GetJob(ctx, job.ID)
-	require.NoError(t, err, "failed to get final job")
-	require.True(t, found, "job not found")
+	require.NoError(t, err)
+	require.True(t, found)
 	assert.Equal(t, orbital.JobStatusDone, finalJob.Status)
 	assert.Empty(t, finalJob.ErrorMessage)
 
-	// Verify task was created and completed
 	tasks, err := manager.ListTasks(ctx, orbital.ListTasksQuery{
 		JobID: job.ID,
 		Limit: 10,
 	})
-	require.NoError(t, err, "failed to list tasks")
-	assert.Len(t, tasks, 1, "expected exactly one task")
+	require.NoError(t, err)
+	require.Len(t, tasks, 1)
 
-	if len(tasks) > 0 {
-		task := tasks[0]
-		assert.Equal(t, orbital.TaskStatusDone, task.Status)
-		assert.Equal(t, taskType, task.Type)
-		assert.Equal(t, taskTarget, task.Target)
-		assert.Equal(t, []byte("task-data"), task.Data)
-		assert.Equal(t, []byte("task completed"), task.WorkingState)
-	}
+	task := tasks[0]
+	assert.Equal(t, orbital.TaskStatusDone, task.Status)
+	assert.Equal(t, taskType, task.Type)
+	assert.Equal(t, taskTarget, task.Target)
+	assert.Equal(t, []byte("task-data"), task.Data)
+	assert.Equal(t, []byte("task completed"), task.WorkingState)
 
-	t.Log("Test completed successfully!")
+	assert.Equal(t, int64(1), task.SentCount, "task should be sent exactly once")
+	assert.Positive(t, task.LastSentAt, "last_sent_at should be set")
+	assert.Equal(t, int64(0), task.ReconcileAfterSec, "reconcile_after_sec should be 0 for completed task")
 }
 
-// TestMultipleTasksFlow tests a job with multiple tasks
-func TestMultipleTasksFlow(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	defer cancel()
-
-	// Setup test environment
-	env, err := setupTestEnvironment(t, ctx)
-	require.NoError(t, err, "failed to setup test environment")
-	defer func() {
-		cancel()
-		time.Sleep(500 * time.Millisecond)
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cleanupCancel()
-		env.Cleanup(cleanupCtx)
-	}()
-
+// testReconcileWithMultipleTasks tests a job with multiple tasks.
+func testReconcileWithMultipleTasks(t *testing.T, ctx context.Context, env *TestEnvironment) {
 	const (
 		taskType1   = "task-type-1"
 		taskType2   = "task-type-2"
@@ -182,13 +159,11 @@ func TestMultipleTasksFlow(t *testing.T) {
 		taskTarget2 = "target-2"
 	)
 
-	// Create unique queue names
-	queue1 := "queue-1-multi"
-	response1 := "response-1-multi"
-	queue2 := "queue-2-multi"
-	response2 := "response-2-multi"
+	queue1 := fmt.Sprintf("queue-1-multi-%d", time.Now().UnixNano())
+	response1 := fmt.Sprintf("response-1-multi-%d", time.Now().UnixNano())
+	queue2 := fmt.Sprintf("queue-2-multi-%d", time.Now().UnixNano())
+	response2 := fmt.Sprintf("response-2-multi-%d", time.Now().UnixNano())
 
-	// Create AMQP clients
 	client1, err := createAMQPClient(ctx, env, env.RabbitMQURL, queue1, response1)
 	require.NoError(t, err)
 	operatorClient1, err := createAMQPClient(ctx, env, env.RabbitMQURL, response1, queue1)
@@ -199,15 +174,11 @@ func TestMultipleTasksFlow(t *testing.T) {
 	operatorClient2, err := createAMQPClient(ctx, env, env.RabbitMQURL, response2, queue2)
 	require.NoError(t, err)
 
-	// Track operator executions with sync.Once to handle potential retries
 	var operator1Once, operator2Once sync.Once
 	operator1Done := make(chan struct{})
 	operator2Done := make(chan struct{})
-
-	// Channel to track when both are done
 	allOperatorsDone := make(chan struct{})
 
-	// Configure manager with multiple tasks
 	managerConfig := ManagerConfig{
 		TaskResolver: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			return orbital.TaskResolverResult{
@@ -238,14 +209,15 @@ func TestMultipleTasksFlow(t *testing.T) {
 	manager, err := createManager(t, ctx, env, managerConfig)
 	require.NoError(t, err)
 
-	// Create operators for each task type
 	operatorConfig1 := OperatorConfig{
 		Handlers: map[string]orbital.Handler{
 			taskType1: func(ctx context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
 				operator1Once.Do(func() {
 					close(operator1Done)
 				})
-				t.Logf("Handler 1 called for task %s", req.TaskID)
+
+				time.Sleep(100 * time.Millisecond)
+
 				return orbital.HandlerResponse{
 					WorkingState: []byte("task 1 done"),
 					Result:       orbital.ResultDone,
@@ -262,7 +234,9 @@ func TestMultipleTasksFlow(t *testing.T) {
 				operator2Once.Do(func() {
 					close(operator2Done)
 				})
-				t.Logf("Handler 2 called for task %s", req.TaskID)
+
+				time.Sleep(100 * time.Millisecond)
+
 				return orbital.HandlerResponse{
 					WorkingState: []byte("task 2 done"),
 					Result:       orbital.ResultDone,
@@ -273,18 +247,15 @@ func TestMultipleTasksFlow(t *testing.T) {
 	_, err = createOperator(t, ctx, operatorClient2, operatorConfig2)
 	require.NoError(t, err)
 
-	// Start a goroutine to signal when both operators are done
 	go func() {
 		<-operator1Done
 		<-operator2Done
 		close(allOperatorsDone)
 	}()
 
-	// Create job
 	job, err := createTestJob(t, ctx, manager, "multi-task-job", []byte("job-data"))
 	require.NoError(t, err)
 
-	// Wait for all operators to complete
 	select {
 	case <-allOperatorsDone:
 		t.Log("All operators completed")
@@ -292,11 +263,12 @@ func TestMultipleTasksFlow(t *testing.T) {
 		t.Fatal("Not all operators completed within timeout")
 	}
 
-	// Wait for completion
-	err = waitForJobStatus(t, ctx, manager, job.ID, orbital.JobStatusDone, 30*time.Second)
+	err = waitForJobStatus(ctx, manager, job.ID, orbital.JobStatusDone, 30*time.Second)
 	require.NoError(t, err)
 
-	// Verify all tasks completed
+	err = waitForTaskExecution(ctx, manager, job.ID, 1, 20*time.Second)
+	require.NoError(t, err)
+
 	tasks, err := manager.ListTasks(ctx, orbital.ListTasksQuery{
 		JobID: job.ID,
 		Limit: 10,
@@ -304,46 +276,44 @@ func TestMultipleTasksFlow(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, tasks, 2)
 
+	tasksByType := make(map[string]orbital.Task)
 	for _, task := range tasks {
-		assert.Equal(t, orbital.TaskStatusDone, task.Status)
+		tasksByType[task.Type] = task
 	}
+
+	task1, ok := tasksByType[taskType1]
+	require.True(t, ok)
+	assert.Equal(t, orbital.TaskStatusDone, task1.Status)
+	assert.Equal(t, []byte("data-1"), task1.Data)
+	assert.Equal(t, []byte("task 1 done"), task1.WorkingState)
+	assert.Equal(t, int64(1), task1.SentCount)
+
+	task2, ok := tasksByType[taskType2]
+	require.True(t, ok)
+	assert.Equal(t, orbital.TaskStatusDone, task2.Status)
+	assert.Equal(t, []byte("data-2"), task2.Data)
+	assert.Equal(t, []byte("task 2 done"), task2.WorkingState)
+	assert.Equal(t, int64(1), task2.SentCount)
 }
 
-// TestTaskFailureScenario tests how the system handles task failures
-func TestTaskFailureScenario(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	defer cancel()
-
-	env, err := setupTestEnvironment(t, ctx)
-	require.NoError(t, err)
-	defer func() {
-		cancel()
-		time.Sleep(500 * time.Millisecond)
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cleanupCancel()
-		env.Cleanup(cleanupCtx)
-	}()
-
+// testTaskFailureScenario tests how the system handles task failures.
+func testTaskFailureScenario(t *testing.T, ctx context.Context, env *TestEnvironment) {
 	const (
 		taskType   = "failing-task"
 		taskTarget = "target"
 	)
 
-	// Create unique queue names
-	tasksQueue := "tasks-failure"
-	responsesQueue := "responses-failure"
+	tasksQueue := fmt.Sprintf("tasks-failure-%d", time.Now().UnixNano())
+	responsesQueue := fmt.Sprintf("responses-failure-%d", time.Now().UnixNano())
 
-	// Create AMQP clients
 	managerClient, err := createAMQPClient(ctx, env, env.RabbitMQURL, tasksQueue, responsesQueue)
 	require.NoError(t, err)
 	operatorClient, err := createAMQPClient(ctx, env, env.RabbitMQURL, responsesQueue, tasksQueue)
 	require.NoError(t, err)
 
-	// Track operator execution
 	operatorDone := make(chan struct{})
 	var operatorOnce sync.Once
 
-	// Configure manager
 	managerConfig := ManagerConfig{
 		TaskResolver: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			return orbital.TaskResolverResult{
@@ -368,14 +338,15 @@ func TestTaskFailureScenario(t *testing.T) {
 	manager, err := createManager(t, ctx, env, managerConfig)
 	require.NoError(t, err)
 
-	// Create operator that fails the task
 	operatorConfig := OperatorConfig{
 		Handlers: map[string]orbital.Handler{
 			taskType: func(ctx context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
 				operatorOnce.Do(func() {
 					close(operatorDone)
 				})
-				t.Logf("Handler returning failure for task %s", req.TaskID)
+
+				time.Sleep(100 * time.Millisecond)
+
 				return orbital.HandlerResponse{
 					WorkingState: []byte("task failed"),
 					Result:       orbital.ResultFailed,
@@ -386,11 +357,9 @@ func TestTaskFailureScenario(t *testing.T) {
 	_, err = createOperator(t, ctx, operatorClient, operatorConfig)
 	require.NoError(t, err)
 
-	// Create job
 	job, err := createTestJob(t, ctx, manager, "failing-job", []byte("job-data"))
 	require.NoError(t, err)
 
-	// Wait for operator to be called
 	select {
 	case <-operatorDone:
 		t.Log("Operator completed with failure as expected")
@@ -398,55 +367,51 @@ func TestTaskFailureScenario(t *testing.T) {
 		t.Fatal("Operator was not called within timeout")
 	}
 
-	// Wait for job to fail
-	err = waitForJobStatus(t, ctx, manager, job.ID, orbital.JobStatusFailed, 30*time.Second)
+	err = waitForJobStatus(ctx, manager, job.ID, orbital.JobStatusFailed, 30*time.Second)
 	require.NoError(t, err)
 
-	// Verify job failed with correct error
+	err = waitForTaskExecution(ctx, manager, job.ID, 1, 15*time.Second)
+	require.NoError(t, err)
+
 	finalJob, found, err := manager.GetJob(ctx, job.ID)
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, orbital.JobStatusFailed, finalJob.Status)
 	assert.Equal(t, orbital.ErrMsgFailedTasks, finalJob.ErrorMessage)
+
+	tasks, err := manager.ListTasks(ctx, orbital.ListTasksQuery{
+		JobID: job.ID,
+		Limit: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, tasks, 1)
+
+	task := tasks[0]
+	assert.Equal(t, orbital.TaskStatusFailed, task.Status)
+	assert.Equal(t, []byte("task failed"), task.WorkingState)
+	assert.Equal(t, int64(1), task.SentCount)
 }
 
-// TestReconcileAfterSec tests the reconciliation delay functionality
-func TestReconcileAfterSec(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	defer cancel()
-
-	env, err := setupTestEnvironment(t, ctx)
-	require.NoError(t, err)
-	defer func() {
-		cancel()
-		time.Sleep(500 * time.Millisecond)
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cleanupCancel()
-		env.Cleanup(cleanupCtx)
-	}()
-
+// testReconcileAfterSec tests the reconciliation delay functionality.
+func testReconcileAfterSec(t *testing.T, ctx context.Context, env *TestEnvironment) {
 	const (
 		taskType   = "reconcile-task"
 		taskTarget = "target"
 	)
 
-	// Track handler invocations
 	var handlerCalls int32
-	var firstCallTime, secondCallTime time.Time
+	handlerCallTimes := make([]time.Time, 0, 3)
 	var mu sync.Mutex
 	operatorDone := make(chan struct{})
 
-	// Create unique queue names
-	tasksQueue := "tasks-reconcile"
-	responsesQueue := "responses-reconcile"
+	tasksQueue := fmt.Sprintf("tasks-reconcile-%d", time.Now().UnixNano())
+	responsesQueue := fmt.Sprintf("responses-reconcile-%d", time.Now().UnixNano())
 
-	// Create AMQP clients
 	managerClient, err := createAMQPClient(ctx, env, env.RabbitMQURL, tasksQueue, responsesQueue)
 	require.NoError(t, err)
 	operatorClient, err := createAMQPClient(ctx, env, env.RabbitMQURL, responsesQueue, tasksQueue)
 	require.NoError(t, err)
 
-	// Configure manager
 	managerConfig := ManagerConfig{
 		TaskResolver: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			return orbital.TaskResolverResult{
@@ -471,19 +436,28 @@ func TestReconcileAfterSec(t *testing.T) {
 	manager, err := createManager(t, ctx, env, managerConfig)
 	require.NoError(t, err)
 
-	// Create operator that requests reconciliation
+	var taskID atomic.Value
+
 	operatorConfig := OperatorConfig{
 		Handlers: map[string]orbital.Handler{
 			taskType: func(ctx context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
 				mu.Lock()
 				defer mu.Unlock()
 
+				if taskID.Load() == nil {
+					taskID.Store(req.TaskID)
+				}
+
 				calls := atomic.AddInt32(&handlerCalls, 1)
-				t.Logf("Handler call #%d for task %s", calls, req.TaskID)
+				handlerCallTimes = append(handlerCallTimes, time.Now())
+				t.Logf("Handler call #%d for task %s at %v", calls, req.TaskID, time.Now())
+
+				time.Sleep(100 * time.Millisecond)
+
+				var reconcileAfterSec int64
 
 				if calls == 1 {
-					firstCallTime = time.Now()
-					// Request reconciliation after 2 seconds
+					reconcileAfterSec = time.Now().Unix() + 2
 					return orbital.HandlerResponse{
 						WorkingState:      []byte("in progress"),
 						Result:            orbital.ResultProcessing,
@@ -491,83 +465,80 @@ func TestReconcileAfterSec(t *testing.T) {
 					}, nil
 				}
 
-				secondCallTime = time.Now()
-				close(operatorDone)
-				// Complete the task
-				return orbital.HandlerResponse{
-					WorkingState: []byte("completed"),
-					Result:       orbital.ResultDone,
-				}, nil
+				if calls == 2 {
+					if time.Now().Unix() < reconcileAfterSec {
+						t.Errorf("reconciliation should happen after at least 2 seconds, but was called too early")
+					}
+					close(operatorDone)
+					return orbital.HandlerResponse{
+						WorkingState: []byte("completed"),
+						Result:       orbital.ResultDone,
+					}, nil
+				}
+
+				t.Errorf("Unexpected handler call #%d", calls)
+				return orbital.HandlerResponse{}, errors.New("unexpected call")
 			},
 		},
 	}
 	_, err = createOperator(t, ctx, operatorClient, operatorConfig)
 	require.NoError(t, err)
 
-	// Create job
 	job, err := createTestJob(t, ctx, manager, "reconcile-job", []byte("job-data"))
 	require.NoError(t, err)
 
-	// Wait for second handler call
 	select {
 	case <-operatorDone:
 		t.Log("Operator completed after reconciliation delay")
-	case <-time.After(60 * time.Second):
+	case <-time.After(45 * time.Second):
 		t.Fatal("Operator second call did not happen within timeout")
 	}
 
-	// Wait for job completion
-	err = waitForJobStatus(t, ctx, manager, job.ID, orbital.JobStatusDone, 30*time.Second)
+	err = waitForJobStatus(ctx, manager, job.ID, orbital.JobStatusDone, 30*time.Second)
 	require.NoError(t, err)
 
-	// Verify handler was called twice
-	finalCalls := atomic.LoadInt32(&handlerCalls)
-	assert.GreaterOrEqual(t, finalCalls, int32(2), "handler should be called at least twice")
+	err = waitForTaskExecution(ctx, manager, job.ID, 2, 20*time.Second)
+	require.NoError(t, err)
 
-	// Verify reconciliation delay
-	if finalCalls >= 2 && !secondCallTime.IsZero() && !firstCallTime.IsZero() {
-		delay := secondCallTime.Sub(firstCallTime)
-		t.Logf("Reconciliation delay: %v", delay)
-		assert.True(t, delay >= 2*time.Second, "reconciliation should happen after at least 2 seconds")
+	finalCalls := atomic.LoadInt32(&handlerCalls)
+	assert.Equal(t, int32(2), finalCalls, "handler should be called exactly twice")
+
+	if tid := taskID.Load(); tid != nil {
+		tasks, err := manager.ListTasks(ctx, orbital.ListTasksQuery{
+			JobID: job.ID,
+			Limit: 10,
+		})
+		require.NoError(t, err)
+		require.Len(t, tasks, 1)
+
+		task := tasks[0]
+		assert.Equal(t, tid.(uuid.UUID), task.ID)
+		assert.Equal(t, orbital.TaskStatusDone, task.Status)
+		assert.Equal(t, int64(2), task.SentCount, "task should be sent exactly twice")
+		assert.Equal(t, []byte("completed"), task.WorkingState)
+		assert.Equal(t, int64(0), task.ReconcileAfterSec, "reconcile_after_sec should be 0 for completed task")
 	}
 }
 
-// TestMultipleTaskRequestResponseCycles tests tasks that complete after multiple request/response cycles
-func TestMultipleTaskRequestResponseCycles(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-	defer cancel()
-
-	env, err := setupTestEnvironment(t, ctx)
-	require.NoError(t, err)
-	defer func() {
-		cancel()
-		time.Sleep(500 * time.Millisecond)
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cleanupCancel()
-		env.Cleanup(cleanupCtx)
-	}()
-
+// testMultipleRequestResponseCycles tests tasks that complete after multiple request/response cycles.
+func testMultipleRequestResponseCycles(t *testing.T, ctx context.Context, env *TestEnvironment) {
 	const (
 		taskType   = "multi-cycle-task"
 		taskTarget = "target"
 	)
 
-	// Track handler invocations
 	var handlerCalls int32
 	operatorDone := make(chan struct{})
-	expectedCycles := int32(3) // Task will take 3 cycles to complete
+	expectedCycles := int64(3)
 
-	// Create unique queue names
-	tasksQueue := "tasks-multi-cycle"
-	responsesQueue := "responses-multi-cycle"
+	tasksQueue := fmt.Sprintf("tasks-multi-cycle-%d", time.Now().UnixNano())
+	responsesQueue := fmt.Sprintf("responses-multi-cycle-%d", time.Now().UnixNano())
 
-	// Create AMQP clients
 	managerClient, err := createAMQPClient(ctx, env, env.RabbitMQURL, tasksQueue, responsesQueue)
 	require.NoError(t, err)
 	operatorClient, err := createAMQPClient(ctx, env, env.RabbitMQURL, responsesQueue, tasksQueue)
 	require.NoError(t, err)
 
-	// Configure manager
 	managerConfig := ManagerConfig{
 		TaskResolver: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			return orbital.TaskResolverResult{
@@ -592,30 +563,36 @@ func TestMultipleTaskRequestResponseCycles(t *testing.T) {
 	manager, err := createManager(t, ctx, env, managerConfig)
 	require.NoError(t, err)
 
-	// Create operator that processes through multiple cycles
+	workingStates := make([][]byte, 0, expectedCycles)
+	var mu sync.Mutex
+
 	operatorConfig := OperatorConfig{
 		Handlers: map[string]orbital.Handler{
 			taskType: func(ctx context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+				mu.Lock()
+				defer mu.Unlock()
+
 				calls := atomic.AddInt32(&handlerCalls, 1)
 				t.Logf("Handler call #%d for task %s", calls, req.TaskID)
 
-				if calls < expectedCycles {
-					// Continue processing - not done yet
+				time.Sleep(100 * time.Millisecond)
+
+				if int64(calls) < expectedCycles {
+					state := []byte(fmt.Sprintf("cycle %d in progress", calls))
+					workingStates = append(workingStates, state)
 					return orbital.HandlerResponse{
-						WorkingState:      []byte(fmt.Sprintf("cycle %d in progress", calls)),
+						WorkingState:      state,
 						Result:            orbital.ResultProcessing,
-						ReconcileAfterSec: 1, // Quick reconciliation for testing
+						ReconcileAfterSec: 1,
 					}, nil
 				}
 
-				// Final cycle - complete the task
-				select {
-				case operatorDone <- struct{}{}:
-				default:
-				}
+				finalState := []byte("all cycles completed")
+				workingStates = append(workingStates, finalState)
+				close(operatorDone)
 
 				return orbital.HandlerResponse{
-					WorkingState: []byte("all cycles completed"),
+					WorkingState: finalState,
 					Result:       orbital.ResultDone,
 				}, nil
 			},
@@ -624,27 +601,25 @@ func TestMultipleTaskRequestResponseCycles(t *testing.T) {
 	_, err = createOperator(t, ctx, operatorClient, operatorConfig)
 	require.NoError(t, err)
 
-	// Create job
 	job, err := createTestJob(t, ctx, manager, "multi-cycle-job", []byte("job-data"))
 	require.NoError(t, err)
 
-	// Wait for final handler call
 	select {
 	case <-operatorDone:
 		t.Log("Operator completed after multiple cycles")
-	case <-time.After(60 * time.Second):
+	case <-time.After(45 * time.Second):
 		t.Fatal("Operator did not complete within timeout")
 	}
 
-	// Wait for job completion
-	err = waitForJobStatus(t, ctx, manager, job.ID, orbital.JobStatusDone, 30*time.Second)
+	err = waitForJobStatus(ctx, manager, job.ID, orbital.JobStatusDone, 30*time.Second)
 	require.NoError(t, err)
 
-	// Verify handler was called the expected number of times
-	finalCalls := atomic.LoadInt32(&handlerCalls)
-	assert.GreaterOrEqual(t, finalCalls, expectedCycles, "handler should be called at least %d times", expectedCycles)
+	err = waitForTaskExecution(ctx, manager, job.ID, expectedCycles, 25*time.Second)
+	require.NoError(t, err)
 
-	// Verify final task state
+	finalCalls := atomic.LoadInt32(&handlerCalls)
+	assert.Equal(t, expectedCycles, int64(finalCalls), "handler should be called exactly %d times", expectedCycles)
+
 	tasks, err := manager.ListTasks(ctx, orbital.ListTasksQuery{
 		JobID: job.ID,
 		Limit: 10,
@@ -655,4 +630,9 @@ func TestMultipleTaskRequestResponseCycles(t *testing.T) {
 	task := tasks[0]
 	assert.Equal(t, orbital.TaskStatusDone, task.Status)
 	assert.Equal(t, []byte("all cycles completed"), task.WorkingState)
+	assert.Equal(t, expectedCycles, task.SentCount, "task should be sent %d times", expectedCycles)
+	assert.Positive(t, task.LastSentAt, "last_sent_at should be set")
+	assert.Equal(t, int64(0), task.ReconcileAfterSec, "reconcile_after_sec should be 0 for completed task")
+
+	assert.Len(t, workingStates, int(expectedCycles), "should have tracked all working states")
 }
