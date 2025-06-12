@@ -391,9 +391,8 @@ func jobCursor(ctx context.Context, repo Repository, jobID uuid.UUID) (JobCursor
 
 // reconcile processes a job that is in state READY or PROCESSING.
 // It sends a task request for each task of the job that is in state CREATED or PROCESSING.
-// It terminates the job if any of its tasks have failed or all tasks are done.
-//
-//nolint:funlen
+// It terminates the job if all tasks are processed.
+// It updates the job status to DONE if all tasks are processed successfully or to FAILED if any task failed.
 func (m *Manager) reconcile(ctx context.Context) error {
 	return m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
 		job, err := m.getJobForReconcile(ctx, repo)
@@ -406,36 +405,30 @@ func (m *Manager) reconcile(ctx context.Context) error {
 		}
 		job.Status = JobStatusProcessing
 
+		// Check if there are any tasks not terminated yet,
+		// ignoring the reconcile ready flag.
 		tasks, err := repo.listTasks(ctx, ListTasksQuery{
 			JobID:    job.ID,
+			StatusIn: []TaskStatus{TaskStatusCreated, TaskStatusProcessing},
 			Limit:    1,
-			StatusIn: []TaskStatus{TaskStatusFailed},
-		})
-		if err != nil {
-			return err
-		}
-
-		if len(tasks) > 0 {
-			job.Status = JobStatusFailed
-			job.ErrorMessage = ErrMsgFailedTasks
-			return m.updateJobAndCreateJobEvent(ctx, repo, job)
-		}
-
-		tasks, err = repo.listTasks(ctx, ListTasksQuery{
-			JobID:              job.ID,
-			RetrievalModeQueue: true,
-			IsReconcileReady:   true,
-			Limit:              m.Config.TaskLimitNum,
-			StatusIn:           []TaskStatus{TaskStatusCreated, TaskStatusProcessing},
-			OrderByUpdatedAt:   true,
 		})
 		if err != nil {
 			return err
 		}
 
 		if len(tasks) == 0 {
-			job.Status = JobStatusDone
-			return m.updateJobAndCreateJobEvent(ctx, repo, job)
+			return m.terminateJob(ctx, repo, job)
+		}
+
+		tasks, err = repo.listTasks(ctx, ListTasksQuery{
+			JobID:            job.ID,
+			IsReconcileReady: true,
+			StatusIn:         []TaskStatus{TaskStatusCreated, TaskStatusProcessing},
+			OrderByUpdatedAt: true,
+			Limit:            m.Config.TaskLimitNum,
+		})
+		if err != nil {
+			return err
 		}
 
 		var wg sync.WaitGroup
@@ -460,6 +453,7 @@ func (m *Manager) reconcile(ctx context.Context) error {
 	})
 }
 
+// getJobForReconcile retrieves the next job that is ready for reconciliation.
 func (m *Manager) getJobForReconcile(ctx context.Context, repo Repository) (Job, error) {
 	jobs, err := repo.listJobs(ctx, ListJobsQuery{
 		StatusIn:           []JobStatus{JobStatusReady, JobStatusProcessing},
@@ -477,6 +471,26 @@ func (m *Manager) getJobForReconcile(ctx context.Context, repo Repository) (Job,
 	}
 
 	return jobs[0], nil
+}
+
+// terminateJob updates the job status to DONE or FAILED based on the status of its tasks.
+func (m *Manager) terminateJob(ctx context.Context, repo Repository, job Job) error {
+	job.Status = JobStatusDone
+
+	tasks, err := repo.listTasks(ctx, ListTasksQuery{
+		JobID:    job.ID,
+		StatusIn: []TaskStatus{TaskStatusFailed},
+		Limit:    1,
+	})
+	if err != nil {
+		return err
+	}
+	if len(tasks) > 0 {
+		job.ErrorMessage = ErrMsgFailedTasks
+		job.Status = JobStatusFailed
+	}
+
+	return m.updateJobAndCreateJobEvent(ctx, repo, job)
 }
 
 // sendRequestAndUpdateTask sends a TaskRequest to the client and updates the Task.
