@@ -37,34 +37,54 @@ func TestReconcile(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("should update the job status to", func(t *testing.T) {
+	t.Run("job status should", func(t *testing.T) {
 		// given
 		tt := []struct {
-			name            string
-			jobStatus       orbital.JobStatus
-			taskStatus      orbital.TaskStatus
-			expJobStatus    orbital.JobStatus
-			isEventRecorded bool
+			name                  string
+			jobStatus             orbital.JobStatus
+			taskStatus            orbital.TaskStatus
+			taskReconcileAfterSec int64
+			expJobStatus          orbital.JobStatus
+			isEventRecorded       bool
 		}{
 			{
-				name:         "PROCESSING if job was in READY status before",
+				name:         "change to PROCESSING if the job was in READY status before",
 				jobStatus:    orbital.JobStatusReady,
 				taskStatus:   orbital.TaskStatusProcessing,
 				expJobStatus: orbital.JobStatusProcessing,
 			},
 			{
-				name:            "FAILED if a task is in FAILED status",
+				name:         "remain PROCESSING if a task is in PROCESSING status",
+				jobStatus:    orbital.JobStatusProcessing,
+				taskStatus:   orbital.TaskStatusProcessing,
+				expJobStatus: orbital.JobStatusProcessing,
+			},
+			{
+				name:         "remain PROCESSING if a task is in CREATED status",
+				jobStatus:    orbital.JobStatusProcessing,
+				taskStatus:   orbital.TaskStatusCreated,
+				expJobStatus: orbital.JobStatusProcessing,
+			},
+			{
+				name:            "change to FAILED if a task is in FAILED status",
 				jobStatus:       orbital.JobStatusProcessing,
 				taskStatus:      orbital.TaskStatusFailed,
 				expJobStatus:    orbital.JobStatusFailed,
 				isEventRecorded: true,
 			},
 			{
-				name:            "DONE if all tasks are in DONE status",
+				name:            "change to DONE if all tasks are in DONE status",
 				jobStatus:       orbital.JobStatusProcessing,
 				taskStatus:      orbital.TaskStatusDone,
 				expJobStatus:    orbital.JobStatusDone,
 				isEventRecorded: true,
+			},
+			{
+				name:                  "remain PROCESSING if a task is not reconcile ready",
+				jobStatus:             orbital.JobStatusProcessing,
+				taskStatus:            orbital.TaskStatusProcessing,
+				taskReconcileAfterSec: 10,
+				expJobStatus:          orbital.JobStatusProcessing,
 			},
 		}
 
@@ -87,8 +107,9 @@ func TestReconcile(t *testing.T) {
 
 				_, err = orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
 					{
-						JobID:  job.ID,
-						Status: tc.taskStatus,
+						JobID:             job.ID,
+						Status:            tc.taskStatus,
+						ReconcileAfterSec: tc.taskReconcileAfterSec,
 					},
 				})
 				assert.NoError(t, err)
