@@ -289,7 +289,7 @@ func (m *Manager) handleConfirmJob(ctx context.Context, repo Repository, job Job
 // and manages job cursors within a transactional context.
 func (m *Manager) createTask(ctx context.Context) error {
 	return m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
-		job, ok, err := jobForTaskCreation(ctx, repo)
+		job, ok, err := m.jobForTaskCreation(ctx, repo)
 		if err != nil {
 			return err
 		}
@@ -299,7 +299,7 @@ func (m *Manager) createTask(ctx context.Context) error {
 			return nil
 		}
 
-		jobCursor, found, err := jobCursor(ctx, repo, job.ID)
+		jobCursor, found, err := m.getJobCursor(ctx, repo, job.ID)
 		if err != nil {
 			slog.Error("jobCursor", "error", err, "jobID", job.ID)
 			return err
@@ -314,7 +314,7 @@ func (m *Manager) createTask(ctx context.Context) error {
 		if resolverResult.IsAborted {
 			job.Status = JobStatusAborted
 			job.ErrorMessage = resolverResult.AbortedErrorMessage
-			return repo.updateJob(ctx, job)
+			return m.updateJobAndCreateJobEvent(ctx, repo, job)
 		}
 
 		jobCursor.Cursor = resolverResult.Cursor
@@ -324,7 +324,7 @@ func (m *Manager) createTask(ctx context.Context) error {
 			return err
 		}
 
-		err = createOrUpdateCursor(ctx, repo, found, jobCursor)
+		err = m.createOrUpdateCursor(ctx, repo, found, jobCursor)
 		if err != nil {
 			slog.Error("createOrUpdateCursor", "error", err, "jobID", job.ID)
 			return err
@@ -345,7 +345,7 @@ func (m *Manager) createTask(ctx context.Context) error {
 
 // createOrUpdateCursor creates or updates a JobCursor in the repository.
 // If the JobCursor is found, it updates the existing record; otherwise, it creates a new one.
-func createOrUpdateCursor(ctx context.Context, repo Repository, found bool, jobCursor JobCursor) error {
+func (m *Manager) createOrUpdateCursor(ctx context.Context, repo Repository, found bool, jobCursor JobCursor) error {
 	if found {
 		return repo.updateJobCursor(ctx, jobCursor)
 	}
@@ -357,7 +357,7 @@ func createOrUpdateCursor(ctx context.Context, repo Repository, found bool, jobC
 // It searches for jobs with statuses "resolving" or "confirmed" that were created at the
 // current UTC Unix timestamp. Returns the job, a boolean indicating if a job was found,
 // and an error if the retrieval fails.
-func jobForTaskCreation(ctx context.Context, repo Repository) (Job, bool, error) {
+func (m *Manager) jobForTaskCreation(ctx context.Context, repo Repository) (Job, bool, error) {
 	var empty Job
 	utcUnix := time.Now().UTC().Unix()
 	jobs, err := repo.listJobs(ctx, ListJobsQuery{
@@ -376,9 +376,9 @@ func jobForTaskCreation(ctx context.Context, repo Repository) (Job, bool, error)
 	return jobs[0], true, nil
 }
 
-// jobCursor retrieves the JobCursor for a given job ID from the repository.
+// getJobCursor retrieves the JobCursor for a given job ID from the repository.
 // If the JobCursor is not found, it initializes a new JobCursor with the provided job ID.
-func jobCursor(ctx context.Context, repo Repository, jobID uuid.UUID) (JobCursor, bool, error) {
+func (m *Manager) getJobCursor(ctx context.Context, repo Repository, jobID uuid.UUID) (JobCursor, bool, error) {
 	jobCursor, found, err := repo.getJobCursor(ctx, jobID)
 	if err != nil {
 		return JobCursor{}, false, err
