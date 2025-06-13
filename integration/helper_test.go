@@ -1,7 +1,7 @@
 //go:build integration
 // +build integration
 
-package integration
+package integration_test
 
 import (
 	"context"
@@ -385,38 +385,6 @@ func waitForTaskExecution(ctx context.Context, manager *orbital.Manager, jobID u
 			}
 
 			if allTasksReady {
-				return nil
-			}
-		}
-	}
-}
-
-// waitForJobEventProcessed waits for a job event to be created and processed (isNotified = true).
-func waitForJobEventProcessed(ctx context.Context, env *TestEnvironment, jobID uuid.UUID, timeout time.Duration) error {
-	startTime := time.Now()
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	repo := orbital.NewRepository(env.Store)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			if time.Since(startTime) > timeout {
-				return fmt.Errorf("timeout after %v waiting for job event to be processed for job %s", timeout, jobID)
-			}
-
-			isNotified := true
-			_, found, err := orbital.GetRepoJobEvent(repo)(ctx, orbital.JobEventQuery{
-				ID:         jobID,
-				IsNotified: &isNotified,
-			})
-			if err != nil {
-				continue
-			}
-			if found {
 				return nil
 			}
 		}

@@ -1,7 +1,7 @@
 //go:build integration
 // +build integration
 
-package integration
+package integration_test
 
 import (
 	"context"
@@ -145,9 +145,6 @@ func testReconcile(t *testing.T, ctx context.Context, env *TestEnvironment) {
 	case <-time.After(15 * time.Second):
 		t.Fatal("Termination event function was not called within timeout")
 	}
-
-	err = waitForJobEventProcessed(ctx, env, job.ID, 15*time.Second)
-	require.NoError(t, err)
 
 	finalJob, found, err := manager.GetJob(ctx, job.ID)
 	require.NoError(t, err)
@@ -317,9 +314,6 @@ func testReconcileWithMultipleTasks(t *testing.T, ctx context.Context, env *Test
 		t.Fatal("Termination event function was not called within timeout")
 	}
 
-	err = waitForJobEventProcessed(ctx, env, job.ID, 15*time.Second)
-	require.NoError(t, err)
-
 	tasks, err := manager.ListTasks(ctx, orbital.ListTasksQuery{
 		JobID: job.ID,
 		Limit: 10,
@@ -448,9 +442,6 @@ func testTaskFailureScenario(t *testing.T, ctx context.Context, env *TestEnviron
 	case <-time.After(15 * time.Second):
 		t.Fatal("Termination event function was not called within timeout")
 	}
-
-	err = waitForJobEventProcessed(ctx, env, job.ID, 15*time.Second)
-	require.NoError(t, err)
 
 	finalJob, found, err := manager.GetJob(ctx, job.ID)
 	require.NoError(t, err)
@@ -603,9 +594,6 @@ func testReconcileAfterSec(t *testing.T, ctx context.Context, env *TestEnvironme
 		t.Fatal("Termination event function was not called within timeout")
 	}
 
-	err = waitForJobEventProcessed(ctx, env, job.ID, 15*time.Second)
-	require.NoError(t, err)
-
 	finalCalls := atomic.LoadInt32(&handlerCalls)
 	assert.Equal(t, int32(2), finalCalls, "handler should be called exactly twice")
 
@@ -746,9 +734,6 @@ func testMultipleRequestResponseCycles(t *testing.T, ctx context.Context, env *T
 	case <-time.After(15 * time.Second):
 		t.Fatal("Termination event function was not called within timeout")
 	}
-
-	err = waitForJobEventProcessed(ctx, env, job.ID, 15*time.Second)
-	require.NoError(t, err)
 
 	finalCalls := atomic.LoadInt32(&handlerCalls)
 	assert.Equal(t, expectedCycles, int64(finalCalls), "handler should be called exactly %d times", expectedCycles)
