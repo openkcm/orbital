@@ -242,6 +242,43 @@ func (r *Repository) updateJobCursor(ctx context.Context, jobCursor JobCursor) e
 	return updateEntity(ctx, jobCursor, r)
 }
 
+// createJobEvent creates a new job event in the repository.
+// It uses the generic createEntity function to persist the event.
+// Returns the created JobEvent and any error encountered during creation.
+func (r *Repository) createJobEvent(ctx context.Context, event JobEvent) (JobEvent, error) {
+	return createEntity(ctx, event, r)
+}
+
+// getJobEvent retrieves a JobEvent from the repository based on the provided JobEventQuery.
+// It constructs a query using the parameters in eventQuery, such as IsNotified, ID,
+// and OrderByUpdatedAt. Returns the found JobEvent, a boolean indicating if it was found,
+// and any error encountered.
+func (r *Repository) getJobEvent(ctx context.Context, eventQuery JobEventQuery) (JobEvent, bool, error) {
+	q := query.Query{
+		EntityName:         query.EntityNameJobEvent,
+		Clauses:            []query.Clause{},
+		RetrievalModeQueue: eventQuery.RetrievalModeQueue,
+		Limit:              eventQuery.Limit,
+	}
+	if eventQuery.IsNotified != nil {
+		q.Clauses = append(q.Clauses, query.ClauseWithIsNotified(*eventQuery.IsNotified))
+	}
+	if eventQuery.ID != uuid.Nil {
+		q.Clauses = append(q.Clauses, query.ClauseWithID(eventQuery.ID))
+	}
+	if eventQuery.OrderByUpdatedAt {
+		q.OrderBy = append(q.OrderBy, query.OrderByUpdatedAtAscending())
+	}
+	return getEntity[JobEvent](ctx, r, q)
+}
+
+// updateJobEvent updates an existing JobEvent entity in the repository.
+// It uses the generic updateEntity function to persist changes to the event.
+// Returns any error encountered during the update.
+func (r *Repository) updateJobEvent(ctx context.Context, event JobEvent) error {
+	return updateEntity(ctx, event, r)
+}
+
 // transaction executes a transactional operation within the repository.
 // It takes a context and a TransactionFunc as input and returns an error if the transaction fails.
 func (r *Repository) transaction(ctx context.Context, txFunc TransactionFunc) error {
@@ -310,41 +347,4 @@ func createEntity[T EntityTypes](ctx context.Context, entity T, r *Repository) (
 		return out, fmt.Errorf("%w %T", ErrRepoCreate, entity)
 	}
 	return decodedEntities[0], nil
-}
-
-// createJobEvent creates a new job event in the repository.
-// It uses the generic createEntity function to persist the event.
-// Returns the created JobEvent and any error encountered during creation.
-func (r *Repository) createJobEvent(ctx context.Context, event JobEvent) (JobEvent, error) {
-	return createEntity(ctx, event, r)
-}
-
-// getJobEvent retrieves a JobEvent from the repository based on the provided JobEventQuery.
-// It constructs a query using the parameters in eventQuery, such as IsNotified, ID,
-// and OrderByUpdatedAt. Returns the found JobEvent, a boolean indicating if it was found,
-// and any error encountered.
-func (r *Repository) getJobEvent(ctx context.Context, eventQuery JobEventQuery) (JobEvent, bool, error) {
-	q := query.Query{
-		EntityName:         query.EntityNameJobEvent,
-		Clauses:            []query.Clause{},
-		RetrievalModeQueue: eventQuery.RetrievalModeQueue,
-		Limit:              eventQuery.Limit,
-	}
-	if eventQuery.IsNotified != nil {
-		q.Clauses = append(q.Clauses, query.ClauseWithIsNotified(*eventQuery.IsNotified))
-	}
-	if eventQuery.ID != uuid.Nil {
-		q.Clauses = append(q.Clauses, query.ClauseWithID(eventQuery.ID))
-	}
-	if eventQuery.OrderByUpdatedAt {
-		q.OrderBy = append(q.OrderBy, query.OrderByUpdatedAtAscending())
-	}
-	return getEntity[JobEvent](ctx, r, q)
-}
-
-// updateJobEvent updates an existing JobEvent entity in the repository.
-// It uses the generic updateEntity function to persist changes to the event.
-// Returns any error encountered during the update.
-func (r *Repository) updateJobEvent(ctx context.Context, event JobEvent) error {
-	return updateEntity(ctx, event, r)
 }
