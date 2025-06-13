@@ -1,28 +1,4 @@
 services:
-  rabbitmq:
-    image: rabbitmq:4
-    command: >
-      sh -c "rabbitmq-plugins enable --offline rabbitmq_auth_mechanism_ssl &&
-             rabbitmq-server"
-    ports:
-      - "5672:5672"
-      - "5671:5671"
-      - "15672:15672"
-    volumes:
-      - ./certs:/certs:ro
-      - ./conf/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
-
-  solace:
-    image: solace/solace-pubsub-standard
-    shm_size: 2g
-    environment:
-      - username_admin_globalaccesslevel=admin
-      - username_admin_password=admin
-      - msgVpnName=default
-    ports:
-      - "8080:8080"
-      - "5673:5672"
-
   postgres:
     image: postgres:17-alpine
     ports:
