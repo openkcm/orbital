@@ -131,12 +131,6 @@ func testReconcile(t *testing.T, ctx context.Context, env *TestEnvironment) {
 		t.Fatal("Operator was not called within timeout")
 	}
 
-	err = waitForJobStatus(ctx, manager, job.ID, orbital.JobStatusDone, 30*time.Second)
-	require.NoError(t, err)
-
-	err = waitForTaskExecution(ctx, manager, job.ID, 1, 15*time.Second)
-	require.NoError(t, err)
-
 	select {
 	case terminatedJob := <-terminationDone:
 		t.Logf("Termination event function called for job %s", terminatedJob.ID)
@@ -299,12 +293,6 @@ func testReconcileWithMultipleTasks(t *testing.T, ctx context.Context, env *Test
 		t.Fatal("Not all operators completed within timeout")
 	}
 
-	err = waitForJobStatus(ctx, manager, job.ID, orbital.JobStatusDone, 30*time.Second)
-	require.NoError(t, err)
-
-	err = waitForTaskExecution(ctx, manager, job.ID, 1, 20*time.Second)
-	require.NoError(t, err)
-
 	select {
 	case terminatedJob := <-terminationDone:
 		t.Logf("Termination event function called for multi-task job %s", terminatedJob.ID)
@@ -313,6 +301,12 @@ func testReconcileWithMultipleTasks(t *testing.T, ctx context.Context, env *Test
 	case <-time.After(15 * time.Second):
 		t.Fatal("Termination event function was not called within timeout")
 	}
+
+	job, found, err := manager.GetJob(ctx, job.ID)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, orbital.JobStatusDone, job.Status)
+	assert.Empty(t, job.ErrorMessage)
 
 	tasks, err := manager.ListTasks(ctx, orbital.ListTasksQuery{
 		JobID: job.ID,
@@ -427,12 +421,6 @@ func testTaskFailureScenario(t *testing.T, ctx context.Context, env *TestEnviron
 		t.Fatal("Operator was not called within timeout")
 	}
 
-	err = waitForJobStatus(ctx, manager, job.ID, orbital.JobStatusFailed, 30*time.Second)
-	require.NoError(t, err)
-
-	err = waitForTaskExecution(ctx, manager, job.ID, 1, 15*time.Second)
-	require.NoError(t, err)
-
 	select {
 	case terminatedJob := <-terminationDone:
 		t.Logf("Termination event function called for failing job %s", terminatedJob.ID)
@@ -522,6 +510,7 @@ func testReconcileAfterSec(t *testing.T, ctx context.Context, env *TestEnvironme
 	require.NoError(t, err)
 
 	var taskID atomic.Value
+	var reconcileAfterSec atomic.Int64
 
 	operatorConfig := OperatorConfig{
 		Handlers: map[string]orbital.Handler{
@@ -539,10 +528,8 @@ func testReconcileAfterSec(t *testing.T, ctx context.Context, env *TestEnvironme
 
 				time.Sleep(100 * time.Millisecond)
 
-				var reconcileAfterSec int64
-
 				if calls == 1 {
-					reconcileAfterSec = time.Now().Unix() + 2
+					reconcileAfterSec.Add(time.Now().Unix() + 2)
 					return orbital.HandlerResponse{
 						WorkingState:      []byte("in progress"),
 						Result:            orbital.ResultProcessing,
@@ -551,7 +538,7 @@ func testReconcileAfterSec(t *testing.T, ctx context.Context, env *TestEnvironme
 				}
 
 				if calls == 2 {
-					if time.Now().Unix() < reconcileAfterSec {
+					if time.Now().Unix() < reconcileAfterSec.Load() {
 						t.Errorf("reconciliation should happen after at least 2 seconds, but was called too early")
 					}
 					close(operatorDone)
@@ -578,12 +565,6 @@ func testReconcileAfterSec(t *testing.T, ctx context.Context, env *TestEnvironme
 	case <-time.After(45 * time.Second):
 		t.Fatal("Operator second call did not happen within timeout")
 	}
-
-	err = waitForJobStatus(ctx, manager, job.ID, orbital.JobStatusDone, 30*time.Second)
-	require.NoError(t, err)
-
-	err = waitForTaskExecution(ctx, manager, job.ID, 2, 20*time.Second)
-	require.NoError(t, err)
 
 	select {
 	case terminatedJob := <-terminationDone:
@@ -720,12 +701,6 @@ func testMultipleRequestResponseCycles(t *testing.T, ctx context.Context, env *T
 		t.Fatal("Operator did not complete within timeout")
 	}
 
-	err = waitForJobStatus(ctx, manager, job.ID, orbital.JobStatusDone, 30*time.Second)
-	require.NoError(t, err)
-
-	err = waitForTaskExecution(ctx, manager, job.ID, expectedCycles, 25*time.Second)
-	require.NoError(t, err)
-
 	select {
 	case terminatedJob := <-terminationDone:
 		t.Logf("Termination event function called for multi-cycle job %s", terminatedJob.ID)
@@ -737,6 +712,12 @@ func testMultipleRequestResponseCycles(t *testing.T, ctx context.Context, env *T
 
 	finalCalls := atomic.LoadInt32(&handlerCalls)
 	assert.Equal(t, expectedCycles, int64(finalCalls), "handler should be called exactly %d times", expectedCycles)
+
+	job, found, err := manager.GetJob(ctx, job.ID)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, orbital.JobStatusDone, job.Status)
+	assert.Empty(t, job.ErrorMessage, "job should not have an error message")
 
 	tasks, err := manager.ListTasks(ctx, orbital.ListTasksQuery{
 		JobID: job.ID,

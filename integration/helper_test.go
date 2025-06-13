@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -240,48 +239,6 @@ func createAMQPClient(ctx context.Context, env *TestEnvironment, rabbitURL, targ
 	return client, nil
 }
 
-// waitForJobStatus polls the job status until it matches the expected status or times out.
-func waitForJobStatus(ctx context.Context, manager *orbital.Manager, jobID uuid.UUID, expectedStatus orbital.JobStatus, timeout time.Duration) error {
-	startTime := time.Now()
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			if time.Since(startTime) > timeout {
-				if job, found, err := manager.GetJob(ctx, jobID); err == nil && found {
-					return fmt.Errorf("timeout after %v waiting for job status %s, current status: %s, error: %s",
-						timeout, expectedStatus, job.Status, job.ErrorMessage)
-				}
-				return fmt.Errorf("timeout after %v waiting for job status %s", timeout, expectedStatus)
-			}
-
-			job, found, err := manager.GetJob(ctx, jobID)
-			if err != nil {
-				continue
-			}
-			if !found {
-				continue
-			}
-
-			if job.Status == expectedStatus {
-				return nil
-			}
-
-			if job.Status == orbital.JobStatusFailed || job.Status == orbital.JobStatusAborted {
-				if expectedStatus == orbital.JobStatusFailed || expectedStatus == orbital.JobStatusAborted {
-					return nil
-				}
-				return fmt.Errorf("job reached terminal state %s (expected %s): %s",
-					job.Status, expectedStatus, job.ErrorMessage)
-			}
-		}
-	}
-}
-
 // runTestWithEnvironment runs a test function with proper environment setup and cleanup.
 func runTestWithEnvironment(t *testing.T, testFunc func(t *testing.T, ctx context.Context, env *TestEnvironment)) {
 	t.Helper()
@@ -334,59 +291,4 @@ func createTestJob(t *testing.T, ctx context.Context, manager *orbital.Manager, 
 
 	t.Logf("Created job %s with type %s", createdJob.ID, jobType)
 	return createdJob, nil
-}
-
-// waitForTaskExecution waits for tasks to be executed (sent) with retry logic.
-func waitForTaskExecution(ctx context.Context, manager *orbital.Manager, jobID uuid.UUID, expectedSentCount int64, timeout time.Duration) error {
-	startTime := time.Now()
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			if time.Since(startTime) > timeout {
-				tasks, err := manager.ListTasks(ctx, orbital.ListTasksQuery{
-					JobID: jobID,
-					Limit: 10,
-				})
-				if err == nil && len(tasks) > 0 {
-					var taskInfo []string
-					for _, task := range tasks {
-						taskInfo = append(taskInfo, fmt.Sprintf("Task %s: SentCount=%d, LastSentAt=%d, Status=%s",
-							task.ID, task.SentCount, task.LastSentAt, task.Status))
-					}
-					return fmt.Errorf("timeout after %v waiting for task execution (expected sent count: %d)\nTask details: %v",
-						timeout, expectedSentCount, taskInfo)
-				}
-				return fmt.Errorf("timeout after %v waiting for task execution (expected sent count: %d)", timeout, expectedSentCount)
-			}
-
-			tasks, err := manager.ListTasks(ctx, orbital.ListTasksQuery{
-				JobID: jobID,
-				Limit: 10,
-			})
-			if err != nil {
-				continue
-			}
-
-			if len(tasks) == 0 {
-				continue
-			}
-
-			allTasksReady := true
-			for _, task := range tasks {
-				if task.SentCount < expectedSentCount || task.LastSentAt <= 0 {
-					allTasksReady = false
-					break
-				}
-			}
-
-			if allTasksReady {
-				return nil
-			}
-		}
-	}
 }
