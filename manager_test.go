@@ -448,6 +448,44 @@ func TestCreateTasks(t *testing.T) {
 			assert.Equal(t, 1, resolverCalled)
 			assert.Equal(t, "the job needs to be aborted", actJob.ErrorMessage)
 		})
+		t.Run("should create a job event", func(t *testing.T) {
+			// given
+			ctx := t.Context()
+			db, store := createSQLStore(t)
+			defer clearTables(t, db)
+			repo := orbital.NewRepository(store)
+
+			job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+				Status: orbital.JobStatusConfirmed,
+			})
+			assert.NoError(t, err)
+
+			resolverCalled := 0
+			resolverFunc := func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
+				resolverCalled++
+				return orbital.TaskResolverResult{
+					IsAborted: true,
+				}, nil
+			}
+
+			subj, _ := orbital.NewManager(repo,
+				resolverFunc,
+			)
+
+			// when
+			err = orbital.CreateTask(subj)(ctx)
+
+			// then
+			assert.NoError(t, err)
+
+			actJobEvent, ok, err := orbital.GetRepoJobEvent(repo)(ctx, orbital.JobEventQuery{
+				ID: job.ID,
+			})
+			assert.NoError(t, err)
+			assert.True(t, ok)
+			assert.Equal(t, job.ID, actJobEvent.ID)
+			assert.False(t, actJobEvent.IsNotified)
+		})
 	})
 
 	t.Run("should update job Status to READY if resolverFunc resolves all targets in the second call", func(t *testing.T) {
