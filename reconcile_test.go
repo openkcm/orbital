@@ -507,7 +507,7 @@ func TestProcessResponse(t *testing.T) {
 				name:               "should be regenerated if Task and Taskresponse ETag are the same and TaskResponse status is CONTINUE",
 				taskETag:           "etag",
 				taskResponseETag:   "etag",
-				taskResponseStatus: string(orbital.ResultContinue),
+				taskResponseStatus: string(orbital.ResultProcessing),
 			},
 			{
 				name:               "should not be regenerated if Task and Taskresponse Etag are different and TaskResponse status is DONE",
@@ -525,7 +525,7 @@ func TestProcessResponse(t *testing.T) {
 				name:               "should not be regenerated if Task and Taskresponse ETag are different and TaskResponse status is CONTINUE",
 				taskETag:           "etag",
 				taskResponseETag:   "different-etag",
-				taskResponseStatus: string(orbital.ResultContinue),
+				taskResponseStatus: string(orbital.ResultProcessing),
 			},
 		}
 		for _, tc := range tt {
