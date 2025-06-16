@@ -163,6 +163,7 @@ func TestReconcile(t *testing.T) {
 				Status:       orbital.TaskStatusCreated,
 				Target:       expTarget,
 				LastSentAt:   0,
+				MaxSentCount: 1,
 			},
 		})
 		assert.NoError(t, err)
@@ -198,6 +199,7 @@ func TestReconcile(t *testing.T) {
 		assert.NotZero(t, actTask.LastSentAt)
 		assert.Equal(t, int64(1), actTask.SentCount)
 	})
+
 	t.Run("should send the same ETag to the operator if the operator does not respond within ReconcileAfterSec", func(t *testing.T) {
 		// given
 		ctx := t.Context()
@@ -222,6 +224,7 @@ func TestReconcile(t *testing.T) {
 				Target:       "target-1",
 				ETag:         expETag,
 				LastSentAt:   0,
+				MaxSentCount: 2,
 			},
 		})
 		assert.NoError(t, err)
@@ -259,6 +262,7 @@ func TestReconcile(t *testing.T) {
 		assert.Equal(t, int64(2), actTask.SentCount)
 		assert.Equal(t, expETag, actTask.ETag)
 	})
+
 	t.Run("should not update task if task request fails", func(t *testing.T) {
 		// given
 		ctx := t.Context()
@@ -274,9 +278,10 @@ func TestReconcile(t *testing.T) {
 		target := "target"
 		ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
 			{
-				JobID:  job.ID,
-				Status: orbital.TaskStatusCreated,
-				Target: target,
+				JobID:        job.ID,
+				Status:       orbital.TaskStatusCreated,
+				Target:       target,
+				MaxSentCount: 1,
 			},
 		})
 		assert.NoError(t, err)
@@ -307,6 +312,44 @@ func TestReconcile(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, ok)
 		assert.Equal(t, orbital.TaskStatusCreated, actTask.Status)
+	})
+
+	t.Run("should not send task request if max sent count is reached", func(t *testing.T) {
+		// given
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+			Status: orbital.JobStatusProcessing,
+		})
+		assert.NoError(t, err)
+
+		ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
+			{
+				JobID:        job.ID,
+				Status:       orbital.TaskStatusCreated,
+				MaxSentCount: 0,
+			},
+		})
+		assert.NoError(t, err)
+		assert.Len(t, ids, 1)
+
+		subj, err := orbital.NewManager(repo,
+			mockTaskResolverFunc(),
+		)
+		assert.NoError(t, err)
+
+		// when
+		err = orbital.Reconcile(subj)(ctx)
+
+		// then
+		assert.NoError(t, err)
+		actTask, ok, err := orbital.GetRepoTask(repo)(ctx, ids[0])
+		assert.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, orbital.TaskStatusFailed, actTask.Status)
 	})
 }
 

@@ -331,12 +331,8 @@ func (m *Manager) createTask(ctx context.Context) error {
 		if resolverResult.Done {
 			job.Status = JobStatusReady
 		}
-		err = repo.updateJob(ctx, job)
-		if err != nil {
-			slog.Error("updateJob", "error", err, "jobID", job.ID)
-			return err
-		}
-		return nil
+
+		return repo.updateJob(ctx, job)
 	})
 }
 
@@ -428,25 +424,9 @@ func (m *Manager) reconcile(ctx context.Context) error {
 			return err
 		}
 
-		var wg sync.WaitGroup
-		for _, task := range tasks {
-			initiator, ok := m.targetToInitiator[task.Target]
-			if !ok {
-				slog.Warn("no initiator for task target", "target", task.Target, "taskID", task.ID)
-				continue
-			}
+		m.handleTasks(ctx, repo, tasks)
 
-			wg.Add(1)
-			go m.sendRequestAndUpdateTask(ctx, &wg, repo, initiator, task)
-		}
-		wg.Wait()
-
-		if err := repo.updateJob(ctx, job); err != nil {
-			slog.Error("updateJob", "error", err, "jobID", job.ID)
-			return err
-		}
-
-		return nil
+		return repo.updateJob(ctx, job)
 	})
 }
 
@@ -490,9 +470,39 @@ func (m *Manager) terminateJob(ctx context.Context, repo Repository, job Job) er
 	return m.updateJobAndCreateJobEvent(ctx, repo, job)
 }
 
-// sendRequestAndUpdateTask sends a TaskRequest to the client and updates the Task.
-func (m *Manager) sendRequestAndUpdateTask(ctx context.Context, wg *sync.WaitGroup, repo Repository, client Initiator, task Task) {
+// handleTasks handles a list of tasks concurrently.
+func (m *Manager) handleTasks(ctx context.Context, repo Repository, tasks []Task) {
+	if len(tasks) == 0 {
+		return
+	}
+
+	var wg sync.WaitGroup
+	for _, task := range tasks {
+		wg.Add(1)
+		go m.handleTask(ctx, &wg, repo, task)
+	}
+	wg.Wait()
+}
+
+// handleTask handles a single task.
+// It checks if the task can be sent based on its sent count and max sent count.
+// If the task has reached its max sent count, it updates the task status to FAILED.
+// If the task can be sent, it retrieves the corresponding client,
+// sends the task request, and updates the task.
+func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repository, task Task) {
 	defer wg.Done()
+
+	if task.SentCount >= task.MaxSentCount {
+		task.Status = TaskStatusFailed
+		repo.updateTask(ctx, task) //nolint:errcheck
+		return
+	}
+
+	client, ok := m.targetToInitiator[task.Target]
+	if !ok {
+		slog.Warn("no client for task target", "target", task.Target, "taskID", task.ID)
+		return
+	}
 
 	task.LastSentAt = time.Now().Unix()
 	task.SentCount++
@@ -511,26 +521,19 @@ func (m *Manager) sendRequestAndUpdateTask(ctx context.Context, wg *sync.WaitGro
 		return
 	}
 
-	if err := repo.updateTask(ctx, task); err != nil {
-		slog.Error("updateTask", "error", err, "taskID", task.ID)
-	}
+	repo.updateTask(ctx, task) //nolint:errcheck
 }
 
 // updateJobAndCreateJobEvent updates the given job in the repository and records a job event.
 // It logs errors if updating the job or creating the job event fails.
 // Returns an error if any operation fails.
 func (m *Manager) updateJobAndCreateJobEvent(ctx context.Context, repo Repository, job Job) error {
-	if err := repo.updateJob(ctx, job); err != nil {
-		slog.Error("updateJob", "error", err, "jobID", job.ID)
-		return err
-	}
-
 	_, err := repo.createJobEvent(ctx, JobEvent{ID: job.ID})
 	if err != nil {
 		slog.Error("createJobEvent", "error", err, "jobID", job.ID)
 		return err
 	}
-	return nil
+	return repo.updateJob(ctx, job)
 }
 
 // startResponseReaders starts goroutines to handle responses from each target Initiator.

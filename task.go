@@ -12,6 +12,9 @@ const (
 	TaskStatusFailed     TaskStatus = "FAILED"
 )
 
+// Default maximum number of times a task can be sent.
+const DefTaskMaxSentCount int64 = 10
+
 // TaskStatus represents the status of the Task.
 type TaskStatus string
 
@@ -24,6 +27,7 @@ type Task struct {
 	WorkingState      []byte
 	LastSentAt        int64
 	SentCount         int64
+	MaxSentCount      int64
 	ReconcileAfterSec int64
 	ETag              string
 	Status            TaskStatus
@@ -40,6 +44,8 @@ type TaskInfo struct {
 	Type string
 	// Targets lists the target identifiers associated with job.
 	Target string
+	// MaxSentCount is the maximum number of times the task can be sent.
+	MaxSentCount int64
 }
 
 // newTasks creates a slice of Task instances for the given job ID and task configurations.
@@ -56,11 +62,15 @@ func newTasks(jobID uuid.UUID, infos []TaskInfo) []Task {
 // TaskInfo. It initializes the WorkingState as an empty byte slice, sets the
 // ETag to a new UUID string, and assigns the TaskStatusCreated status.
 func newTask(jobID uuid.UUID, info TaskInfo) Task {
+	if info.MaxSentCount <= 0 {
+		info.MaxSentCount = DefTaskMaxSentCount
+	}
 	return Task{
 		JobID:        jobID,
-		WorkingState: make([]byte, 0),
 		Type:         info.Type,
 		Data:         info.Data,
+		WorkingState: make([]byte, 0),
+		MaxSentCount: info.MaxSentCount,
 		ETag:         uuid.NewString(),
 		Status:       TaskStatusCreated,
 		Target:       info.Target,

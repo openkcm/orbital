@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -87,7 +88,11 @@ func (r *Repository) getJob(ctx context.Context, id uuid.UUID) (Job, bool, error
 // updateJob updates an existing job entity in the repository.
 // It takes a context and a Job object as input and returns an error if the update operation fails.
 func (r *Repository) updateJob(ctx context.Context, job Job) error {
-	return updateEntity(ctx, job, r)
+	err := updateEntity(ctx, job, r)
+	if err != nil {
+		slog.Error("updateJob", "error", err, "jobID", job.ID)
+	}
+	return err
 }
 
 // listJobs retrieves a list of job entities from the repository based on the provided query parameters.
@@ -166,7 +171,11 @@ func (r *Repository) getTask(ctx context.Context, id uuid.UUID) (Task, bool, err
 // updateTask updates an existing task entity in the repository.
 // It takes a context and a Task object as input and returns an error if the update operation fails.
 func (r *Repository) updateTask(ctx context.Context, task Task) error {
-	return updateEntity(ctx, task, r)
+	err := updateEntity(ctx, task, r)
+	if err != nil {
+		slog.Error("updateTask", "error", err, "taskID", task.ID)
+	}
+	return err
 }
 
 // listTasks retrieves a list of task entities from the repository based on the provided query parameters.

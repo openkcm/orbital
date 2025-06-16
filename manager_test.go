@@ -354,6 +354,79 @@ func TestCreateTasks(t *testing.T) {
 		}
 	})
 
+	t.Run("should create tasks based on task info", func(t *testing.T) {
+		// given
+		tt := []struct {
+			name string
+			info orbital.TaskInfo
+		}{
+			{
+				name: "with empty fields",
+				info: orbital.TaskInfo{
+					Target:       "",
+					Data:         []byte{},
+					Type:         "",
+					MaxSentCount: 0,
+				},
+			},
+			{
+				name: "with all fields set",
+				info: orbital.TaskInfo{
+					Target:       "target",
+					Data:         []byte("data"),
+					Type:         "type",
+					MaxSentCount: 1,
+				},
+			},
+		}
+
+		for _, tc := range tt {
+			t.Run(tc.name, func(t *testing.T) {
+				ctx := t.Context()
+				db, store := createSQLStore(t)
+				defer clearTables(t, db)
+				repo := orbital.NewRepository(store)
+
+				resolverFunc := func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
+					return orbital.TaskResolverResult{
+						TaskInfos: []orbital.TaskInfo{tc.info},
+						Done:      true,
+					}, nil
+				}
+
+				subj, _ := orbital.NewManager(
+					repo,
+					resolverFunc,
+				)
+
+				job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+					Status: orbital.JobStatusConfirmed,
+				})
+				assert.NoError(t, err)
+
+				// when
+				err = orbital.CreateTask(subj)(ctx)
+
+				// then
+				assert.NoError(t, err)
+				actTasks, err := subj.ListTasks(ctx, orbital.ListTasksQuery{
+					Status: orbital.TaskStatusCreated,
+					Limit:  10,
+				})
+				assert.NoError(t, err)
+				assert.Len(t, actTasks, 1)
+				assert.Equal(t, job.ID, actTasks[0].JobID)
+				assert.Equal(t, tc.info.Target, actTasks[0].Target)
+				assert.Equal(t, tc.info.Data, actTasks[0].Data)
+				if tc.info.MaxSentCount == 0 {
+					assert.Equal(t, orbital.DefTaskMaxSentCount, actTasks[0].MaxSentCount)
+				} else {
+					assert.Equal(t, tc.info.MaxSentCount, actTasks[0].MaxSentCount)
+				}
+			})
+		}
+	})
+
 	t.Run("should respect retrieval mode and order by updateAt", func(t *testing.T) {
 		// given
 		db, store := createSQLStore(t)
