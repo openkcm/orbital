@@ -17,6 +17,25 @@ jobs:
     name: Release version
     runs-on: ubuntu-24.04
     steps:
+      - name: Install GPG
+        run: sudo apt-get install -y gnupg
+
+      - name: Import GPG Key
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          KEY_ID=$(gpg --list-secret-keys --with-colons | grep '^sec' | cut -d: -f5)
+          echo "Using GPG key: $KEY_ID"
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: Configure Git for GPG
+        run: |
+          git config --global user.name "GitHub CI Bot"
+          git config --global user.email "github-ci[bot]@users.noreply.github.com"
+          git config --global commit.gpgsign true
+          git config --global user.signingkey "${{ secrets.GPG_KEY_ID }}"
+          git config --global gpg.program gpg
+
       - name: Generate token from GitHub App
         id: generate-token
         uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
@@ -186,6 +205,7 @@ jobs:
           base: main
           branch: dev/${{ env.next_version }}
           delete-branch: true
+          sign-commits: true
           title: "chore: update to ${{ env.next_version }}-dev version"
           body: "This PR was created automatically by GitHub Actions."
           labels: |
