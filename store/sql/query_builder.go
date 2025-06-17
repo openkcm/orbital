@@ -150,10 +150,16 @@ func (sqb *selectQueryBuilder) buildOrderBy(q query.Query) string {
 
 // buildLocking adds row locking clause if needed.
 func (sqb *selectQueryBuilder) buildLocking(q query.Query) string {
-	if q.RetrievalModeQueue {
+	switch q.RetrievalMode {
+	case query.RetrievalModeForUpdate:
+		return "FOR UPDATE"
+	case query.RetrievalModeForUpdateSkipLocked:
 		return "FOR UPDATE SKIP LOCKED"
+	case query.RetrievalModeDefault:
+		return ""
+	default:
+		return ""
 	}
-	return ""
 }
 
 // buildLimit adds the LIMIT clause if specified.

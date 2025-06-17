@@ -122,8 +122,9 @@ func (r *Repository) listJobs(ctx context.Context, jobsQuery ListJobsQuery) ([]J
 		q.Clauses = append(q.Clauses, query.ClauseWithUpdatedBefore(jobsQuery.UpdatedAt))
 	}
 
+	q.RetrievalMode = query.RetrievalModeDefault
 	if jobsQuery.RetrievalModeQueue {
-		q.RetrievalModeQueue = true
+		q.RetrievalMode = query.RetrievalModeForUpdateSkipLocked
 	}
 
 	if jobsQuery.OrderByUpdatedAt {
@@ -180,6 +181,8 @@ func (r *Repository) updateTask(ctx context.Context, task Task) error {
 
 // listTasks retrieves a list of task entities from the repository based on the provided query parameters.
 // It takes a context and a ListTasksQuery object as input and returns a slice of Task entities or an error if the operation fails.
+//
+//nolint:cyclop
 func (r *Repository) listTasks(ctx context.Context, tasksQuery ListTasksQuery) ([]Task, error) {
 	q := query.Query{
 		EntityName: query.EntityNameTasks,
@@ -220,7 +223,10 @@ func (r *Repository) listTasks(ctx context.Context, tasksQuery ListTasksQuery) (
 		q.Clauses = append(q.Clauses, query.ClauseWithReadyToBeSent(time.Now().Unix()))
 	}
 
-	q.RetrievalModeQueue = tasksQuery.RetrievalModeQueue
+	q.RetrievalMode = query.RetrievalModeDefault
+	if tasksQuery.RetrievalModeQueue {
+		q.RetrievalMode = query.RetrievalModeForUpdateSkipLocked
+	}
 
 	if tasksQuery.OrderByUpdatedAt {
 		q.OrderBy = append(q.OrderBy, query.OrderByUpdatedAtAscending())
@@ -264,11 +270,16 @@ func (r *Repository) createJobEvent(ctx context.Context, event JobEvent) (JobEve
 // and any error encountered.
 func (r *Repository) getJobEvent(ctx context.Context, eventQuery JobEventQuery) (JobEvent, bool, error) {
 	q := query.Query{
-		EntityName:         query.EntityNameJobEvent,
-		Clauses:            []query.Clause{},
-		RetrievalModeQueue: eventQuery.RetrievalModeQueue,
-		Limit:              eventQuery.Limit,
+		EntityName:    query.EntityNameJobEvent,
+		Clauses:       []query.Clause{},
+		RetrievalMode: query.RetrievalModeDefault,
+		Limit:         eventQuery.Limit,
 	}
+
+	if eventQuery.RetrievalModeQueue {
+		q.RetrievalMode = query.RetrievalModeForUpdateSkipLocked
+	}
+
 	if eventQuery.IsNotified != nil {
 		q.Clauses = append(q.Clauses, query.ClauseWithIsNotified(*eventQuery.IsNotified))
 	}
@@ -356,4 +367,15 @@ func createEntity[T EntityTypes](ctx context.Context, entity T, r *Repository) (
 		return out, fmt.Errorf("%w %T", ErrRepoCreate, entity)
 	}
 	return decodedEntities[0], nil
+}
+
+// getJobForUpdate retrieves a job entity by its ID and ensures that the job is locked for update.
+func (r *Repository) getJobForUpdate(ctx context.Context, id uuid.UUID) (Job, bool, error) {
+	q := query.Query{
+		EntityName:    query.EntityNameJobs,
+		Clauses:       []query.Clause{query.ClauseWithID(id)},
+		RetrievalMode: query.RetrievalModeForUpdate,
+	}
+
+	return getEntity[Job](ctx, r, q)
 }

@@ -23,16 +23,24 @@ const (
 	EntityNameJobEvent                EntityName = "job_event"
 )
 
+type RetrievalMode int
+
+const (
+	RetrievalModeDefault RetrievalMode = iota
+	RetrievalModeForUpdate
+	RetrievalModeForUpdateSkipLocked
+)
+
 // Query represents a database query for a specific entity type. It includes
 // filtering clauses, pagination cursor, result limit, and an option to enable
 // queue-like retrieval mode.
 type Query struct {
-	EntityName         EntityName // Name of the entity being queried.
-	Clauses            []Clause   // Filtering clauses for the query.
-	Cursor             Cursor     // Cursor for pagination.
-	Limit              int        // Maximum number of results to return.
-	RetrievalModeQueue bool       // If true, enables queue-like retrieval mode.
-	OrderBy            []OrderBy  // Fields to order the results by.
+	EntityName    EntityName // Name of the entity being queried.
+	Clauses       []Clause   // Filtering clauses for the query.
+	Cursor        Cursor     // Cursor for pagination.
+	Limit         int        // Maximum number of results to return.
+	RetrievalMode RetrievalMode
+	OrderBy       []OrderBy // Fields to order the results by.
 }
 
 // OrderBy represents the ordering of query results.

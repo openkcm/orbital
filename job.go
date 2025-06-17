@@ -15,6 +15,7 @@ const (
 	JobStatusFailed          JobStatus = "FAILED"
 	JobStatusAborted         JobStatus = "ABORTED"
 	JobStatusConfirmCanceled JobStatus = "CONFIRM_CANCELED"
+	JobStatusUserCanceled    JobStatus = "USER_CANCELED"
 )
 
 type (
@@ -39,4 +40,10 @@ func NewJob(jobType string, data []byte) Job {
 		Data: data,
 		Type: jobType,
 	}
+}
+
+// isCancelable checks if the job can be canceled based on its current status.
+func (j *Job) isCancelable() bool {
+	return j.Status == JobStatusCreated || j.Status == JobStatusConfirmed || j.Status == JobStatusResolving ||
+		j.Status == JobStatusReady || j.Status == JobStatusProcessing
 }

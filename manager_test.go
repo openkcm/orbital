@@ -875,3 +875,62 @@ func TestStart(t *testing.T) {
 		assert.Equal(t, 1, actCalled)
 	})
 }
+
+func TestCancel(t *testing.T) {
+	t.Run("should cancel job", func(t *testing.T) {
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		jobID := uuid.New()
+		_, err := orbital.CreateRepoJob(repo)(t.Context(), orbital.Job{ID: jobID, Status: orbital.JobStatusCreated})
+		assert.NoError(t, err)
+
+		subj, _ := orbital.NewManager(repo,
+			mockTaskResolverFunc(),
+		)
+		err = subj.CancelJob(t.Context(), jobID)
+		assert.NoError(t, err)
+
+		job, ok, err := subj.GetJob(t.Context(), jobID)
+		assert.NoError(t, err)
+		assert.True(t, ok)
+
+		assert.Equal(t, orbital.JobStatusUserCanceled, job.Status)
+		assert.Equal(t, job.ErrorMessage, "job has been canceled by the user")
+	})
+	t.Run("should not cancel job", func(t *testing.T) {
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		jobID := uuid.New()
+		_, err := orbital.CreateRepoJob(repo)(t.Context(), orbital.Job{ID: jobID, Status: orbital.JobStatusDone})
+		assert.NoError(t, err)
+
+		subj, _ := orbital.NewManager(repo,
+			mockTaskResolverFunc(),
+		)
+		err = subj.CancelJob(t.Context(), jobID)
+		assert.Error(t, err)
+
+		job, ok, err := subj.GetJob(t.Context(), jobID)
+		assert.NoError(t, err)
+		assert.True(t, ok)
+
+		assert.NotEqual(t, orbital.JobStatusUserCanceled, job.Status)
+		assert.Equal(t, job.ErrorMessage, "")
+	})
+	t.Run("job not found", func(t *testing.T) {
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		subj, _ := orbital.NewManager(repo,
+			mockTaskResolverFunc(),
+		)
+		err := subj.CancelJob(t.Context(), uuid.New())
+		assert.ErrorIs(t, err, orbital.ErrJobNotFound)
+		assert.ErrorContains(t, err, "job not found")
+	})
+}

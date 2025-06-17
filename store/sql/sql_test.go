@@ -650,15 +650,15 @@ func TestWithRetrievalModeQueue(t *testing.T) {
 			{
 				firstCallParams: callParams{
 					queryToExecute: query.Query{
-						RetrievalModeQueue: true,
-						Limit:              3,
+						RetrievalMode: query.RetrievalModeForUpdateSkipLocked,
+						Limit:         3,
 					},
 				},
 				secondCallParams: callParams{
 					isTransactional: true,
 					queryToExecute: query.Query{
-						RetrievalModeQueue: true,
-						Limit:              5,
+						RetrievalMode: query.RetrievalModeForUpdateSkipLocked,
+						Limit:         5,
 					},
 				},
 				expEntitysInFirstCall:  records[:3],
@@ -666,84 +666,84 @@ func TestWithRetrievalModeQueue(t *testing.T) {
 			},
 			{
 				firstCallParams: callParams{
-					queryToExecute: query.Query{RetrievalModeQueue: true, Limit: 5},
+					queryToExecute: query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 5},
 				},
 				secondCallParams: callParams{
 					isTransactional: true,
-					queryToExecute:  query.Query{RetrievalModeQueue: true, Limit: 1},
+					queryToExecute:  query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 1},
 				},
 				expEntitysInFirstCall:  records[:5],
 				expEntitysInSecondCall: records[5:6],
 			},
 			{
 				firstCallParams: callParams{
-					queryToExecute: query.Query{RetrievalModeQueue: true, Limit: 1},
+					queryToExecute: query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 1},
 				},
 				secondCallParams: callParams{
 					isTransactional: true,
-					queryToExecute:  query.Query{RetrievalModeQueue: true, Limit: 100},
+					queryToExecute:  query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 100},
 				},
 				expEntitysInFirstCall:  records[:1],
 				expEntitysInSecondCall: records[1:],
 			},
 			{
 				firstCallParams: callParams{
-					queryToExecute: query.Query{RetrievalModeQueue: true, Limit: 100},
+					queryToExecute: query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 100},
 				},
 				secondCallParams: callParams{
 					isTransactional: true,
-					queryToExecute:  query.Query{RetrievalModeQueue: true, Limit: 10},
+					queryToExecute:  query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 10},
 				},
 				expEntitysInFirstCall:  records[:10],
 				expEntitysInSecondCall: nil,
 			},
 			{
 				firstCallParams: callParams{
-					queryToExecute: query.Query{RetrievalModeQueue: true, Limit: 3},
+					queryToExecute: query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 3},
 				},
 				secondCallParams: callParams{
 					isTransactional: false,
-					queryToExecute:  query.Query{RetrievalModeQueue: true, Limit: 5},
+					queryToExecute:  query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 5},
 				},
 				expEntitysInFirstCall:  records[:3],
 				expEntitysInSecondCall: records[3:8],
 			},
 			{
 				firstCallParams: callParams{
-					queryToExecute: query.Query{RetrievalModeQueue: true, Limit: 5},
+					queryToExecute: query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 5},
 				},
 				secondCallParams: callParams{
 					isTransactional: false,
-					queryToExecute:  query.Query{RetrievalModeQueue: true, Limit: 1},
+					queryToExecute:  query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 1},
 				},
 				expEntitysInFirstCall:  records[:5],
 				expEntitysInSecondCall: records[5:6],
 			},
 			{
 				firstCallParams: callParams{
-					queryToExecute: query.Query{RetrievalModeQueue: true, Limit: 1},
+					queryToExecute: query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 1},
 				},
 				secondCallParams: callParams{
 					isTransactional: false,
-					queryToExecute:  query.Query{RetrievalModeQueue: true, Limit: 100},
+					queryToExecute:  query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 100},
 				},
 				expEntitysInFirstCall:  records[:1],
 				expEntitysInSecondCall: records[1:],
 			},
 			{
 				firstCallParams: callParams{
-					queryToExecute: query.Query{RetrievalModeQueue: true, Limit: 100},
+					queryToExecute: query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 100},
 				},
 				secondCallParams: callParams{
 					isTransactional: false,
-					queryToExecute:  query.Query{RetrievalModeQueue: true, Limit: 100},
+					queryToExecute:  query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 100},
 				},
 				expEntitysInFirstCall:  records[:10],
 				expEntitysInSecondCall: nil,
 			},
 			{
 				firstCallParams: callParams{
-					queryToExecute: query.Query{RetrievalModeQueue: true, Limit: 3},
+					queryToExecute: query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 3},
 				},
 				secondCallParams: callParams{
 					isTransactional: true,
@@ -754,7 +754,7 @@ func TestWithRetrievalModeQueue(t *testing.T) {
 			},
 			{
 				firstCallParams: callParams{
-					queryToExecute: query.Query{RetrievalModeQueue: true, Limit: 5},
+					queryToExecute: query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 5},
 				},
 				secondCallParams: callParams{
 					isTransactional: true,
@@ -765,7 +765,7 @@ func TestWithRetrievalModeQueue(t *testing.T) {
 			},
 			{
 				firstCallParams: callParams{
-					queryToExecute: query.Query{RetrievalModeQueue: true, Limit: 1},
+					queryToExecute: query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 1},
 				},
 				secondCallParams: callParams{
 					isTransactional: true,
@@ -776,7 +776,7 @@ func TestWithRetrievalModeQueue(t *testing.T) {
 			},
 			{
 				firstCallParams: callParams{
-					queryToExecute: query.Query{RetrievalModeQueue: true, Limit: 100},
+					queryToExecute: query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 100},
 				},
 				secondCallParams: callParams{
 					isTransactional: true,
@@ -787,7 +787,7 @@ func TestWithRetrievalModeQueue(t *testing.T) {
 			},
 			{
 				firstCallParams: callParams{
-					queryToExecute: query.Query{RetrievalModeQueue: true, Limit: 3},
+					queryToExecute: query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 3},
 				},
 				secondCallParams: callParams{
 					isTransactional: false,
@@ -798,7 +798,7 @@ func TestWithRetrievalModeQueue(t *testing.T) {
 			},
 			{
 				firstCallParams: callParams{
-					queryToExecute: query.Query{RetrievalModeQueue: true, Limit: 5},
+					queryToExecute: query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 5},
 				},
 				secondCallParams: callParams{
 					isTransactional: false,
@@ -809,7 +809,7 @@ func TestWithRetrievalModeQueue(t *testing.T) {
 			},
 			{
 				firstCallParams: callParams{
-					queryToExecute: query.Query{RetrievalModeQueue: true, Limit: 1},
+					queryToExecute: query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 1},
 				},
 				secondCallParams: callParams{
 					isTransactional: false,
@@ -820,7 +820,7 @@ func TestWithRetrievalModeQueue(t *testing.T) {
 			},
 			{
 				firstCallParams: callParams{
-					queryToExecute: query.Query{RetrievalModeQueue: true, Limit: 100},
+					queryToExecute: query.Query{RetrievalMode: query.RetrievalModeForUpdateSkipLocked, Limit: 100},
 				},
 				secondCallParams: callParams{
 					isTransactional: false,
@@ -839,10 +839,10 @@ func TestWithRetrievalModeQueue(t *testing.T) {
 
 			testName := fmt.Sprintf("1stCall[limit:%v,isQueue:%v] 2ndCall[isTrans:%v,limit:%v,isQueue:%v]",
 				firstCallQuery.Limit,
-				firstCallQuery.RetrievalModeQueue,
+				firstCallQuery.RetrievalMode,
 				tt.secondCallParams.isTransactional,
 				secondCallQuery.Limit,
-				secondCallQuery.RetrievalModeQueue)
+				secondCallQuery.RetrievalMode)
 
 			t.Run(testName, func(t *testing.T) {
 				transactor1 := make(chan string)
@@ -904,6 +904,69 @@ func TestWithRetrievalModeQueue(t *testing.T) {
 				assert.Equal(t, tt.expEntitysInSecondCall, actEntityInSecondCall)
 			})
 		}
+	})
+
+	t.Run("should do `FOR UPDATE`", func(t *testing.T) {
+		transactor1 := make(chan string)
+		defer close(transactor1)
+
+		transactor2 := make(chan string)
+		defer close(transactor2)
+
+		queryToExecute := query.Query{
+			EntityName:    query.EntityNameJobCursor,
+			RetrievalMode: query.RetrievalModeForUpdate,
+			Clauses:       []query.Clause{query.ClauseWithID(records[0].ID)},
+		}
+
+		wg := sync.WaitGroup{}
+		wg.Add(2)
+
+		var fromTran1 orbital.Entity
+		var fromTran2 orbital.Entity
+
+		go func() {
+			defer wg.Done()
+			assert.Equal(t, "transaction 1 start", <-transactor1)
+			err := store.Transaction(ctx, func(ctx context.Context, r orbital.Repository) error {
+				listResult, err := r.Store.List(ctx, queryToExecute)
+				assert.NoError(t, err)
+				assert.Len(t, listResult.Entities, 1)
+				assert.Equal(t, records[0].ID, listResult.Entities[0].ID)
+
+				fromTran1 = listResult.Entities[0]
+				transactor1 <- "transaction 1 wait"
+				return nil
+			})
+			assert.NoError(t, err)
+		}()
+
+		go func() {
+			defer wg.Done()
+			assert.Equal(t, "transaction 2 start", <-transactor2)
+			err := store.Transaction(ctx, func(ctx context.Context, r orbital.Repository) error {
+				listResult, err := r.Store.List(ctx, queryToExecute)
+				assert.NoError(t, err)
+				assert.Len(t, listResult.Entities, 1)
+				assert.Equal(t, records[0].ID, listResult.Entities[0].ID)
+
+				fromTran2 = listResult.Entities[0]
+				transactor2 <- "transaction 2 wait"
+				return nil
+			})
+			assert.NoError(t, err)
+		}()
+
+		transactor1 <- "transaction 1 start"
+		time.Sleep(100 * time.Millisecond)
+		transactor2 <- "transaction 2 start"
+		assert.Equal(t, fromTran1.ID, records[0].ID)
+		assert.Equal(t, fromTran2.ID, uuid.Nil)
+		assert.Equal(t, "transaction 1 wait", <-transactor1)
+		assert.Equal(t, "transaction 2 wait", <-transactor2)
+		wg.Wait()
+		assert.Equal(t, fromTran2.ID, records[0].ID)
+		assert.Equal(t, fromTran1.ID, fromTran2.ID)
 	})
 }
 
