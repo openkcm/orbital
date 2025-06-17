@@ -85,3 +85,7 @@ func GetRepoJobEvent(r *Repository) func(ctx context.Context, q JobEventQuery) (
 func UpdateRepoJobEvent(r *Repository) func(ctx context.Context, event JobEvent) error {
 	return r.updateJobEvent
 }
+
+func GetRepoJobForUpdate(r *Repository) func(ctx context.Context, id uuid.UUID) (Job, bool, error) {
+	return r.getJobForUpdate
+}

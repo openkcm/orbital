@@ -101,9 +101,12 @@ const (
 	defProcessingTaskDelay = 5 * time.Second
 )
 
-var ErrTaskResolverNotSet = errors.New("taskResolver not set")
-
-var ErrMsgFailedTasks = "job has failed tasks"
+var (
+	ErrTaskResolverNotSet = errors.New("taskResolver not set")
+	ErrMsgFailedTasks     = "job has failed tasks"
+	ErrJobUnCancelable    = errors.New("job cannot be canceled in its current state")
+	ErrJobNotFound        = errors.New("job not found")
+)
 
 // NewManager creates a new Manager instance.
 func NewManager(repo *Repository, taskResolver TaskResolverFunc, optFuncs ...ManagerOptsFunc) (*Manager, error) {
@@ -232,6 +235,27 @@ func (m *Manager) GetJob(ctx context.Context, jobID uuid.UUID) (Job, bool, error
 // ListTasks retrieves tasks by query from the repository.
 func (m *Manager) ListTasks(ctx context.Context, query ListTasksQuery) ([]Task, error) {
 	return m.repo.listTasks(ctx, query)
+}
+
+// CancelJob cancels a job and associated running tasks. It updates the job status to "USER_CANCEL".
+func (m *Manager) CancelJob(ctx context.Context, jobID uuid.UUID) error {
+	return m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
+		job, ok, err := repo.getJobForUpdate(ctx, jobID)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return ErrJobNotFound
+		}
+		if !job.isCancelable() {
+			return ErrJobUnCancelable
+		}
+
+		job.Status = JobStatusUserCanceled
+		job.ErrorMessage = "job has been canceled by the user"
+
+		return m.updateJobAndCreateJobEvent(ctx, repo, job)
+	})
 }
 
 // confirmJob processes jobs in the CREATED state that were created before a specified delay

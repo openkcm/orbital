@@ -555,7 +555,7 @@ func TestRepoTransactionError(t *testing.T) {
 }
 
 func TestRepoTransactionRaceCondition(t *testing.T) {
-	t.Run("should not fetch records in RetrievalModeQueue which are being updated in a transaction", func(t *testing.T) {
+	t.Run("should not fetch records in RetrievalMode which are being updated in a transaction", func(t *testing.T) {
 		ctx := t.Context()
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
@@ -578,7 +578,7 @@ func TestRepoTransactionRaceCondition(t *testing.T) {
 		/**
 			  The first transaction starts and updates the status of an existing job to "aborted" with RetrievalMoedQueue `false`
 			  but it does not commit immediately. Instead, it signals that it is waiting, allowing the second transactionany  to start.
-		    The second transaction attempts to list jobs with the "created" status with RetrievalModeQueue `true`, expecting to see none.
+		    The second transaction attempts to list jobs with the "created" status with RetrievalMode `true`, expecting to see none.
 			  **/
 		go func() {
 			assert.Equal(t, "1st transaction starts", <-transactor1)
@@ -785,4 +785,106 @@ func TestRepoUpdateJobEvent(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, jobEvent.IsNotified, updatedJobEvent.IsNotified)
+}
+
+func TestRepoGetJobForUpdate(t *testing.T) {
+	t.Run("should return the job if it exists", func(t *testing.T) {
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+			Data:         []byte("data"),
+			Type:         "type",
+			Status:       "status",
+			ErrorMessage: "error-message",
+		})
+		assert.NoError(t, err)
+		assert.NotEqual(t, uuid.Nil, job.ID)
+
+		fetchedJob, ok, err := orbital.GetRepoJobForUpdate(repo)(ctx, job.ID)
+		assert.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, job.ID, fetchedJob.ID)
+		assert.Equal(t, job.Data, fetchedJob.Data)
+		assert.Equal(t, job.Type, fetchedJob.Type)
+		assert.Equal(t, job.Status, fetchedJob.Status)
+		assert.Equal(t, job.ErrorMessage, fetchedJob.ErrorMessage)
+	})
+
+	t.Run("should return false if the job ID is not there", func(t *testing.T) {
+		ctx := t.Context()
+		_, store := createSQLStore(t)
+		repo := orbital.NewRepository(store)
+
+		fetchedJob, ok, err := orbital.GetRepoJobForUpdate(repo)(ctx, uuid.New())
+		assert.NoError(t, err)
+		assert.False(t, ok)
+		assert.Equal(t, uuid.Nil, fetchedJob.ID)
+	})
+
+	t.Run("transaction should get updated job after waiting for other transaction to finish", func(t *testing.T) {
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		transactor1 := make(chan string)
+		defer close(transactor1)
+
+		transactor2 := make(chan string)
+		defer close(transactor2)
+
+		wg := sync.WaitGroup{}
+		wg.Add(2)
+
+		createdJob, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+			Type:   "job-type",
+			Status: orbital.JobStatusCreated,
+		})
+		assert.NoError(t, err)
+		go func() {
+			defer wg.Done()
+			assert.Equal(t, "1st transaction starts", <-transactor1)
+			err := orbital.Transaction(repo)(t.Context(), func(ctx context.Context, repo orbital.Repository) error {
+				fetchJob, ok, err := orbital.GetRepoJobForUpdate(&repo)(ctx, createdJob.ID)
+				assert.NoError(t, err)
+				assert.True(t, ok)
+				assert.Equal(t, createdJob.ID, fetchJob.ID)
+
+				createdJob.Data = []byte("updated-data")
+
+				err = orbital.UpdateRepoJob(&repo)(ctx, createdJob)
+				assert.NoError(t, err)
+
+				transactor1 <- "1st transaction waits"
+				return nil
+			})
+			assert.NoError(t, err)
+		}()
+
+		go func() {
+			assert.Equal(t, "2nd transaction starts", <-transactor2)
+			defer wg.Done()
+
+			err := orbital.Transaction(repo)(ctx, func(ctx context.Context, repo orbital.Repository) error {
+				fetchJob, ok, err := orbital.GetRepoJobForUpdate(&repo)(ctx, createdJob.ID)
+				assert.NoError(t, err)
+				assert.True(t, ok)
+				assert.Equal(t, createdJob.ID, fetchJob.ID)
+				assert.Equal(t, []byte("updated-data"), fetchJob.Data)
+
+				return nil
+			})
+			assert.NoError(t, err)
+		}()
+
+		transactor1 <- "1st transaction starts"
+		time.Sleep(100 * time.Millisecond)
+		transactor2 <- "2nd transaction starts"
+
+		assert.Equal(t, "1st transaction waits", <-transactor1)
+		wg.Wait()
+	})
 }
