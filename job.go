@@ -6,15 +6,15 @@ import (
 
 // Possible job states.
 const (
-	JobStatusCreated    JobStatus = "CREATED"
-	JobStatusConfirmed  JobStatus = "CONFIRMED"
-	JobStatusResolving  JobStatus = "RESOLVING"
-	JobStatusReady      JobStatus = "READY"
-	JobStatusProcessing JobStatus = "PROCESSING"
-	JobStatusDone       JobStatus = "DONE"
-	JobStatusFailed     JobStatus = "FAILED"
-	JobStatusAborted    JobStatus = "ABORTED"
-	JobStatusCanceled   JobStatus = "CANCELED"
+	JobStatusCreated         JobStatus = "CREATED"
+	JobStatusConfirmed       JobStatus = "CONFIRMED"
+	JobStatusResolving       JobStatus = "RESOLVING"
+	JobStatusReady           JobStatus = "READY"
+	JobStatusProcessing      JobStatus = "PROCESSING"
+	JobStatusDone            JobStatus = "DONE"
+	JobStatusFailed          JobStatus = "FAILED"
+	JobStatusAborted         JobStatus = "ABORTED"
+	JobStatusConfirmCanceled JobStatus = "CONFIRM_CANCELED"
 )
 
 type (

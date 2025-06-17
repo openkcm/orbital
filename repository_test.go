@@ -682,7 +682,7 @@ func TestRepoTransactionRaceCondition(t *testing.T) {
 
 			err := orbital.Transaction(repo)(ctx, func(ctx context.Context, repo orbital.Repository) error {
 				// should update the job as cancel
-				createdJob.Status = orbital.JobStatusCanceled
+				createdJob.Status = orbital.JobStatusConfirmCanceled
 				err := orbital.UpdateRepoJob(&repo)(ctx, createdJob)
 				assert.NoError(t, err)
 
@@ -703,7 +703,7 @@ func TestRepoTransactionRaceCondition(t *testing.T) {
 
 		// should fetch the updated job for the second transaction
 		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
-			Status:    orbital.JobStatusCanceled,
+			Status:    orbital.JobStatusConfirmCanceled,
 			CreatedAt: utcUnix(),
 			Limit:     10,
 		})

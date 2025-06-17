@@ -33,8 +33,12 @@ type (
 	// It returns a ConfirmResult struct with the confirmation result and an error if the process fails.
 	JobConfirmFunc func(ctx context.Context, job Job) (JobConfirmResult, error)
 	// JobConfirmResult represents the result of a job confirmation operation.
+	// CanceledErrorMessage contains the error message if the confirmation was canceled.
+	// Confirmed indicates whether the job was confirmed by the user.
+	// If Confirmed is false, then job status is updated to JobStatusConfirmCanceled.
 	JobConfirmResult struct {
-		Confirmed bool
+		CanceledErrorMessage string
+		Confirmed            bool
 	}
 
 	// TaskResolverCursor is the type for the next cursor.
@@ -95,11 +99,6 @@ const (
 	defReconcileInterval   = 5 * time.Second
 	defProcessingJobDelay  = 5 * time.Second
 	defProcessingTaskDelay = 5 * time.Second
-)
-
-// Internal constants.
-const (
-	repoOpTimeout = 2 * time.Second
 )
 
 var ErrTaskResolverNotSet = errors.New("taskResolver not set")
@@ -239,10 +238,8 @@ func (m *Manager) ListTasks(ctx context.Context, query ListTasksQuery) ([]Task, 
 // and attempts to confirm them within a transaction.
 func (m *Manager) confirmJob(ctx context.Context) error {
 	return m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
-		listCtx, cancel := context.WithTimeout(ctx, repoOpTimeout)
-		defer cancel()
 		nowUTC := time.Now().UTC()
-		jobs, err := repo.listJobs(listCtx, ListJobsQuery{
+		jobs, err := repo.listJobs(ctx, ListJobsQuery{
 			Status:             JobStatusCreated,
 			CreatedAt:          nowUTC.Add(-m.Config.ConfirmJobDelay).Unix(),
 			Limit:              1,
@@ -277,11 +274,11 @@ func (m *Manager) handleConfirmJob(ctx context.Context, repo Repository, job Job
 	}
 	job.Status = JobStatusConfirmed
 	if !res.Confirmed {
-		job.Status = JobStatusCanceled
+		job.ErrorMessage = res.CanceledErrorMessage
+		job.Status = JobStatusConfirmCanceled
+		return m.updateJobAndCreateJobEvent(ctx, repo, job)
 	}
-	updateCtx, cancel := context.WithTimeout(ctx, repoOpTimeout)
-	defer cancel()
-	return repo.updateJob(updateCtx, job)
+	return repo.updateJob(ctx, job)
 }
 
 // createTask orchestrates the creation of tasks for jobs in the repository.

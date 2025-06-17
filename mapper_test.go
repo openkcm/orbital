@@ -688,14 +688,14 @@ func TestDecodeValueVariants(t *testing.T) {
 			UpdatedAt: now,
 			Values: map[string]any{
 				"type":          "foo",
-				"status":        orbital.JobStatusCanceled,
+				"status":        orbital.JobStatusConfirmCanceled,
 				"data":          []byte("x"),
 				"error_message": "error",
 			},
 		}
 		job, err := orbital.Decode[orbital.Job](e)
 		assert.NoError(t, err)
-		assert.Equal(t, orbital.JobStatusCanceled, job.Status)
+		assert.Equal(t, orbital.JobStatusConfirmCanceled, job.Status)
 	})
 
 	t.Run("status as string type", func(t *testing.T) {
