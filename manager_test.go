@@ -90,7 +90,7 @@ func TestConfirmJob(t *testing.T) {
 				confirmFuncResponse: func() (orbital.JobConfirmResult, error) {
 					return orbital.JobConfirmResult{Confirmed: false}, nil
 				},
-				expStatus: orbital.JobStatusCanceled,
+				expStatus: orbital.JobStatusConfirmCanceled,
 			},
 			{
 				name: "successful",
@@ -134,6 +134,112 @@ func TestConfirmJob(t *testing.T) {
 			})
 		}
 	})
+	t.Run("should set the job error message from confirm func when job is not confirmed", func(t *testing.T) {
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+		expErrMsg := "cancelled error message"
+
+		confirmFunc := func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
+			return orbital.JobConfirmResult{
+				CanceledErrorMessage: expErrMsg,
+				Confirmed:            false,
+			}, nil
+		}
+		subj, _ := orbital.NewManager(repo,
+			mockTaskResolverFunc(),
+			orbital.WithJobConfirmFunc(confirmFunc),
+		)
+		subj.Config.ConfirmJobDelay = 100 * time.Millisecond
+
+		job := orbital.NewJob("", nil)
+		jobCreated, err := subj.PrepareJob(ctx, job)
+		assert.NoError(t, err)
+
+		// when
+		time.Sleep(1 * time.Second)
+		err = orbital.ConfirmJob(subj)(ctx)
+		assert.NoError(t, err)
+
+		// then
+		job, ok, err := subj.GetJob(ctx, jobCreated.ID)
+		assert.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, orbital.JobStatusConfirmCanceled, job.Status)
+		assert.Equal(t, expErrMsg, job.ErrorMessage)
+	})
+	t.Run("should create job event from confirm func when job is not confirmed", func(t *testing.T) {
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		confirmFunc := func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
+			return orbital.JobConfirmResult{
+				Confirmed: false,
+			}, nil
+		}
+		subj, _ := orbital.NewManager(repo,
+			mockTaskResolverFunc(),
+			orbital.WithJobConfirmFunc(confirmFunc),
+		)
+		subj.Config.ConfirmJobDelay = 100 * time.Millisecond
+
+		job := orbital.NewJob("", nil)
+		jobCreated, err := subj.PrepareJob(ctx, job)
+		assert.NoError(t, err)
+
+		// when
+		time.Sleep(1 * time.Second)
+		err = orbital.ConfirmJob(subj)(ctx)
+		assert.NoError(t, err)
+
+		// then
+		jobEvent, ok, err := orbital.GetRepoJobEvent(repo)(ctx, orbital.JobEventQuery{
+			ID: jobCreated.ID,
+		})
+		assert.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, jobCreated.ID, jobEvent.ID)
+		assert.False(t, jobEvent.IsNotified)
+	})
+
+	t.Run("should not set the job error message from confirm func when job is confirmed", func(t *testing.T) {
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		confirmFunc := func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
+			return orbital.JobConfirmResult{
+				CanceledErrorMessage: "cancelled error message",
+				Confirmed:            true,
+			}, nil
+		}
+		subj, _ := orbital.NewManager(repo,
+			mockTaskResolverFunc(),
+			orbital.WithJobConfirmFunc(confirmFunc),
+		)
+		subj.Config.ConfirmJobDelay = 100 * time.Millisecond
+
+		job := orbital.NewJob("", nil)
+		jobCreated, err := subj.PrepareJob(ctx, job)
+		assert.NoError(t, err)
+
+		// when
+		time.Sleep(1 * time.Second)
+		err = orbital.ConfirmJob(subj)(ctx)
+		assert.NoError(t, err)
+
+		// then
+		job, ok, err := subj.GetJob(ctx, jobCreated.ID)
+		assert.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, orbital.JobStatusConfirmed, job.Status)
+		assert.Empty(t, job.ErrorMessage)
+	})
+
 	t.Run("should respect retrieval mode and order by updatedAt in query", func(t *testing.T) {
 		// given
 		db, store := createSQLStore(t)
