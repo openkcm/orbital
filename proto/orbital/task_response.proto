@@ -4,18 +4,18 @@ package orbital;
 
 // TaskStatus defines the possible statuses of a task.
 enum TaskStatus {
-  PROCESSING = 0;   // operator is still working on the task
-  DONE       = 1;   // operator has completed the task
-  FAILED      = 2;   // operator encountered an error
+  PROCESSING = 0; // operator is still working on the task
+  DONE = 1; // operator has completed the task
+  FAILED = 2; // operator encountered an error
 }
 
 // TaskResponse is the response object received from the operator.
 message TaskResponse {
   string taskId = 10; // UUID as string
   string type = 20; // Type of the task
-  bytes workingState = 30; // Updated state of the task
+  optional bytes workingState = 30; // Updated state of the task
   string etag = 40; // Correlates with TaskRequest
   TaskStatus status = 50; // Status of the task
-  string errorMessage = 60; // Optional error message
+  optional string errorMessage = 60; // Optional error message
   int64 reconcileAfterSec = 70; // Time in seconds to delay next retry
 }
