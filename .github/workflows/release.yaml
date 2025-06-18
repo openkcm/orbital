@@ -1,41 +1,16 @@
-name: Versioned Release
+name: Release
 
 on:
-  push:
+  pull_request:
+    types: [ closed ]
     branches:
       - main
-  release:
-    types: [published]
-
-permissions:
-  actions: write
-  contents: write
-  pull-requests: write
 
 jobs:
-  release_tag:
-    name: Release version
+  release-tag:
+    if: ${{ (github.event.pull_request.merged == true) && (contains(github.event.pull_request.labels.*.name, 'release')) }}
     runs-on: ubuntu-24.04
     steps:
-      - name: Install GPG
-        run: sudo apt-get install -y gnupg
-
-      - name: Import GPG Key
-        run: |
-          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
-          KEY_ID=$(gpg --list-secret-keys --with-colons | grep '^sec' | cut -d: -f5)
-          echo "Using GPG key: $KEY_ID"
-        env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-
-      - name: Configure Git for GPG
-        run: |
-          git config --global user.name "GitHub CI Bot"
-          git config --global user.email "github-ci[bot]@users.noreply.github.com"
-          git config --global commit.gpgsign true
-          git config --global user.signingkey "${{ secrets.GPG_KEY_ID }}"
-          git config --global gpg.program gpg
-
       - name: Generate token from GitHub App
         id: generate-token
         uses: tibdex/github-app-token@3beb63f4bd073e61482598c45c71c1019b59b73a # v2.1.0
@@ -51,6 +26,33 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
+      - name: Import GPG key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          echo "use-agent" >> ~/.gnupg/gpg.conf
+          echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
+          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+          echo RELOADAGENT | gpg-connect-agent
+          git config --global user.name "GitHub CI Bot"
+          git config --global user.email "github-ci[bot]@users.noreply.github.com"
+          git config --global user.signingkey "${{ secrets.GPG_KEY_ID }}"
+          git config --global commit.gpgsign true
+          git config --global tag.gpgSign true
+          git config --global gpg.program gpg
+
+      - name: Ensure initial tag exists
+        run: |
+          if [ -z "$(git tag)" ]; then
+            echo "No tags found. Creating v0.0.0 from main."
+            git fetch origin main --tags
+            git tag -a v0.0.0 origin/main -m "Initial tag" --local-user "$(git config user.signingkey)"
+            git push origin "refs/tags/v0.0.0"
+          else
+            echo "Tags already exist. Skipping initial tag creation."
+          fi
+
       - name: Checkout build (taskfiles) repo
         run: |
           git clone https://github.com/openkcm/build.git ./hack/common
@@ -59,81 +61,45 @@ jobs:
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 #v2.0.0
         with:
           version: 3.x
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Read and validate VERSION
-        id: version
+      - name: Set up environment
         run: |
-          VERSION=$(task version)
-          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-dev(-[0-9a-f]*)?)?$ ]]; then
-            echo "Invalid version format: $VERSION"
-            exit 1
-          fi
-          echo "New version: $VERSION"
-          echo "version=$VERSION" >> $GITHUB_ENV
+          echo "version=$(task next-release-version)" >> $GITHUB_ENV
 
-      - name: Skip release if version is a dev version
-        if: contains(env.version, '-dev')
-        run: |
-          echo "Skipping development version release: ${{ env.version }}"
-          echo "SKIP=true" >> $GITHUB_ENV
-          exit 0
+      - name: Generate SBOM
+        uses: CycloneDX/gh-gomod-generate-sbom@efc74245d6802c8cefd925620515442756c70d8f #v2.0.0
+        with:
+          version: v1
+          args: mod -type library -json -licenses -output sbom.json
 
-      - name: Check if VERSION is already tagged
-        id: check_tag
-        run: |
-          if git rev-parse "refs/tags/${{ env.version }}" >/dev/null 2>&1; then
-            echo "Tag ${{ env.version }} already exists. Skipping release."
-            echo "SKIP=true" >> $GITHUB_ENV
-            exit 0
-          fi
-          echo "Tag ${{ env.version }} doesn't exists. Proceeding with release."
+      - name: Run Trivy sbom vulnerability scanner
+        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 #v0.31.0
+        with:
+          scan-type: 'sbom'
+          scan-ref: "sbom.json"
+          format: 'json'
+          output: 'trivy-sbom-vuln.json'
 
-      - name: Determine Next Version
-        id: set-next-version
-        if: ${{ env.SKIP != 'true' }}
-        run: |
-          latest_version=${{ env.version }}
-          echo "Latest tag: $latest_version"
-        
-          # Extract version components
-          major=$(echo $latest_version | cut -d. -f1 | tr -d 'v')
-          minor=$(echo $latest_version | cut -d. -f2)
-          patch=$(echo $latest_version | cut -d. -f3)
-        
-          echo "Current version: $major.$minor.$patch"
-          
-          patch=$((patch + 1))
-        
-          next_version="v$major.$minor.$patch"
-          echo "Next version: $next_version"
-          
-          echo "next_version=$next_version" >> $GITHUB_ENV
+      - name: Run trivy repository security scanner
+        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 #v0.31.0
+        with:
+          token-setup-trivy: ${{ steps.generate-token.outputs.token }}
+          scan-type: repository
+          format: json
+          output: trivy-repository-vuln.json
+          severity: CRITICAL,HIGH,MEDIUM
 
-      - name: Create Git tag
-        if: ${{ env.SKIP != 'true' }}
-        run: |
-          AUTHOR_NAME=$(git log -1 --pretty=format:'%an')
-          AUTHOR_EMAIL=$(git log -1 --pretty=format:'%ae')
-          echo "Tagging as $AUTHOR_NAME <$AUTHOR_EMAIL>"
-          
-          echo "AUTHOR_NAME=$AUTHOR_NAME" >> $GITHUB_ENV
-          echo "AUTHOR_EMAIL=$AUTHOR_EMAIL" >> $GITHUB_ENV
-          
-          git config user.name "$AUTHOR_NAME"
-          git config user.email "$AUTHOR_EMAIL"
-          
-          git tag -a "${{ env.version }}" -m "Release ${{ env.version }}"
-          git push origin "${{ env.version }}"
-        env:
-          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+      - name: Run tfsec security scanner
+        uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6 #v1.0.3
+        with:
+          github_token: ${{ steps.generate-token.outputs.token }}
+          format: json
 
       - name: Build Changelog
         id: github_release
         uses: mikepenz/release-changelog-builder-action@5fb6e51e44d4aea73f66549f425aa3ed5008109e # v5
         with:
-          mode: "PR"
+          mode: "release"
           configurationJson: |
             {
               "template": "#{{CHANGELOG}}",
@@ -158,57 +124,31 @@ jobs:
                   "on_property": "title",
                   "target": "$1"
                 }
-              ]
+              ],
+              "exclude": {
+                "pattern": "^chore:\s*release",
+                "labels": "release"
+              }
             }
+
+      - name: Create signed tag from main
+        run: |
+          git fetch origin main --tags
+          git tag -a "${{ env.version }}" origin/main -m "Release ${{ env.version }}" --local-user "$(git config user.signingkey)"
+          git push origin "refs/tags/${{ env.version }}"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update to the next version
-        if: ${{ env.SKIP != 'true' }}
-        run: |
-          task release:update-repo-version --verbose -- "${{ env.next_version }}-dev"
-
-      - name: Generate SBOM
-        if: ${{ env.SKIP != 'true' }}
-        run: |
-          task cyclonedxgomod:mod-library --verbose
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
 
       - name: Create GitHub release
-        if: ${{ env.SKIP != 'true' }}
-        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
           tag_name: ${{ env.version }}
           name: Release ${{ env.version }}
           body: ${{steps.github_release.outputs.changelog}}
-          files: "sbom.json"
+          files: |
+            sbom.json
+            *vuln.json
           draft: true
           prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Clean up SBOM files
-        if: ${{ env.SKIP != 'true' }}
-        run: |
-          rm -f sbom.json
-          rm -rf hack
-
-      - name: Create pr for next version
-        if: ${{ env.SKIP != 'true' }}
-        id: cpr
-        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
-        with:
-          token: ${{ steps.generate-token.outputs.token }}
-          commit-message: "chore: update to ${{ env.next_version }}-dev version"
-          committer: "GitHub Actions <github-actions[bot]@users.noreply.github.com>"
-          author: "${{ env.AUTHOR_NAME }} <${{ env.AUTHOR_EMAIL }}>"
-          signoff: true
-          base: main
-          branch: dev/${{ env.next_version }}
-          delete-branch: true
-          sign-commits: true
-          title: "chore: update to ${{ env.next_version }}-dev version"
-          body: "This PR was created automatically by GitHub Actions."
-          labels: |
-            next-dev-version
-            automated pr
-          draft: false
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}

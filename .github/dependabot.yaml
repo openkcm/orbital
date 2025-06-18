@@ -6,6 +6,14 @@ version: 2
 updates:
   - package-ecosystem: gomod
     directory: /
+    reviewers:
+      - "openkcm/go-maintainers"
     schedule:
       interval: daily
     open-pull-requests-limit: 5
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    reviewers:
+      - "openkcm/go-maintainers"
+    schedule:
+      interval: "daily"
