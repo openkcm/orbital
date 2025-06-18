@@ -363,6 +363,7 @@ func TestProcessResponse(t *testing.T) {
 			expectedTaskStatus     orbital.TaskStatus
 			expectedWorkingState   []byte
 			expectedReconcileAfter int64
+			expErrorMessage        string
 			expectError            bool
 			expectNoUpdate         bool
 		}{
@@ -396,6 +397,41 @@ func TestProcessResponse(t *testing.T) {
 				},
 				expectedTaskStatus:     orbital.TaskStatusDone,
 				expectedWorkingState:   []byte("updated-state"),
+				expectedReconcileAfter: 300,
+				expectError:            false,
+			},
+			{
+				name: "should not update task with error message if the task response is not failed",
+				setupData: func(t *testing.T, repo *orbital.Repository) uuid.UUID {
+					t.Helper()
+					ctx := t.Context()
+					task := orbital.Task{
+						JobID:        uuid.New(),
+						Type:         "task-type",
+						Data:         []byte("task-data"),
+						WorkingState: []byte("initial-state"),
+						Status:       orbital.TaskStatusProcessing,
+						Target:       "target-1",
+						ETag:         "etag-123",
+					}
+					taskIDs, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{task})
+					assert.NoError(t, err)
+					return taskIDs[0]
+				},
+				response: func(taskID uuid.UUID) orbital.TaskResponse {
+					return orbital.TaskResponse{
+						TaskID:            taskID,
+						Type:              "task-type",
+						WorkingState:      []byte("updated-state"),
+						ETag:              "etag-123",
+						Status:            string(orbital.ResultDone),
+						ReconcileAfterSec: 300,
+						ErrorMessage:      "some-error-message",
+					}
+				},
+				expectedTaskStatus:     orbital.TaskStatusDone,
+				expectedWorkingState:   []byte("updated-state"),
+				expErrorMessage:        "",
 				expectedReconcileAfter: 300,
 				expectError:            false,
 			},
@@ -475,6 +511,7 @@ func TestProcessResponse(t *testing.T) {
 					}
 				},
 				expectedTaskStatus:   orbital.TaskStatusFailed,
+				expErrorMessage:      "Processing failed",
 				expectedWorkingState: []byte("error-state"),
 				expectError:          false,
 			},
@@ -520,6 +557,7 @@ func TestProcessResponse(t *testing.T) {
 					}
 					// Make sure the ETag is updated if the response was processed successfully
 					assert.NotEqual(t, response.ETag, task.ETag)
+					assert.Equal(t, tt.expErrorMessage, task.ErrorMessage)
 				} else {
 					assert.Equal(t, orbital.TaskStatusProcessing, task.Status)
 					assert.Equal(t, []byte("initial-state"), task.WorkingState)

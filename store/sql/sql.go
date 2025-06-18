@@ -51,6 +51,7 @@ func New(ctx context.Context, db *sql.DB) (*SQL, error) {
    			etag VARCHAR(100),
    			status VARCHAR(100) NOT NULL,
    			target TEXT NOT NULL,
+     		error_message VARCHAR(250),
    			updated_at BIGINT NOT NULL,
    			created_at BIGINT NOT NULL
    		);

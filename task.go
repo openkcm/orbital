@@ -32,6 +32,7 @@ type Task struct {
 	ETag              string
 	Status            TaskStatus
 	Target            string
+	ErrorMessage      string
 	UpdatedAt         int64
 	CreatedAt         int64
 }

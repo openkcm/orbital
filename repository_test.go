@@ -286,11 +286,12 @@ func TestRepoCreateTasks(t *testing.T) {
 		tasks = append(tasks, orbital.Task{
 			JobID:        jobID,
 			Type:         taskType,
-			WorkingState: []byte(fmt.Sprintf("working-state-%v", index)),
+			WorkingState: fmt.Append([]byte("working-state-"), index),
 			SentCount:    int64(index),
 			ETag:         fmt.Sprintf("etag-%v", index),
 			Status:       orbital.TaskStatusCreated,
 			Target:       fmt.Sprintf("target-%v", index),
+			ErrorMessage: fmt.Sprintf("error-message-%v", index),
 		})
 	}
 
@@ -304,9 +305,10 @@ func TestRepoCreateTasks(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, jobID, fetchedTask.JobID)
 		assert.Equal(t, taskType, fetchedTask.Type)
-		assert.Equal(t, []byte(fmt.Sprintf("working-state-%v", index)), fetchedTask.WorkingState)
+		assert.Equal(t, fmt.Sprintf("working-state-%v", index), string(fetchedTask.WorkingState))
 		assert.Equal(t, int64(index), fetchedTask.SentCount)
 		assert.Equal(t, fmt.Sprintf("etag-%v", index), fetchedTask.ETag)
+		assert.Equal(t, fmt.Sprintf("error-message-%v", index), fetchedTask.ErrorMessage)
 		assert.Equal(t, orbital.TaskStatusCreated, fetchedTask.Status)
 	}
 }

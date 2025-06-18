@@ -248,9 +248,10 @@ func TestEncodes(t *testing.T) {
 	t.Run("success Task", func(t *testing.T) {
 		input := []orbital.Task{
 			{
-				ID:        uID,
-				CreatedAt: unixTime,
-				UpdatedAt: unixTime,
+				ID:           uID,
+				CreatedAt:    unixTime,
+				UpdatedAt:    unixTime,
+				ErrorMessage: "foo-error",
 			},
 		}
 		expected := []orbital.Entity{
@@ -260,13 +261,21 @@ func TestEncodes(t *testing.T) {
 				CreatedAt: unixTime,
 				UpdatedAt: unixTime,
 				Values: map[string]any{
-					"id":            uID,
-					"created_at":    unixTime,
-					"updated_at":    unixTime,
-					"working_state": []byte(nil), "data": []byte(nil), "type": "", "etag": "", "job_id": uuid.Nil,
-					"last_sent_at": int64(0), "reconcile_after_sec": int64(0), "sent_count": int64(0),
-					"max_sent_count": int64(0), "status": orbital.TaskStatus(""),
-					"target": "",
+					"id":                  uID,
+					"created_at":          unixTime,
+					"updated_at":          unixTime,
+					"working_state":       []byte(nil),
+					"data":                []byte(nil),
+					"type":                "",
+					"etag":                "",
+					"job_id":              uuid.Nil,
+					"last_sent_at":        int64(0),
+					"reconcile_after_sec": int64(0),
+					"sent_count":          int64(0),
+					"max_sent_count":      int64(0),
+					"status":              orbital.TaskStatus(""),
+					"target":              "",
+					"error_message":       "foo-error",
 				},
 			},
 		}
@@ -439,6 +448,7 @@ func TestDecodes(t *testing.T) {
 				ETag:              "etag-1",
 				Status:            orbital.TaskStatusCreated,
 				Target:            "target-1",
+				ErrorMessage:      "error-message-1",
 				UpdatedAt:         utcUnix(),
 				CreatedAt:         utcUnix(),
 			}
@@ -453,6 +463,7 @@ func TestDecodes(t *testing.T) {
 				ETag:              "etag-2",
 				Status:            orbital.TaskStatusCreated,
 				Target:            "target-2",
+				ErrorMessage:      "error-message-2",
 				UpdatedAt:         utcUnix(),
 				CreatedAt:         utcUnix(),
 			}
@@ -517,6 +528,10 @@ func TestDecodes(t *testing.T) {
 					name:        "missing reconcile_after_sec",
 					keyToDelete: "reconcile_after_sec",
 				},
+				{
+					name:        "missing error_message",
+					keyToDelete: "error_message",
+				},
 			}
 
 			for _, tt := range tts {
@@ -540,6 +555,7 @@ func TestDecodes(t *testing.T) {
 							"etag":                "etag",
 							"status":              "status",
 							"target":              "target",
+							"error_message":       "error",
 							"updated_at":          0,
 							"created_at":          0,
 						},

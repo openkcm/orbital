@@ -137,6 +137,7 @@ func Encode[T EntityTypes](entityType T) (Entity, error) {
 				"etag":                obj.ETag,
 				"status":              obj.Status,
 				"target":              obj.Target,
+				"error_message":       obj.ErrorMessage,
 				"updated_at":          obj.UpdatedAt,
 				"created_at":          obj.CreatedAt,
 			},
@@ -281,6 +282,9 @@ func decodeTask[T EntityTypes](e Entity) (T, error) {
 		return empty, err
 	}
 	if t.ReconcileAfterSec, err = resolve[int64](vals, "reconcile_after_sec"); err != nil {
+		return empty, err
+	}
+	if t.ErrorMessage, err = resolve[string](vals, "error_message"); err != nil {
 		return empty, err
 	}
 	return out, nil

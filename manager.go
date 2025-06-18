@@ -603,6 +603,9 @@ func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error 
 		task.ETag = uuid.NewString() // Generate a new ETag for the updated task
 		task.Status = TaskStatus(resp.Status)
 		task.ReconcileAfterSec = resp.ReconcileAfterSec
+		if task.Status == TaskStatusFailed {
+			task.ErrorMessage = resp.ErrorMessage
+		}
 
 		return repo.updateTask(txCtx, task)
 	})
