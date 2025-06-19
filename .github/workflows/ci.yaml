@@ -5,10 +5,18 @@ on:
       - v*
     branches:
       - main
+    paths-ignore:
+      - 'docs/**'
+      - 'LICENSES/**'
+      - '.releases/**'
+      - '.github/**'
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  build:
+  validate-and-testing:
     runs-on: ubuntu-24.04
 
     steps:
@@ -30,8 +38,6 @@ jobs:
         uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 #v2.0.0
         with:
           version: 3.x
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: task validate
         run: task validate --verbose
