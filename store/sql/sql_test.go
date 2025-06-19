@@ -1,11 +1,7 @@
-//go:build integration
-// +build integration
-
 package sql_test
 
 import (
 	"context"
-	stdsql "database/sql"
 	"errors"
 	"fmt"
 	"reflect"
@@ -17,6 +13,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+
+	stdsql "database/sql"
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/store/query"
