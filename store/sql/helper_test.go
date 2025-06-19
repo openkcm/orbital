@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/docker/go-connections/nat"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -42,7 +43,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	mappedPort, err := pgContainer.MappedPort(ctx, "5432")
+	mappedPort, err := pgContainer.MappedPort(ctx, nat.Port(port))
 	if err != nil {
 		log.Println("Failed to get mapped port for PostgreSQL container:", err)
 		os.Exit(1)
