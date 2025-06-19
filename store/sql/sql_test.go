@@ -949,7 +949,7 @@ func TestWithRetrievalModeQueue(t *testing.T) {
 			err := store.Transaction(ctx, func(ctx context.Context, r orbital.Repository) error {
 				// here we check if the first transaction is in stage 1
 				assert.Equal(t, int32(1), firstTransactionStage.Load())
-				transactor2 <- "transaction 1 continue"
+				transactor2 <- "transaction 1 can continue"
 				listResult, err := r.Store.List(ctx, queryWithRetrievalModeUpdate)
 				// following assert makes sure that we are able to fetch the record
 				assert.NoError(t, err)
@@ -965,7 +965,7 @@ func TestWithRetrievalModeQueue(t *testing.T) {
 		transactor1 <- "transaction 1 start"
 		assert.Equal(t, "transaction 1 wait", <-transactor1)
 		transactor2 <- "transaction 2 start"
-		assert.Equal(t, "transaction 1 continue", <-transactor2)
+		assert.Equal(t, "transaction 1 can continue", <-transactor2)
 		transactor1 <- "transaction 1 continue"
 		wg.Wait()
 	})
