@@ -1,47 +1,63 @@
-//go:build integration
-// +build integration
-
 package orbital_test
 
 import (
-	stdsql "database/sql"
+	"context"
 	"fmt"
+	"log"
 	"os"
 	"testing"
 
+	"github.com/docker/go-connections/nat"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	_ "github.com/lib/pq"
+
+	stdsql "database/sql"
 
 	"github.com/openkcm/orbital/store/sql"
 )
 
-var (
-	host     = os.Getenv("DB_HOST")
-	port     = os.Getenv("DB_PORT")
-	user     = os.Getenv("DB_USER")
-	password = os.Getenv("DB_PASS")
-	dbname   = os.Getenv("DB_NAME")
+const (
+	host     = "localhost"
+	user     = "postgres"
+	password = "secret"
+	dbname   = "orbital"
 	sslmode  = "disable"
 )
 
-func init() {
-	if host == "" {
-		host = "localhost"
+var port = "5432"
+
+func TestMain(m *testing.M) {
+	ctx := context.Background()
+
+	pgContainer, err := postgres.Run(ctx, "postgres:17-alpine",
+		postgres.WithDatabase(dbname),
+		postgres.WithUsername(user),
+		postgres.WithPassword(password),
+		postgres.BasicWaitStrategies(),
+	)
+	if err != nil {
+		log.Println("Failed to start PostgreSQL container:", err)
+		os.Exit(1)
 	}
-	if port == "" {
-		port = "5432"
+
+	mappedPort, err := pgContainer.MappedPort(ctx, nat.Port(port))
+	if err != nil {
+		log.Println("Failed to get mapped port for PostgreSQL container:", err)
+		os.Exit(1)
 	}
-	if user == "" {
-		user = "postgres"
+	port = mappedPort.Port()
+
+	code := m.Run()
+
+	if err := pgContainer.Terminate(ctx); err != nil {
+		log.Println("Failed to terminate PostgreSQL container:", err)
+		os.Exit(1)
 	}
-	if password == "" {
-		password = "secret"
-	}
-	if dbname == "" {
-		dbname = "orbital"
-	}
+
+	os.Exit(code)
 }
 
 func clearTables(t *testing.T, db *stdsql.DB) {

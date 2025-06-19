@@ -1,6 +1,3 @@
-//go:build integration
-// +build integration
-
 package orbital_test
 
 import (
@@ -897,7 +894,7 @@ func TestCancel(t *testing.T) {
 		assert.True(t, ok)
 
 		assert.Equal(t, orbital.JobStatusUserCanceled, job.Status)
-		assert.Equal(t, job.ErrorMessage, "job has been canceled by the user")
+		assert.Equal(t, "job has been canceled by the user", job.ErrorMessage)
 	})
 	t.Run("should not cancel job", func(t *testing.T) {
 		db, store := createSQLStore(t)
@@ -919,7 +916,7 @@ func TestCancel(t *testing.T) {
 		assert.True(t, ok)
 
 		assert.NotEqual(t, orbital.JobStatusUserCanceled, job.Status)
-		assert.Equal(t, job.ErrorMessage, "")
+		assert.Empty(t, job.ErrorMessage)
 	})
 	t.Run("job not found", func(t *testing.T) {
 		db, store := createSQLStore(t)
