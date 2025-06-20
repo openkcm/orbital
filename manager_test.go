@@ -25,7 +25,7 @@ func TestPrepareJob(t *testing.T) {
 	defer clearTables(t, db)
 	repo := orbital.NewRepository(store)
 
-	subj, _ := orbital.NewManager(repo, mockTaskResolverFunc())
+	subj, _ := orbital.NewManager(repo, mockTaskResolveFunc())
 
 	job := orbital.NewJob("resource-data", []byte("type"))
 	_, ok, err := subj.GetJob(ctx, job.ID)
@@ -49,7 +49,7 @@ func TestNewManagerTaskResolverErr(t *testing.T) {
 	t.Run("should not return error if task resolver is defined", func(t *testing.T) {
 		// when
 		_, err := orbital.NewManager(nil,
-			mockTaskResolverFunc(),
+			mockTaskResolveFunc(),
 		)
 
 		// then
@@ -109,7 +109,7 @@ func TestConfirmJob(t *testing.T) {
 					return tt.confirmFuncResponse()
 				}
 				subj, _ := orbital.NewManager(repo,
-					mockTaskResolverFunc(),
+					mockTaskResolveFunc(),
 					orbital.WithJobConfirmFunc(confirmFunc),
 				)
 				subj.Config.ConfirmJobDelay = 100 * time.Millisecond
@@ -145,7 +145,7 @@ func TestConfirmJob(t *testing.T) {
 			}, nil
 		}
 		subj, _ := orbital.NewManager(repo,
-			mockTaskResolverFunc(),
+			mockTaskResolveFunc(),
 			orbital.WithJobConfirmFunc(confirmFunc),
 		)
 		subj.Config.ConfirmJobDelay = 100 * time.Millisecond
@@ -178,8 +178,9 @@ func TestConfirmJob(t *testing.T) {
 			}, nil
 		}
 		subj, _ := orbital.NewManager(repo,
-			mockTaskResolverFunc(),
+			mockTaskResolveFunc(),
 			orbital.WithJobConfirmFunc(confirmFunc),
+			orbital.WithJobTerminatedEventFunc(mockTerminatedFunc()),
 		)
 		subj.Config.ConfirmJobDelay = 100 * time.Millisecond
 
@@ -215,7 +216,7 @@ func TestConfirmJob(t *testing.T) {
 			}, nil
 		}
 		subj, _ := orbital.NewManager(repo,
-			mockTaskResolverFunc(),
+			mockTaskResolveFunc(),
 			orbital.WithJobConfirmFunc(confirmFunc),
 		)
 		subj.Config.ConfirmJobDelay = 100 * time.Millisecond
@@ -268,7 +269,7 @@ func TestConfirmJob(t *testing.T) {
 			return orbital.JobConfirmResult{Confirmed: true}, nil
 		}
 		subj, _ := orbital.NewManager(repo,
-			mockTaskResolverFunc(),
+			mockTaskResolveFunc(),
 			orbital.WithJobConfirmFunc(confirmFunc),
 		)
 		subj.Config.ConfirmJobDelay = 100 * time.Millisecond
@@ -550,7 +551,7 @@ func TestCreateTasks(t *testing.T) {
 		}
 	})
 
-	t.Run("if TaskResolverFunc return IsAborted as true then", func(t *testing.T) {
+	t.Run("if TaskResolveFunc return IsAborted as true then", func(t *testing.T) {
 		t.Run("should update job status as Aborted", func(t *testing.T) {
 			// given
 			ctx := t.Context()
@@ -567,7 +568,7 @@ func TestCreateTasks(t *testing.T) {
 			resolverFunc := func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 				resolverCalled++
 				return orbital.TaskResolverResult{
-					IsAborted: true,
+					IsCanceled: true,
 				}, nil
 			}
 
@@ -585,7 +586,7 @@ func TestCreateTasks(t *testing.T) {
 			assert.NoError(t, err)
 			assert.True(t, ok)
 			assert.Equal(t, 1, resolverCalled)
-			assert.Equal(t, orbital.JobStatusAborted, actJob.Status)
+			assert.Equal(t, orbital.JobStatusResolveCanceled, actJob.Status)
 		})
 		t.Run("should update job error message", func(t *testing.T) {
 			// given
@@ -603,8 +604,8 @@ func TestCreateTasks(t *testing.T) {
 			resolverFunc := func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 				resolverCalled++
 				return orbital.TaskResolverResult{
-					IsAborted:           true,
-					AbortedErrorMessage: "the job needs to be aborted",
+					IsCanceled:           true,
+					CanceledErrorMessage: "the job needs to be canceled",
 				}, nil
 			}
 
@@ -622,7 +623,7 @@ func TestCreateTasks(t *testing.T) {
 			assert.NoError(t, err)
 			assert.True(t, ok)
 			assert.Equal(t, 1, resolverCalled)
-			assert.Equal(t, "the job needs to be aborted", actJob.ErrorMessage)
+			assert.Equal(t, "the job needs to be canceled", actJob.ErrorMessage)
 		})
 		t.Run("should create a job event", func(t *testing.T) {
 			// given
@@ -640,12 +641,13 @@ func TestCreateTasks(t *testing.T) {
 			resolverFunc := func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 				resolverCalled++
 				return orbital.TaskResolverResult{
-					IsAborted: true,
+					IsCanceled: true,
 				}, nil
 			}
 
 			subj, _ := orbital.NewManager(repo,
 				resolverFunc,
+				orbital.WithJobTerminatedEventFunc(mockTerminatedFunc()),
 			)
 
 			// when
@@ -833,14 +835,8 @@ func TestListTasks(t *testing.T) {
 	})
 }
 
-func mockTaskResolverFunc() orbital.TaskResolverFunc {
-	return func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
-		return orbital.TaskResolverResult{}, nil
-	}
-}
-
 func TestStart(t *testing.T) {
-	t.Run("should call JobTerminationEventFunc", func(t *testing.T) {
+	t.Run("should call JobTerminatedEventFunc", func(t *testing.T) {
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
 		repo := orbital.NewRepository(store)
@@ -852,19 +848,20 @@ func TestStart(t *testing.T) {
 		_, err = orbital.CreateRepoJobEvent(repo)(t.Context(), orbital.JobEvent{ID: jobID})
 		assert.NoError(t, err)
 
-		subj, _ := orbital.NewManager(repo,
-			mockTaskResolverFunc(),
-		)
-		subj.Config.NotifyWorkerConfig.ExecInterval = 150 * time.Millisecond
-
 		actCalled := 0
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		subj.JobTerminationEventFunc = func(_ context.Context, _ orbital.Job) error {
-			defer wg.Done()
-			actCalled++
-			return nil
-		}
+		subj, _ := orbital.NewManager(repo,
+			mockTaskResolveFunc(),
+			orbital.WithJobTerminatedEventFunc(
+				func(_ context.Context, _ orbital.Job) error {
+					defer wg.Done()
+					actCalled++
+					return nil
+				}),
+		)
+		subj.Config.NotifyWorkerConfig.ExecInterval = 150 * time.Millisecond
+
 		err = subj.Start(t.Context())
 		assert.NoError(t, err)
 		wg.Wait()
@@ -884,7 +881,7 @@ func TestCancel(t *testing.T) {
 		assert.NoError(t, err)
 
 		subj, _ := orbital.NewManager(repo,
-			mockTaskResolverFunc(),
+			mockTaskResolveFunc(),
 		)
 		err = subj.CancelJob(t.Context(), jobID)
 		assert.NoError(t, err)
@@ -906,7 +903,7 @@ func TestCancel(t *testing.T) {
 		assert.NoError(t, err)
 
 		subj, _ := orbital.NewManager(repo,
-			mockTaskResolverFunc(),
+			mockTaskResolveFunc(),
 		)
 		err = subj.CancelJob(t.Context(), jobID)
 		assert.Error(t, err)
@@ -924,7 +921,7 @@ func TestCancel(t *testing.T) {
 		repo := orbital.NewRepository(store)
 
 		subj, _ := orbital.NewManager(repo,
-			mockTaskResolverFunc(),
+			mockTaskResolveFunc(),
 		)
 		err := subj.CancelJob(t.Context(), uuid.New())
 		assert.ErrorIs(t, err, orbital.ErrJobNotFound)

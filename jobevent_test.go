@@ -17,15 +17,15 @@ var (
 )
 
 func TestRecordJobEvent(t *testing.T) {
-	t.Run("should not record event if JobTerminationEventFunc is nil", func(t *testing.T) {
+	t.Run("should not record event if JobTerminatedEventFunc is nil", func(t *testing.T) {
 		// given
 		ctx := t.Context()
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
 		repo := orbital.NewRepository(store)
-		subj, _ := orbital.NewManager(repo, mockTaskResolverFunc())
-
-		subj.JobTerminationEventFunc = nil // explicitly set to nil
+		subj, _ := orbital.NewManager(repo, mockTaskResolveFunc(),
+			orbital.WithJobTerminatedEventFunc(nil), // explicitly set to nil
+		)
 
 		// when
 		err := orbital.RecordJobEvent(subj)(ctx, *repo, uuid.New())
@@ -37,16 +37,19 @@ func TestRecordJobEvent(t *testing.T) {
 		assert.False(t, ok)
 	})
 
-	t.Run("should record event if JobTerminationEventFunc is not nil and jobevent is not present", func(t *testing.T) {
+	t.Run("should record event if JobTerminatedEventFunc is not nil and jobevent is not present", func(t *testing.T) {
 		// given
 		ctx := t.Context()
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
 		repo := orbital.NewRepository(store)
-		subj, _ := orbital.NewManager(repo, mockTaskResolverFunc())
-		subj.JobTerminationEventFunc = func(_ context.Context, _ orbital.Job) error {
-			return nil
-		}
+		subj, _ := orbital.NewManager(repo, mockTaskResolveFunc(),
+			orbital.WithJobTerminatedEventFunc(
+				func(_ context.Context, _ orbital.Job) error { // set to a non-nil function
+					return nil
+				}),
+		)
+
 		jobID := uuid.New()
 
 		// when
@@ -70,10 +73,12 @@ func TestRecordJobEvent(t *testing.T) {
 		jobID := uuid.New()
 		_, err := orbital.CreateRepoJobEvent(repo)(ctx, orbital.JobEvent{ID: jobID, IsNotified: true}) // create a job event with isNotified = true
 		assert.NoError(t, err)
-		subj, _ := orbital.NewManager(repo, mockTaskResolverFunc())
-		subj.JobTerminationEventFunc = func(_ context.Context, _ orbital.Job) error {
-			return nil
-		}
+		subj, _ := orbital.NewManager(repo, mockTaskResolveFunc(),
+			orbital.WithJobTerminatedEventFunc(
+				func(_ context.Context, _ orbital.Job) error {
+					return nil
+				}),
+		)
 
 		// when
 		err = orbital.RecordJobEvent(subj)(ctx, *repo, jobID)
@@ -89,19 +94,21 @@ func TestRecordJobEvent(t *testing.T) {
 }
 
 func TestSendJobEvent(t *testing.T) {
-	t.Run("should not send event if there are not jobevents", func(t *testing.T) {
+	t.Run("should not send event if there are no jobevents", func(t *testing.T) {
 		// given
 		ctx := t.Context()
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
 		repo := orbital.NewRepository(store)
-		subj, _ := orbital.NewManager(repo, mockTaskResolverFunc())
 
 		jobTerminationCalled := 0
-		subj.JobTerminationEventFunc = func(_ context.Context, _ orbital.Job) error {
-			jobTerminationCalled++
-			return nil
-		}
+		subj, _ := orbital.NewManager(repo, mockTaskResolveFunc(),
+			orbital.WithJobTerminatedEventFunc(
+				func(_ context.Context, _ orbital.Job) error {
+					jobTerminationCalled++
+					return nil
+				}),
+		)
 
 		// when
 		err := orbital.SendJobEvent(subj)(ctx)
@@ -118,13 +125,14 @@ func TestSendJobEvent(t *testing.T) {
 		repo := orbital.NewRepository(store)
 		_, err := orbital.CreateRepoJobEvent(repo)(ctx, orbital.JobEvent{IsNotified: false})
 		assert.NoError(t, err)
-		subj, _ := orbital.NewManager(repo, mockTaskResolverFunc())
-
 		jobTerminationCalled := 0
-		subj.JobTerminationEventFunc = func(_ context.Context, _ orbital.Job) error {
-			jobTerminationCalled++
-			return nil
-		}
+		subj, _ := orbital.NewManager(repo, mockTaskResolveFunc(),
+			orbital.WithJobTerminatedEventFunc(
+				func(_ context.Context, _ orbital.Job) error {
+					jobTerminationCalled++
+					return nil
+				}),
+		)
 
 		// when
 		err = orbital.SendJobEvent(subj)(ctx)
@@ -150,15 +158,16 @@ func TestSendJobEvent(t *testing.T) {
 
 		_, err = orbital.CreateRepoJobEvent(repo)(ctx, orbital.JobEvent{ID: createdJob.ID, IsNotified: false})
 		assert.NoError(t, err)
-		subj, _ := orbital.NewManager(repo, mockTaskResolverFunc())
-
 		jobTerminationCalled := 0
 		var actSendJob orbital.Job
-		subj.JobTerminationEventFunc = func(_ context.Context, job orbital.Job) error {
-			jobTerminationCalled++
-			actSendJob = job
-			return nil
-		}
+		subj, _ := orbital.NewManager(repo, mockTaskResolveFunc(),
+			orbital.WithJobTerminatedEventFunc(
+				func(_ context.Context, job orbital.Job) error {
+					jobTerminationCalled++
+					actSendJob = job
+					return nil
+				}),
+		)
 
 		// when
 		err = orbital.SendJobEvent(subj)(ctx)
@@ -181,11 +190,12 @@ func TestSendJobEvent(t *testing.T) {
 
 		_, err = orbital.CreateRepoJobEvent(repo)(ctx, orbital.JobEvent{ID: createdJob.ID, IsNotified: false})
 		assert.NoError(t, err)
-		subj, _ := orbital.NewManager(repo, mockTaskResolverFunc())
-
-		subj.JobTerminationEventFunc = func(_ context.Context, _ orbital.Job) error {
-			return nil
-		}
+		subj, _ := orbital.NewManager(repo, mockTaskResolveFunc(),
+			orbital.WithJobTerminatedEventFunc(
+				func(_ context.Context, _ orbital.Job) error {
+					return nil
+				}),
+		)
 
 		// when
 		err = orbital.SendJobEvent(subj)(ctx)
@@ -199,7 +209,7 @@ func TestSendJobEvent(t *testing.T) {
 		assert.True(t, actEvent.IsNotified)
 	})
 
-	t.Run("should not update jobevent `isNotified` to true if the JobTerminationEventFunc return an error", func(t *testing.T) {
+	t.Run("should not update jobevent `isNotified` to true if the JobTerminatedEventFunc return an error", func(t *testing.T) {
 		// given
 		ctx := t.Context()
 		db, store := createSQLStore(t)
@@ -211,11 +221,12 @@ func TestSendJobEvent(t *testing.T) {
 
 		_, err = orbital.CreateRepoJobEvent(repo)(ctx, orbital.JobEvent{ID: createdJob.ID, IsNotified: false})
 		assert.NoError(t, err)
-		subj, _ := orbital.NewManager(repo, mockTaskResolverFunc())
-
-		subj.JobTerminationEventFunc = func(_ context.Context, _ orbital.Job) error {
-			return assert.AnError // simulate an error
-		}
+		subj, _ := orbital.NewManager(repo, mockTaskResolveFunc(),
+			orbital.WithJobTerminatedEventFunc(
+				func(_ context.Context, _ orbital.Job) error {
+					return assert.AnError // simulate an error
+				}),
+		)
 
 		// when
 		err = orbital.SendJobEvent(subj)(ctx)
@@ -230,8 +241,8 @@ func TestSendJobEvent(t *testing.T) {
 		assert.False(t, actEvent.IsNotified)
 	})
 
-	t.Run("should update jobevent updateAt to latest timestamp if the JobTerminationEventFunc return an error", func(t *testing.T) {
-		// this makes sure that the jobevent is updated even if the JobTerminationEventFunc returns an error
+	t.Run("should update jobevent updateAt to latest timestamp if the JobTerminatedEventFunc return an error", func(t *testing.T) {
+		// this makes sure that the jobevent is updated even if the JobTerminatedEventFunc returns an error
 		// so that the jobevent can be retried later.
 		// given
 		ctx := t.Context()
@@ -244,11 +255,12 @@ func TestSendJobEvent(t *testing.T) {
 
 		createdEvent, err := orbital.CreateRepoJobEvent(repo)(ctx, orbital.JobEvent{ID: createdJob.ID, IsNotified: false})
 		assert.NoError(t, err)
-		subj, _ := orbital.NewManager(repo, mockTaskResolverFunc())
-
-		subj.JobTerminationEventFunc = func(_ context.Context, _ orbital.Job) error {
-			return assert.AnError // simulate an error
-		}
+		subj, _ := orbital.NewManager(repo, mockTaskResolveFunc(),
+			orbital.WithJobTerminatedEventFunc(
+				func(_ context.Context, _ orbital.Job) error {
+					return assert.AnError // simulate an error
+				}),
+		)
 
 		// when
 		time.Sleep(1 * time.Second) // ensure the updateAt will change
@@ -257,7 +269,7 @@ func TestSendJobEvent(t *testing.T) {
 		// then
 		assert.NoError(t, err)
 
-		actEvent, ok, err := orbital.GetRepoJobEvent(repo)(ctx, orbital.JobEventQuery{IsNotified: &isFalse})
+		actEvent, ok, err := orbital.GetRepoJobEvent(repo)(ctx, orbital.JobEventQuery{ID: createdJob.ID})
 		assert.NoError(t, err)
 		assert.True(t, ok)
 		assert.False(t, actEvent.IsNotified)

@@ -41,10 +41,10 @@ type TestEnvironment struct {
 
 // ManagerConfig holds configuration for the manager.
 type ManagerConfig struct {
-	TaskResolver         orbital.TaskResolverFunc
-	JobConfirmFunc       orbital.JobConfirmFunc
-	TargetClients        map[string]orbital.Initiator
-	TerminationEventFunc orbital.TerminationEventFunc
+	TaskResolveFunc        orbital.TaskResolveFunc
+	JobConfirmFunc         orbital.JobConfirmFunc
+	TargetClients          map[string]orbital.Initiator
+	JobTerminatedEventFunc orbital.JobTerminatedEventFunc
 }
 
 // OperatorConfig holds configuration for the operator.
@@ -168,16 +168,12 @@ func createManager(t *testing.T, ctx context.Context, env *TestEnvironment, conf
 	managerOpts := []orbital.ManagerOptsFunc{
 		orbital.WithJobConfirmFunc(config.JobConfirmFunc),
 		orbital.WithTargetClients(config.TargetClients),
-		orbital.WithProcessingJobDelay(100 * time.Millisecond),
+		orbital.WithJobTerminatedEventFunc(config.JobTerminatedEventFunc),
 	}
 
-	manager, err := orbital.NewManager(repo, config.TaskResolver, managerOpts...)
+	manager, err := orbital.NewManager(repo, config.TaskResolveFunc, managerOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create manager: %w", err)
-	}
-
-	if config.TerminationEventFunc != nil {
-		manager.JobTerminationEventFunc = config.TerminationEventFunc
 	}
 
 	manager.Config.ConfirmJobWorkerConfig.ExecInterval = 200 * time.Millisecond

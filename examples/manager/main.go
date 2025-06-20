@@ -56,15 +56,12 @@ func main() {
 		// Register a task resolver function for jobs
 		taskResolver(),
 		// Register a confirm function for jobs
-		orbital.WithJobConfirmFunc(confirm),
+		orbital.WithJobConfirmFunc(jobConfirmFunc),
+		// Register a termination hook
+		orbital.WithJobTerminatedEventFunc(jobTerminatedEventFunc),
 	)
 	handleErr("Manager initialization failed", err)
 
-	// Register a termination hook
-	orbitalManager.JobTerminationEventFunc = func(_ context.Context, job orbital.Job) error {
-		log.Printf("Job %s terminated with status %s\n", job.ID, job.Status)
-		return nil
-	}
 	// Start the job manager
 	err = orbitalManager.Start(ctx)
 	handleErr("Failed to start job manager", err)
@@ -104,11 +101,16 @@ func listTasks(ctx context.Context, manager *orbital.Manager, query orbital.List
 	return nil
 }
 
-func confirm(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
+func jobConfirmFunc(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 	return orbital.JobConfirmResult{Confirmed: true}, nil
 }
 
-func taskResolver() orbital.TaskResolverFunc {
+func jobTerminatedEventFunc(_ context.Context, job orbital.Job) error {
+	log.Printf("Job %s terminated with status %s\n", job.ID, job.Status)
+	return nil
+}
+
+func taskResolver() orbital.TaskResolveFunc {
 	return func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 		return orbital.TaskResolverResult{
 			TaskInfos: []orbital.TaskInfo{

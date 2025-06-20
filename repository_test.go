@@ -583,7 +583,7 @@ func TestRepoTransactionRaceCondition(t *testing.T) {
 			assert.Equal(t, "1st transaction starts", <-transactor1)
 			defer wg.Done()
 			err := orbital.Transaction(repo)(ctx, func(ctx context.Context, repo orbital.Repository) error {
-				createdJob.Status = orbital.JobStatusAborted
+				createdJob.Status = orbital.JobStatusResolveCanceled
 				err := orbital.UpdateRepoJob(&repo)(ctx, createdJob)
 				assert.NoError(t, err)
 
@@ -628,7 +628,7 @@ func TestRepoTransactionRaceCondition(t *testing.T) {
 
 		// should fetch the updated job for the first transaction
 		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
-			Status:    orbital.JobStatusAborted,
+			Status:    orbital.JobStatusResolveCanceled,
 			CreatedAt: utcUnix(),
 			Limit:     10,
 		})
@@ -661,7 +661,7 @@ func TestRepoTransactionRaceCondition(t *testing.T) {
 			ctxTimeout, cancel := context.WithTimeout(ctx, 1*time.Second)
 			defer cancel()
 			err := orbital.Transaction(repo)(ctxTimeout, func(ctx context.Context, repo orbital.Repository) error {
-				createdJob.Status = orbital.JobStatusAborted
+				createdJob.Status = orbital.JobStatusResolveCanceled
 				err := orbital.UpdateRepoJob(&repo)(ctx, createdJob)
 				assert.NoError(t, err)
 

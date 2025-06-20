@@ -16,15 +16,16 @@ type (
 	// Manager is the interface for managing jobs,
 	// including their creation, state transitions, and lifecycle handling.
 	Manager struct {
-		repo                    *Repository
-		Config                  *Config
-		confirmFunc             JobConfirmFunc
-		taskResolver            TaskResolverFunc
-		targetToInitiator       map[string]Initiator
-		JobTerminationEventFunc TerminationEventFunc
+		Config                 Config
+		repo                   *Repository
+		jobConfirmFunc         JobConfirmFunc
+		taskResolveFunc        TaskResolveFunc
+		jobTerminatedEventFunc JobTerminatedEventFunc
+		targetToInitiator      map[string]Initiator
 	}
-	// TerminationEventFunc defines a callback function type for sending job events.
-	TerminationEventFunc func(ctx context.Context, job Job) error
+
+	// JobTerminatedEventFunc defines a callback function type for sending job events.
+	JobTerminatedEventFunc func(ctx context.Context, job Job) error
 
 	// ManagerOptsFunc is a function type to configure Manager options.
 	ManagerOptsFunc func(mgr *Manager)
@@ -52,24 +53,23 @@ type (
 		Cursor TaskResolverCursor
 		// Done indicates whether the resolution process is complete.
 		Done bool
-		// IsAborted indicates whether the job needs to be aborted.
-		IsAborted bool
-		// AbortedErrorMessage provides an error message if the job is aborted.
-		AbortedErrorMessage string
+		// IsCanceled indicates whether the job needs to be canceled.
+		IsCanceled bool
+		// CanceledErrorMessage provides an error message if the job is canceled.
+		CanceledErrorMessage string
 	}
 
-	// TaskResolverFunc is a  function type that resolves targets for the creation tasks for a job and the cursor.
-	TaskResolverFunc func(ctx context.Context, job Job, cursor TaskResolverCursor) (TaskResolverResult, error)
+	// TaskResolveFunc is a  function type that resolves targets for the creation tasks for a job and the cursor.
+	TaskResolveFunc func(ctx context.Context, job Job, cursor TaskResolverCursor) (TaskResolverResult, error)
 
 	// Config contains configuration for job processing.
 	Config struct {
-		// JobsLimitNum is the maximum number of jobs to process at once.
-		JobsLimitNum int
 		// TaskLimitNum is the maximum number of tasks to process at once.
 		TaskLimitNum int
 		// ConfirmJobInterval is the interval between jobs scheduler attempts.
 		ConfirmJobInterval time.Duration
-		// JobConfig contains configuration for job processing.
+		// ConfirmJobDelay is the delay before confirming a job.
+		ConfirmJobDelay time.Duration
 		// ConfirmJobWorkerConfig holds the configuration for the job confirmation worker.
 		ConfirmJobWorkerConfig WorkerConfig
 		// CreateTasksWorkerConfig holds the configuration for the task creation worker.
@@ -78,27 +78,17 @@ type (
 		ReconcileWorkerConfig WorkerConfig
 		// NotifyWorkerConfig holds the configuration for the notification worker.
 		NotifyWorkerConfig WorkerConfig
-		// ConfirmJobDelay is the delay before confirming a job.
-		ConfirmJobDelay time.Duration
-		// ConfirmJobTimeout is the timeout for jobs confirmation attempts.
-		ConfirmJobTimeout time.Duration
-		// CreateTasksInterval is the interval for task creation.
-		CreateTasksInterval time.Duration
-		// ProcessingJobDelay is the delay before processing jobs in reconcileTasks.
-		ProcessingJobDelay time.Duration
 	}
 )
 
 // Default values for configs.
 const (
-	defConfirmJobDelay     = 5 * time.Second
-	defNoOfWorker          = 5
-	defWorkTimeout         = 5 * time.Second
-	defTaskLimitNum        = 500
-	defWorkExecInterval    = 10 * time.Second
-	defReconcileInterval   = 5 * time.Second
-	defProcessingJobDelay  = 5 * time.Second
-	defProcessingTaskDelay = 5 * time.Second
+	defConfirmJobDelay   = 5 * time.Second
+	defNoOfWorker        = 5
+	defWorkTimeout       = 5 * time.Second
+	defTaskLimitNum      = 500
+	defWorkExecInterval  = 10 * time.Second
+	defReconcileInterval = 5 * time.Second
 )
 
 var (
@@ -109,14 +99,14 @@ var (
 )
 
 // NewManager creates a new Manager instance.
-func NewManager(repo *Repository, taskResolver TaskResolverFunc, optFuncs ...ManagerOptsFunc) (*Manager, error) {
+func NewManager(repo *Repository, taskResolver TaskResolveFunc, optFuncs ...ManagerOptsFunc) (*Manager, error) {
 	if taskResolver == nil {
 		return nil, ErrTaskResolverNotSet
 	}
 	mgr := &Manager{
-		repo:         repo,
-		taskResolver: taskResolver,
-		Config: &Config{
+		repo:            repo,
+		taskResolveFunc: taskResolver,
+		Config: Config{
 			ConfirmJobWorkerConfig: WorkerConfig{
 				NoOfWorkers:  defNoOfWorker,
 				ExecInterval: defWorkExecInterval,
@@ -137,11 +127,10 @@ func NewManager(repo *Repository, taskResolver TaskResolverFunc, optFuncs ...Man
 				ExecInterval: defWorkExecInterval,
 				Timeout:      defWorkTimeout,
 			},
-			ConfirmJobDelay:    defConfirmJobDelay,
-			ProcessingJobDelay: defProcessingJobDelay,
-			TaskLimitNum:       defTaskLimitNum,
+			ConfirmJobDelay: defConfirmJobDelay,
+			TaskLimitNum:    defTaskLimitNum,
 		},
-		confirmFunc: func(_ context.Context, _ Job) (JobConfirmResult, error) {
+		jobConfirmFunc: func(_ context.Context, _ Job) (JobConfirmResult, error) {
 			return JobConfirmResult{
 				Confirmed: true,
 			}, nil
@@ -157,14 +146,7 @@ func NewManager(repo *Repository, taskResolver TaskResolverFunc, optFuncs ...Man
 // WithJobConfirmFunc registers a function to confirm jobs.
 func WithJobConfirmFunc(f JobConfirmFunc) ManagerOptsFunc {
 	return func(opts *Manager) {
-		opts.confirmFunc = f
-	}
-}
-
-// WithTasksLimitNum sets Managers JobsLimitNum param.
-func WithTasksLimitNum(n int) ManagerOptsFunc {
-	return func(opts *Manager) {
-		opts.Config.TaskLimitNum = n
+		opts.jobConfirmFunc = f
 	}
 }
 
@@ -175,10 +157,10 @@ func WithTargetClients(targetToInitiators map[string]Initiator) ManagerOptsFunc 
 	}
 }
 
-// WithProcessingJobDelay sets the delay before processing jobs in reconcileTasks.
-func WithProcessingJobDelay(d time.Duration) ManagerOptsFunc {
+// WithJobTerminatedEventFunc registers a function to send job termination events.
+func WithJobTerminatedEventFunc(f JobTerminatedEventFunc) ManagerOptsFunc {
 	return func(m *Manager) {
-		m.Config.ProcessingJobDelay = d
+		m.jobTerminatedEventFunc = f
 	}
 }
 
@@ -291,7 +273,7 @@ func (m *Manager) confirmJob(ctx context.Context) error {
 // handleConfirmJob executes the confirmation function for a job and updates its state
 // based on the confirmation result returned by the function.
 func (m *Manager) handleConfirmJob(ctx context.Context, repo Repository, job Job) error {
-	res, err := m.confirmFunc(ctx, job)
+	res, err := m.jobConfirmFunc(ctx, job)
 	if err != nil {
 		// NOTE: here we update the job to change the updated_at timestamp in order to spread the fetching of jobs.
 		return repo.updateJob(ctx, job)
@@ -326,15 +308,15 @@ func (m *Manager) createTask(ctx context.Context) error {
 			return err
 		}
 
-		resolverResult, err := m.taskResolver(ctx, job, jobCursor.Cursor)
+		resolverResult, err := m.taskResolveFunc(ctx, job, jobCursor.Cursor)
 		if err != nil {
 			slog.Error("taskResolver", "error", err, "jobID", job.ID)
 			// NOTE: here we update the job to change the updated_at timestamp in order to spread the fetching of jobs.
 			return repo.updateJob(ctx, job)
 		}
-		if resolverResult.IsAborted {
-			job.Status = JobStatusAborted
-			job.ErrorMessage = resolverResult.AbortedErrorMessage
+		if resolverResult.IsCanceled {
+			job.Status = JobStatusResolveCanceled
+			job.ErrorMessage = resolverResult.CanceledErrorMessage
 			return m.updateJobAndCreateJobEvent(ctx, repo, job)
 		}
 
@@ -552,7 +534,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 // It logs errors if updating the job or creating the job event fails.
 // Returns an error if any operation fails.
 func (m *Manager) updateJobAndCreateJobEvent(ctx context.Context, repo Repository, job Job) error {
-	_, err := repo.createJobEvent(ctx, JobEvent{ID: job.ID})
+	err := m.recordJobTerminationEvent(ctx, repo, job.ID)
 	if err != nil {
 		slog.Error("createJobEvent", "error", err, "jobID", job.ID)
 		return err
