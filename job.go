@@ -13,7 +13,7 @@ const (
 	JobStatusProcessing      JobStatus = "PROCESSING"
 	JobStatusDone            JobStatus = "DONE"
 	JobStatusFailed          JobStatus = "FAILED"
-	JobStatusAborted         JobStatus = "ABORTED"
+	JobStatusResolveCanceled JobStatus = "RESOLVE_CANCELED"
 	JobStatusConfirmCanceled JobStatus = "CONFIRM_CANCELED"
 	JobStatusUserCanceled    JobStatus = "USER_CANCELED"
 )

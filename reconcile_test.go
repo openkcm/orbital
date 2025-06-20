@@ -23,7 +23,7 @@ func TestReconcile(t *testing.T) {
 		repo := orbital.NewRepository(store)
 
 		subj, err := orbital.NewManager(repo,
-			mockTaskResolverFunc(),
+			mockTaskResolveFunc(),
 		)
 		assert.NoError(t, err)
 
@@ -93,7 +93,8 @@ func TestReconcile(t *testing.T) {
 				repo := orbital.NewRepository(store)
 
 				subj, err := orbital.NewManager(repo,
-					mockTaskResolverFunc(),
+					mockTaskResolveFunc(),
+					orbital.WithJobTerminatedEventFunc(mockTerminatedFunc()),
 				)
 				assert.NoError(t, err)
 
@@ -177,7 +178,7 @@ func TestReconcile(t *testing.T) {
 		assert.NoError(t, err)
 
 		subj, err := orbital.NewManager(repo,
-			mockTaskResolverFunc(),
+			mockTaskResolveFunc(),
 			orbital.WithTargetClients(map[string]orbital.Initiator{
 				expTarget: initiator,
 			}),
@@ -236,7 +237,7 @@ func TestReconcile(t *testing.T) {
 		assert.NoError(t, err)
 
 		subj, err := orbital.NewManager(repo,
-			mockTaskResolverFunc(),
+			mockTaskResolveFunc(),
 			orbital.WithTargetClients(map[string]orbital.Initiator{
 				expTarget: initiator,
 			}),
@@ -292,7 +293,7 @@ func TestReconcile(t *testing.T) {
 		assert.NoError(t, err)
 
 		subj, err := orbital.NewManager(repo,
-			mockTaskResolverFunc(),
+			mockTaskResolveFunc(),
 			orbital.WithTargetClients(map[string]orbital.Initiator{
 				target: initiator,
 			}),
@@ -334,7 +335,7 @@ func TestReconcile(t *testing.T) {
 		assert.Len(t, ids, 1)
 
 		subj, err := orbital.NewManager(repo,
-			mockTaskResolverFunc(),
+			mockTaskResolveFunc(),
 		)
 		assert.NoError(t, err)
 
@@ -523,7 +524,7 @@ func TestProcessResponse(t *testing.T) {
 
 				taskID := tt.setupData(t, repo)
 
-				mgr, err := orbital.NewManager(repo, mockTaskResolverFunc())
+				mgr, err := orbital.NewManager(repo, mockTaskResolveFunc())
 				assert.NoError(t, err)
 
 				response := tt.response(taskID)
@@ -627,7 +628,7 @@ func TestProcessResponse(t *testing.T) {
 				assert.Len(t, taskIDs, 1)
 				taskID := taskIDs[0]
 
-				mgr, err := orbital.NewManager(repo, mockTaskResolverFunc())
+				mgr, err := orbital.NewManager(repo, mockTaskResolveFunc())
 				assert.NoError(t, err)
 
 				response := orbital.TaskResponse{

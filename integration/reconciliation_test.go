@@ -62,7 +62,7 @@ func testReconcile(t *testing.T, ctx context.Context, env *TestEnvironment) {
 	terminationDone := make(chan orbital.Job, 1)
 
 	managerConfig := ManagerConfig{
-		TaskResolver: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
+		TaskResolveFunc: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			t.Logf("TaskResolver called for job %s", job.ID)
 			return orbital.TaskResolverResult{
 				TaskInfos: []orbital.TaskInfo{
@@ -82,9 +82,9 @@ func testReconcile(t *testing.T, ctx context.Context, env *TestEnvironment) {
 		TargetClients: map[string]orbital.Initiator{
 			taskTarget: managerClient,
 		},
-		TerminationEventFunc: func(ctx context.Context, job orbital.Job) error {
+		JobTerminatedEventFunc: func(ctx context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&terminationCalls, 1)
-			t.Logf("TerminationEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
+			t.Logf("JobTerminatedEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
 			select {
 			case terminationDone <- job:
@@ -200,7 +200,7 @@ func testReconcileWithMultipleTasks(t *testing.T, ctx context.Context, env *Test
 	terminationDone := make(chan orbital.Job, 1)
 
 	managerConfig := ManagerConfig{
-		TaskResolver: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
+		TaskResolveFunc: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			return orbital.TaskResolverResult{
 				TaskInfos: []orbital.TaskInfo{
 					{
@@ -224,9 +224,9 @@ func testReconcileWithMultipleTasks(t *testing.T, ctx context.Context, env *Test
 			taskTarget1: client1,
 			taskTarget2: client2,
 		},
-		TerminationEventFunc: func(ctx context.Context, job orbital.Job) error {
+		JobTerminatedEventFunc: func(ctx context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&terminationCalls, 1)
-			t.Logf("TerminationEventFunc called for multi-task job %s (call #%d), status: %s", job.ID, calls, job.Status)
+			t.Logf("JobTerminatedEventFunc called for multi-task job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
 			select {
 			case terminationDone <- job:
@@ -359,7 +359,7 @@ func testTaskFailureScenario(t *testing.T, ctx context.Context, env *TestEnviron
 	terminationDone := make(chan orbital.Job, 1)
 
 	managerConfig := ManagerConfig{
-		TaskResolver: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
+		TaskResolveFunc: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			return orbital.TaskResolverResult{
 				TaskInfos: []orbital.TaskInfo{
 					{
@@ -377,9 +377,9 @@ func testTaskFailureScenario(t *testing.T, ctx context.Context, env *TestEnviron
 		TargetClients: map[string]orbital.Initiator{
 			taskTarget: managerClient,
 		},
-		TerminationEventFunc: func(ctx context.Context, job orbital.Job) error {
+		JobTerminatedEventFunc: func(ctx context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&terminationCalls, 1)
-			t.Logf("TerminationEventFunc called for failing job %s (call #%d), status: %s", job.ID, calls, job.Status)
+			t.Logf("JobTerminatedEventFunc called for failing job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
 			select {
 			case terminationDone <- job:
@@ -476,7 +476,7 @@ func testReconcileAfterSec(t *testing.T, ctx context.Context, env *TestEnvironme
 	require.NoError(t, err)
 
 	managerConfig := ManagerConfig{
-		TaskResolver: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
+		TaskResolveFunc: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			return orbital.TaskResolverResult{
 				TaskInfos: []orbital.TaskInfo{
 					{
@@ -494,9 +494,9 @@ func testReconcileAfterSec(t *testing.T, ctx context.Context, env *TestEnvironme
 		TargetClients: map[string]orbital.Initiator{
 			taskTarget: managerClient,
 		},
-		TerminationEventFunc: func(ctx context.Context, job orbital.Job) error {
+		JobTerminatedEventFunc: func(ctx context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&terminationCalls, 1)
-			t.Logf("TerminationEventFunc called for reconcile job %s (call #%d), status: %s", job.ID, calls, job.Status)
+			t.Logf("JobTerminatedEventFunc called for reconcile job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
 			select {
 			case terminationDone <- job:
@@ -620,7 +620,7 @@ func testMultipleRequestResponseCycles(t *testing.T, ctx context.Context, env *T
 	require.NoError(t, err)
 
 	managerConfig := ManagerConfig{
-		TaskResolver: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
+		TaskResolveFunc: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			return orbital.TaskResolverResult{
 				TaskInfos: []orbital.TaskInfo{
 					{
@@ -638,9 +638,9 @@ func testMultipleRequestResponseCycles(t *testing.T, ctx context.Context, env *T
 		TargetClients: map[string]orbital.Initiator{
 			taskTarget: managerClient,
 		},
-		TerminationEventFunc: func(ctx context.Context, job orbital.Job) error {
+		JobTerminatedEventFunc: func(ctx context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&terminationCalls, 1)
-			t.Logf("TerminationEventFunc called for multi-cycle job %s (call #%d), status: %s", job.ID, calls, job.Status)
+			t.Logf("JobTerminatedEventFunc called for multi-cycle job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
 			select {
 			case terminationDone <- job:

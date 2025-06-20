@@ -16,6 +16,7 @@ import (
 
 	stdsql "database/sql"
 
+	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/store/sql"
 )
 
@@ -89,4 +90,16 @@ func createSQLStore(t *testing.T) (*stdsql.DB, *sql.SQL) {
 	require.NoError(t, err)
 
 	return db, store
+}
+
+func mockTaskResolveFunc() orbital.TaskResolveFunc {
+	return func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
+		return orbital.TaskResolverResult{}, nil
+	}
+}
+
+func mockTerminatedFunc() orbital.JobTerminatedEventFunc {
+	return func(_ context.Context, _ orbital.Job) error {
+		return nil
+	}
 }
