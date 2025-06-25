@@ -23,7 +23,7 @@ import (
 func TestReconciliationFlows(t *testing.T) {
 	tests := []struct {
 		name string
-		test func(t *testing.T, ctx context.Context, env *TestEnvironment)
+		test func(ctx context.Context, t *testing.T, env *TestEnvironment)
 	}{
 		{"Reconcile", testReconcile},
 		{"Reconcile With MultipleTasks", testReconcileWithMultipleTasks},
@@ -40,7 +40,7 @@ func TestReconciliationFlows(t *testing.T) {
 }
 
 // testReconcile tests the basic flow: create job → create 1 task → job processing → job done.
-func testReconcile(t *testing.T, ctx context.Context, env *TestEnvironment) {
+func testReconcile(ctx context.Context, t *testing.T, env *TestEnvironment) {
 	const (
 		taskType   = "test-task"
 		taskTarget = "test-target"
@@ -58,11 +58,11 @@ func testReconcile(t *testing.T, ctx context.Context, env *TestEnvironment) {
 	operatorDone := make(chan struct{})
 	var operatorOnce sync.Once
 
-	var terminationCalls int32
+	var jobDoneCalls, jobCanceledCalls, jobFailedCalls int32
 	terminationDone := make(chan orbital.Job, 1)
 
 	managerConfig := ManagerConfig{
-		TaskResolveFunc: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
+		TaskResolveFunc: func(_ context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			t.Logf("TaskResolver called for job %s", job.ID)
 			return orbital.TaskResolverResult{
 				TaskInfos: []orbital.TaskInfo{
@@ -75,16 +75,36 @@ func testReconcile(t *testing.T, ctx context.Context, env *TestEnvironment) {
 				Done: true,
 			}, nil
 		},
-		JobConfirmFunc: func(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
+		JobConfirmFunc: func(_ context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
 			t.Logf("JobConfirmFunc called for job %s", job.ID)
 			return orbital.JobConfirmResult{Confirmed: true}, nil
 		},
 		TargetClients: map[string]orbital.Initiator{
 			taskTarget: managerClient,
 		},
-		JobTerminatedEventFunc: func(ctx context.Context, job orbital.Job) error {
-			calls := atomic.AddInt32(&terminationCalls, 1)
-			t.Logf("JobTerminatedEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
+		JobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
+			calls := atomic.AddInt32(&jobDoneCalls, 1)
+			t.Logf("JobDoneEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
+
+			select {
+			case terminationDone <- job:
+			default:
+			}
+			return nil
+		},
+		JobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
+			calls := atomic.AddInt32(&jobCanceledCalls, 1)
+			t.Logf("JobCanceledEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
+
+			select {
+			case terminationDone <- job:
+			default:
+			}
+			return nil
+		},
+		JobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
+			calls := atomic.AddInt32(&jobFailedCalls, 1)
+			t.Logf("JobFailedEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
 			select {
 			case terminationDone <- job:
@@ -99,7 +119,7 @@ func testReconcile(t *testing.T, ctx context.Context, env *TestEnvironment) {
 
 	operatorConfig := OperatorConfig{
 		Handlers: map[string]orbital.Handler{
-			taskType: func(ctx context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+			taskType: func(_ context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
 				operatorOnce.Do(func() {
 					close(operatorDone)
 				})
@@ -118,7 +138,7 @@ func testReconcile(t *testing.T, ctx context.Context, env *TestEnvironment) {
 		},
 	}
 
-	_, err = createOperator(t, ctx, operatorClient, operatorConfig)
+	_, err = createOperator(ctx, t, operatorClient, operatorConfig)
 	require.NoError(t, err)
 
 	job, err := createTestJob(t, ctx, manager, "test-job", []byte("job-data"))
@@ -164,11 +184,13 @@ func testReconcile(t *testing.T, ctx context.Context, env *TestEnvironment) {
 	assert.Positive(t, task.LastSentAt, "last_sent_at should be set")
 	assert.Equal(t, int64(0), task.ReconcileAfterSec, "reconcile_after_sec should be 0 for completed task")
 
-	assert.Equal(t, int32(1), atomic.LoadInt32(&terminationCalls), "termination event function should be called exactly once")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&jobDoneCalls), "job done event function should be called exactly once")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&jobCanceledCalls), "job canceled event function should not be called")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&jobFailedCalls), "job failed event function should not be called")
 }
 
 // testReconcileWithMultipleTasks tests a job with multiple tasks.
-func testReconcileWithMultipleTasks(t *testing.T, ctx context.Context, env *TestEnvironment) {
+func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *TestEnvironment) {
 	const (
 		taskType1   = "task-type-1"
 		taskType2   = "task-type-2"
@@ -196,7 +218,7 @@ func testReconcileWithMultipleTasks(t *testing.T, ctx context.Context, env *Test
 	operator2Done := make(chan struct{})
 	allOperatorsDone := make(chan struct{})
 
-	var terminationCalls int32
+	var jobDoneCalls, jobCanceledCalls, jobFailedCalls int32
 	terminationDone := make(chan orbital.Job, 1)
 
 	managerConfig := ManagerConfig{
@@ -224,9 +246,29 @@ func testReconcileWithMultipleTasks(t *testing.T, ctx context.Context, env *Test
 			taskTarget1: client1,
 			taskTarget2: client2,
 		},
-		JobTerminatedEventFunc: func(ctx context.Context, job orbital.Job) error {
-			calls := atomic.AddInt32(&terminationCalls, 1)
-			t.Logf("JobTerminatedEventFunc called for multi-task job %s (call #%d), status: %s", job.ID, calls, job.Status)
+		JobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
+			calls := atomic.AddInt32(&jobDoneCalls, 1)
+			t.Logf("JobDoneEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
+
+			select {
+			case terminationDone <- job:
+			default:
+			}
+			return nil
+		},
+		JobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
+			calls := atomic.AddInt32(&jobCanceledCalls, 1)
+			t.Logf("JobCanceledEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
+
+			select {
+			case terminationDone <- job:
+			default:
+			}
+			return nil
+		},
+		JobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
+			calls := atomic.AddInt32(&jobFailedCalls, 1)
+			t.Logf("JobFailedEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
 			select {
 			case terminationDone <- job:
@@ -255,7 +297,7 @@ func testReconcileWithMultipleTasks(t *testing.T, ctx context.Context, env *Test
 			},
 		},
 	}
-	_, err = createOperator(t, ctx, operatorClient1, operatorConfig1)
+	_, err = createOperator(ctx, t, operatorClient1, operatorConfig1)
 	require.NoError(t, err)
 
 	operatorConfig2 := OperatorConfig{
@@ -274,7 +316,7 @@ func testReconcileWithMultipleTasks(t *testing.T, ctx context.Context, env *Test
 			},
 		},
 	}
-	_, err = createOperator(t, ctx, operatorClient2, operatorConfig2)
+	_, err = createOperator(ctx, t, operatorClient2, operatorConfig2)
 	require.NoError(t, err)
 
 	go func() {
@@ -334,11 +376,13 @@ func testReconcileWithMultipleTasks(t *testing.T, ctx context.Context, env *Test
 	assert.Equal(t, []byte("task 2 done"), task2.WorkingState)
 	assert.Equal(t, int64(1), task2.SentCount)
 
-	assert.Equal(t, int32(1), atomic.LoadInt32(&terminationCalls), "termination event function should be called exactly once")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&jobDoneCalls), "job done event function should be called exactly once")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&jobCanceledCalls), "job canceled event function should not be called")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&jobFailedCalls), "job failed event function should not be called")
 }
 
 // testTaskFailureScenario tests how the system handles task failures.
-func testTaskFailureScenario(t *testing.T, ctx context.Context, env *TestEnvironment) {
+func testTaskFailureScenario(ctx context.Context, t *testing.T, env *TestEnvironment) {
 	const (
 		taskType   = "failing-task"
 		taskTarget = "target"
@@ -355,7 +399,7 @@ func testTaskFailureScenario(t *testing.T, ctx context.Context, env *TestEnviron
 	operatorDone := make(chan struct{})
 	var operatorOnce sync.Once
 
-	var terminationCalls int32
+	var jobDoneCalls, jobCanceledCalls, jobFailedCalls int32
 	terminationDone := make(chan orbital.Job, 1)
 
 	managerConfig := ManagerConfig{
@@ -377,9 +421,29 @@ func testTaskFailureScenario(t *testing.T, ctx context.Context, env *TestEnviron
 		TargetClients: map[string]orbital.Initiator{
 			taskTarget: managerClient,
 		},
-		JobTerminatedEventFunc: func(ctx context.Context, job orbital.Job) error {
-			calls := atomic.AddInt32(&terminationCalls, 1)
-			t.Logf("JobTerminatedEventFunc called for failing job %s (call #%d), status: %s", job.ID, calls, job.Status)
+		JobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
+			calls := atomic.AddInt32(&jobDoneCalls, 1)
+			t.Logf("JobDoneEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
+
+			select {
+			case terminationDone <- job:
+			default:
+			}
+			return nil
+		},
+		JobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
+			calls := atomic.AddInt32(&jobCanceledCalls, 1)
+			t.Logf("JobCanceledEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
+
+			select {
+			case terminationDone <- job:
+			default:
+			}
+			return nil
+		},
+		JobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
+			calls := atomic.AddInt32(&jobFailedCalls, 1)
+			t.Logf("JobFailedEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
 			select {
 			case terminationDone <- job:
@@ -408,7 +472,7 @@ func testTaskFailureScenario(t *testing.T, ctx context.Context, env *TestEnviron
 			},
 		},
 	}
-	_, err = createOperator(t, ctx, operatorClient, operatorConfig)
+	_, err = createOperator(ctx, t, operatorClient, operatorConfig)
 	require.NoError(t, err)
 
 	job, err := createTestJob(t, ctx, manager, "failing-job", []byte("job-data"))
@@ -449,11 +513,13 @@ func testTaskFailureScenario(t *testing.T, ctx context.Context, env *TestEnviron
 	assert.Equal(t, []byte("task failed"), task.WorkingState)
 	assert.Equal(t, int64(1), task.SentCount)
 
-	assert.Equal(t, int32(1), atomic.LoadInt32(&terminationCalls), "termination event function should be called exactly once")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&jobDoneCalls), "job done event function should not be called")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&jobCanceledCalls), "job canceled event function should not be called")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&jobFailedCalls), "job failed event function should be called exactly once")
 }
 
 // testReconcileAfterSec tests the reconciliation delay functionality.
-func testReconcileAfterSec(t *testing.T, ctx context.Context, env *TestEnvironment) {
+func testReconcileAfterSec(ctx context.Context, t *testing.T, env *TestEnvironment) {
 	const (
 		taskType   = "reconcile-task"
 		taskTarget = "target"
@@ -464,7 +530,7 @@ func testReconcileAfterSec(t *testing.T, ctx context.Context, env *TestEnvironme
 	var mu sync.Mutex
 	operatorDone := make(chan struct{})
 
-	var terminationCalls int32
+	var jobDoneCalls, jobCanceledCalls, jobFailedCalls int32
 	terminationDone := make(chan orbital.Job, 1)
 
 	tasksQueue := fmt.Sprintf("tasks-reconcile-%d", time.Now().UnixNano())
@@ -494,9 +560,29 @@ func testReconcileAfterSec(t *testing.T, ctx context.Context, env *TestEnvironme
 		TargetClients: map[string]orbital.Initiator{
 			taskTarget: managerClient,
 		},
-		JobTerminatedEventFunc: func(ctx context.Context, job orbital.Job) error {
-			calls := atomic.AddInt32(&terminationCalls, 1)
-			t.Logf("JobTerminatedEventFunc called for reconcile job %s (call #%d), status: %s", job.ID, calls, job.Status)
+		JobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
+			calls := atomic.AddInt32(&jobDoneCalls, 1)
+			t.Logf("JobDoneEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
+
+			select {
+			case terminationDone <- job:
+			default:
+			}
+			return nil
+		},
+		JobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
+			calls := atomic.AddInt32(&jobCanceledCalls, 1)
+			t.Logf("JobCanceledEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
+
+			select {
+			case terminationDone <- job:
+			default:
+			}
+			return nil
+		},
+		JobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
+			calls := atomic.AddInt32(&jobFailedCalls, 1)
+			t.Logf("JobFailedEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
 			select {
 			case terminationDone <- job:
@@ -553,7 +639,7 @@ func testReconcileAfterSec(t *testing.T, ctx context.Context, env *TestEnvironme
 			},
 		},
 	}
-	_, err = createOperator(t, ctx, operatorClient, operatorConfig)
+	_, err = createOperator(ctx, t, operatorClient, operatorConfig)
 	require.NoError(t, err)
 
 	job, err := createTestJob(t, ctx, manager, "reconcile-job", []byte("job-data"))
@@ -594,11 +680,13 @@ func testReconcileAfterSec(t *testing.T, ctx context.Context, env *TestEnvironme
 		assert.Equal(t, int64(0), task.ReconcileAfterSec, "reconcile_after_sec should be 0 for completed task")
 	}
 
-	assert.Equal(t, int32(1), atomic.LoadInt32(&terminationCalls), "termination event function should be called exactly once")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&jobDoneCalls), "job done event function should be called exactly once")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&jobCanceledCalls), "job canceled event function should not be called")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&jobFailedCalls), "job failed event function should not be called")
 }
 
 // testMultipleRequestResponseCycles tests tasks that complete after multiple request/response cycles.
-func testMultipleRequestResponseCycles(t *testing.T, ctx context.Context, env *TestEnvironment) {
+func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *TestEnvironment) {
 	const (
 		taskType   = "multi-cycle-task"
 		taskTarget = "target"
@@ -608,7 +696,7 @@ func testMultipleRequestResponseCycles(t *testing.T, ctx context.Context, env *T
 	operatorDone := make(chan struct{})
 	expectedCycles := int64(3)
 
-	var terminationCalls int32
+	var jobDoneCalls, jobCanceledCalls, jobFailedCalls int32
 	terminationDone := make(chan orbital.Job, 1)
 
 	tasksQueue := fmt.Sprintf("tasks-multi-cycle-%d", time.Now().UnixNano())
@@ -638,9 +726,29 @@ func testMultipleRequestResponseCycles(t *testing.T, ctx context.Context, env *T
 		TargetClients: map[string]orbital.Initiator{
 			taskTarget: managerClient,
 		},
-		JobTerminatedEventFunc: func(ctx context.Context, job orbital.Job) error {
-			calls := atomic.AddInt32(&terminationCalls, 1)
-			t.Logf("JobTerminatedEventFunc called for multi-cycle job %s (call #%d), status: %s", job.ID, calls, job.Status)
+		JobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
+			calls := atomic.AddInt32(&jobDoneCalls, 1)
+			t.Logf("JobDoneEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
+
+			select {
+			case terminationDone <- job:
+			default:
+			}
+			return nil
+		},
+		JobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
+			calls := atomic.AddInt32(&jobCanceledCalls, 1)
+			t.Logf("JobCanceledEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
+
+			select {
+			case terminationDone <- job:
+			default:
+			}
+			return nil
+		},
+		JobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
+			calls := atomic.AddInt32(&jobFailedCalls, 1)
+			t.Logf("JobFailedEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
 			select {
 			case terminationDone <- job:
@@ -688,7 +796,7 @@ func testMultipleRequestResponseCycles(t *testing.T, ctx context.Context, env *T
 			},
 		},
 	}
-	_, err = createOperator(t, ctx, operatorClient, operatorConfig)
+	_, err = createOperator(ctx, t, operatorClient, operatorConfig)
 	require.NoError(t, err)
 
 	job, err := createTestJob(t, ctx, manager, "multi-cycle-job", []byte("job-data"))
@@ -735,5 +843,7 @@ func testMultipleRequestResponseCycles(t *testing.T, ctx context.Context, env *T
 
 	assert.Len(t, workingStates, int(expectedCycles), "should have tracked all working states")
 
-	assert.Equal(t, int32(1), atomic.LoadInt32(&terminationCalls), "termination event function should be called exactly once")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&jobDoneCalls), "job done event function should be called exactly once")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&jobCanceledCalls), "job canceled event function should not be called")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&jobFailedCalls), "job failed event function should not be called")
 }

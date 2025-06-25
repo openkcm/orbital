@@ -57,8 +57,8 @@ func main() {
 		taskResolver(),
 		// Register a confirm function for jobs
 		orbital.WithJobConfirmFunc(jobConfirmFunc),
-		// Register a termination hook
-		orbital.WithJobTerminatedEventFunc(jobTerminatedEventFunc),
+		// Register a job done event func
+		orbital.WithJobDoneEventFunc(jobDoneEventFunc),
 	)
 	handleErr("Manager initialization failed", err)
 
@@ -105,8 +105,8 @@ func jobConfirmFunc(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult,
 	return orbital.JobConfirmResult{Confirmed: true}, nil
 }
 
-func jobTerminatedEventFunc(_ context.Context, job orbital.Job) error {
-	log.Printf("Job %s terminated with status %s\n", job.ID, job.Status)
+func jobDoneEventFunc(_ context.Context, job orbital.Job) error {
+	log.Printf("Job %s event func called with status %s\n", job.ID, job.Status)
 	return nil
 }
 

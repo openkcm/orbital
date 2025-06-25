@@ -180,7 +180,7 @@ func TestConfirmJob(t *testing.T) {
 		subj, _ := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
 			orbital.WithJobConfirmFunc(confirmFunc),
-			orbital.WithJobTerminatedEventFunc(mockTerminatedFunc()),
+			orbital.WithJobCanceledEventFunc(mockTerminatedFunc()),
 		)
 		subj.Config.ConfirmJobDelay = 100 * time.Millisecond
 
@@ -647,7 +647,7 @@ func TestCreateTasks(t *testing.T) {
 
 			subj, _ := orbital.NewManager(repo,
 				resolverFunc,
-				orbital.WithJobTerminatedEventFunc(mockTerminatedFunc()),
+				orbital.WithJobCanceledEventFunc(mockTerminatedFunc()),
 			)
 
 			// when
@@ -836,13 +836,13 @@ func TestListTasks(t *testing.T) {
 }
 
 func TestStart(t *testing.T) {
-	t.Run("should call JobTerminatedEventFunc", func(t *testing.T) {
+	t.Run("should call JobDoneEventFunc", func(t *testing.T) {
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
 		repo := orbital.NewRepository(store)
 
 		jobID := uuid.New()
-		_, err := orbital.CreateRepoJob(repo)(t.Context(), orbital.Job{ID: jobID})
+		_, err := orbital.CreateRepoJob(repo)(t.Context(), orbital.Job{ID: jobID, Status: orbital.JobStatusDone})
 		assert.NoError(t, err)
 
 		_, err = orbital.CreateRepoJobEvent(repo)(t.Context(), orbital.JobEvent{ID: jobID})
@@ -853,7 +853,7 @@ func TestStart(t *testing.T) {
 		wg.Add(1)
 		subj, _ := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
-			orbital.WithJobTerminatedEventFunc(
+			orbital.WithJobDoneEventFunc(
 				func(_ context.Context, _ orbital.Job) error {
 					defer wg.Done()
 					actCalled++

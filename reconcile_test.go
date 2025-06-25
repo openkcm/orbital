@@ -94,7 +94,8 @@ func TestReconcile(t *testing.T) {
 
 				subj, err := orbital.NewManager(repo,
 					mockTaskResolveFunc(),
-					orbital.WithJobTerminatedEventFunc(mockTerminatedFunc()),
+					orbital.WithJobFailedEventFunc(mockTerminatedFunc()),
+					orbital.WithJobDoneEventFunc(mockTerminatedFunc()),
 				)
 				assert.NoError(t, err)
 

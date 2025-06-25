@@ -64,14 +64,30 @@ func TestMain(m *testing.M) {
 func clearTables(t *testing.T, db *stdsql.DB) {
 	t.Helper()
 	ctx := t.Context()
+	assert.NoError(t, clearJobTable(ctx, db))
+	assert.NoError(t, clearTasksTable(ctx, db))
+	assert.NoError(t, clearJobCursorTable(ctx, db))
+	assert.NoError(t, clearJobEventTable(ctx, db))
+}
+
+func clearJobTable(ctx context.Context, db *stdsql.DB) error {
 	_, err := db.ExecContext(ctx, "DELETE FROM jobs")
-	assert.NoError(t, err)
-	_, err = db.ExecContext(ctx, "DELETE FROM tasks")
-	assert.NoError(t, err)
-	_, err = db.ExecContext(ctx, "DELETE FROM job_cursor")
-	assert.NoError(t, err)
-	_, err = db.ExecContext(ctx, "DELETE FROM job_event")
-	assert.NoError(t, err)
+	return err
+}
+
+func clearTasksTable(ctx context.Context, db *stdsql.DB) error {
+	_, err := db.ExecContext(ctx, "DELETE FROM tasks")
+	return err
+}
+
+func clearJobCursorTable(ctx context.Context, db *stdsql.DB) error {
+	_, err := db.ExecContext(ctx, "DELETE FROM job_cursor")
+	return err
+}
+
+func clearJobEventTable(ctx context.Context, db *stdsql.DB) error {
+	_, err := db.ExecContext(ctx, "DELETE FROM job_event")
+	return err
 }
 
 func createSQLStore(t *testing.T) (*stdsql.DB, *sql.SQL) {

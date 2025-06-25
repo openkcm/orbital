@@ -16,12 +16,14 @@ type (
 	// Manager is the interface for managing jobs,
 	// including their creation, state transitions, and lifecycle handling.
 	Manager struct {
-		Config                 Config
-		repo                   *Repository
-		jobConfirmFunc         JobConfirmFunc
-		taskResolveFunc        TaskResolveFunc
-		jobTerminatedEventFunc JobTerminatedEventFunc
-		targetToInitiator      map[string]Initiator
+		Config               Config
+		repo                 *Repository
+		jobConfirmFunc       JobConfirmFunc
+		taskResolveFunc      TaskResolveFunc
+		jobDoneEventFunc     JobTerminatedEventFunc
+		jobCanceledEventFunc JobTerminatedEventFunc
+		jobFailedEventFunc   JobTerminatedEventFunc
+		targetToInitiator    map[string]Initiator
 	}
 
 	// JobTerminatedEventFunc defines a callback function type for sending job events.
@@ -157,10 +159,24 @@ func WithTargetClients(targetToInitiators map[string]Initiator) ManagerOptsFunc 
 	}
 }
 
-// WithJobTerminatedEventFunc registers a function to send job termination events.
-func WithJobTerminatedEventFunc(f JobTerminatedEventFunc) ManagerOptsFunc {
+// WithJobDoneEventFunc registers a function to send job done events.
+func WithJobDoneEventFunc(f JobTerminatedEventFunc) ManagerOptsFunc {
 	return func(m *Manager) {
-		m.jobTerminatedEventFunc = f
+		m.jobDoneEventFunc = f
+	}
+}
+
+// WithJobCanceledEventFunc registers a function to send job canceled events.
+func WithJobCanceledEventFunc(f JobTerminatedEventFunc) ManagerOptsFunc {
+	return func(m *Manager) {
+		m.jobCanceledEventFunc = f
+	}
+}
+
+// WithJobFailedEventFunc registers a function to send job failed events.
+func WithJobFailedEventFunc(f JobTerminatedEventFunc) ManagerOptsFunc {
+	return func(m *Manager) {
+		m.jobFailedEventFunc = f
 	}
 }
 
@@ -191,7 +207,7 @@ func (m *Manager) Start(ctx context.Context) error {
 			},
 			{
 				Name:         "notify-event",
-				Fn:           m.sendJobTerminationEvent,
+				Fn:           m.sendJobTerminatedEvent,
 				ExecInterval: m.Config.NotifyWorkerConfig.ExecInterval,
 				NoOfWorkers:  m.Config.NotifyWorkerConfig.NoOfWorkers,
 				Timeout:      m.Config.NotifyWorkerConfig.Timeout,
@@ -534,7 +550,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 // It logs errors if updating the job or creating the job event fails.
 // Returns an error if any operation fails.
 func (m *Manager) updateJobAndCreateJobEvent(ctx context.Context, repo Repository, job Job) error {
-	err := m.recordJobTerminationEvent(ctx, repo, job.ID)
+	err := m.recordJobTerminatedEvent(ctx, repo, job)
 	if err != nil {
 		slog.Error("createJobEvent", "error", err, "jobID", job.ID)
 		return err

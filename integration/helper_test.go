@@ -41,10 +41,12 @@ type TestEnvironment struct {
 
 // ManagerConfig holds configuration for the manager.
 type ManagerConfig struct {
-	TaskResolveFunc        orbital.TaskResolveFunc
-	JobConfirmFunc         orbital.JobConfirmFunc
-	TargetClients          map[string]orbital.Initiator
-	JobTerminatedEventFunc orbital.JobTerminatedEventFunc
+	TaskResolveFunc      orbital.TaskResolveFunc
+	JobConfirmFunc       orbital.JobConfirmFunc
+	TargetClients        map[string]orbital.Initiator
+	JobDoneEventFunc     orbital.JobTerminatedEventFunc
+	JobCanceledEventFunc orbital.JobTerminatedEventFunc
+	JobFailedEventFunc   orbital.JobTerminatedEventFunc
 }
 
 // OperatorConfig holds configuration for the operator.
@@ -168,7 +170,9 @@ func createManager(t *testing.T, ctx context.Context, env *TestEnvironment, conf
 	managerOpts := []orbital.ManagerOptsFunc{
 		orbital.WithJobConfirmFunc(config.JobConfirmFunc),
 		orbital.WithTargetClients(config.TargetClients),
-		orbital.WithJobTerminatedEventFunc(config.JobTerminatedEventFunc),
+		orbital.WithJobDoneEventFunc(config.JobDoneEventFunc),
+		orbital.WithJobCanceledEventFunc(config.JobCanceledEventFunc),
+		orbital.WithJobFailedEventFunc(config.JobFailedEventFunc),
 	}
 
 	manager, err := orbital.NewManager(repo, config.TaskResolveFunc, managerOpts...)
@@ -195,7 +199,7 @@ func createManager(t *testing.T, ctx context.Context, env *TestEnvironment, conf
 }
 
 // createOperator creates and starts an operator instance.
-func createOperator(t *testing.T, ctx context.Context, responder orbital.Responder, config OperatorConfig) (*orbital.Operator, error) {
+func createOperator(ctx context.Context, t *testing.T, responder orbital.Responder, config OperatorConfig) (*orbital.Operator, error) {
 	t.Helper()
 
 	operator, err := orbital.NewOperator(responder)
@@ -236,7 +240,7 @@ func createAMQPClient(ctx context.Context, env *TestEnvironment, rabbitURL, targ
 }
 
 // runTestWithEnvironment runs a test function with proper environment setup and cleanup.
-func runTestWithEnvironment(t *testing.T, testFunc func(t *testing.T, ctx context.Context, env *TestEnvironment)) {
+func runTestWithEnvironment(t *testing.T, testFunc func(ctx context.Context, t *testing.T, env *TestEnvironment)) {
 	t.Helper()
 
 	envCtx, envCancel := context.WithTimeout(t.Context(), 3*time.Minute)
@@ -253,7 +257,7 @@ func runTestWithEnvironment(t *testing.T, testFunc func(t *testing.T, ctx contex
 		env.Cleanup(envCtx)
 	}()
 
-	testFunc(t, testCtx, env)
+	testFunc(testCtx, t, env)
 }
 
 // waitForRabbitMQReady waits for RabbitMQ to be ready to accept connections.
