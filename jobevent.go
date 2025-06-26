@@ -78,7 +78,7 @@ func (m *Manager) sendJobTerminatedEvent(ctx context.Context) error {
 		if eventFunc == nil {
 			return repo.updateJobEvent(ctx, event)
 		}
-		return m.sendEvent(ctx, repo, eventFunc, job, event)
+		return m.sendAndUpdateEvent(ctx, repo, eventFunc, job, event)
 	})
 }
 
@@ -101,12 +101,12 @@ func (m *Manager) eventFunc(job Job) JobTerminatedEventFunc {
 	}
 }
 
-// sendEvent sends a job event notification using the provided event function.
+// sendAndUpdateEvent sends a job event notification using the provided event function.
 // If the event function is nil, it returns immediately. Otherwise, it invokes
 // the event function callback and logs any error encountered. It then updates
 // the event's notification status in the repository based on whether the
 // callback succeeded. Returns an error if updating the event fails.
-func (m *Manager) sendEvent(ctx context.Context, repo Repository, jobEventFunc JobTerminatedEventFunc, job Job, event JobEvent) error {
+func (m *Manager) sendAndUpdateEvent(ctx context.Context, repo Repository, jobEventFunc JobTerminatedEventFunc, job Job, event JobEvent) error {
 	if jobEventFunc == nil {
 		return nil
 	}
