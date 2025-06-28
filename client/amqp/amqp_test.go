@@ -1,6 +1,7 @@
 package amqp_test
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -8,57 +9,121 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"math/big"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/Azure/go-amqp"
+	"github.com/docker/docker/api/types/container"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 
-	amqppkg "github.com/openkcm/orbital/client/amqp"
+	stdamqp "github.com/Azure/go-amqp"
+
+	"github.com/openkcm/orbital"
+	"github.com/openkcm/orbital/client/amqp"
 	"github.com/openkcm/orbital/codec"
+)
+
+const (
+	rootCACertFile     = "rootCA.pem"
+	rootCAKeyFile      = "rootCA.key"
+	serverCertFile     = "server.pem"
+	serverKeyFile      = "server.key"
+	clientCertFile     = "client.pem"
+	clientKeyFile      = "client.key"
+	rabbitMQConfigFile = "rabbitmq.conf"
 )
 
 var errBadOption = errors.New("bad option")
 
-func writeTemp(t *testing.T, dir, name string, data []byte) string {
-	t.Helper()
-	p := filepath.Join(dir, name)
-	if err := os.WriteFile(p, data, 0o600); err != nil {
-		t.Fatalf("write %s: %v", name, err)
-	}
-	return p
+type tlsFiles struct {
+	dir            string
+	rootCACertPath string
+	rootCAKeyPath  string
+	serverCertPath string
+	serverKeyPath  string
+	clientCertPath string
+	clientKeyPath  string
 }
 
-func selfSignedCert(t *testing.T) (string, string, string) {
+func createTLSFiles(t *testing.T) tlsFiles {
 	t.Helper()
-
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	assert.NoError(t, err, "key generation should not fail")
-
-	now := time.Now()
-	template := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{CommonName: "unit-test"},
-		NotBefore:    now.Add(-time.Hour),
-		NotAfter:     now.Add(time.Hour),
-		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		IsCA:         true,
-	}
-
-	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
-	assert.NoError(t, err, "certificate creation should not fail")
-
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
-
 	dir := t.TempDir()
-	return writeTemp(t, dir, "cert.pem", certPEM),
-		writeTemp(t, dir, "key.pem", keyPEM),
-		writeTemp(t, dir, "ca.pem", certPEM)
+
+	caKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	caTpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "Test Root CA"},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTpl, caTpl, &caKey.PublicKey, caKey)
+	assert.NoError(t, err, "certificate creation should not fail")
+	writePEM(t, dir, rootCACertFile, "CERTIFICATE", caDER, 0644)
+	writePEM(t, dir, rootCAKeyFile, "RSA PRIVATE KEY",
+		x509.MarshalPKCS1PrivateKey(caKey), 0600)
+	caCert, err := x509.ParseCertificate(caDER)
+	assert.NoError(t, err, "parsing CA certificate should not fail")
+
+	srvKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	srvTpl := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      pkix.Name{CommonName: "localhost"},
+		NotBefore:    time.Now().Add(-24 * time.Hour),
+		NotAfter:     time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:     []string{"localhost", "rabbitmq"},
+		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
+	}
+	srvDER, err := x509.CreateCertificate(rand.Reader, srvTpl, caCert, &srvKey.PublicKey, caKey)
+	assert.NoError(t, err, "certificate creation should not fail")
+	writePEM(t, dir, serverCertFile, "CERTIFICATE", srvDER, 0644)
+	writePEM(t, dir, serverKeyFile, "RSA PRIVATE KEY",
+		x509.MarshalPKCS1PrivateKey(srvKey), 0600)
+
+	cliKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	assert.NoError(t, err, "client key generation should not fail")
+	cliTpl := &x509.Certificate{
+		SerialNumber: big.NewInt(3),
+		Subject:      pkix.Name{CommonName: "guest"},
+		NotBefore:    time.Now().Add(-24 * time.Hour),
+		NotAfter:     time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	cliDER, err := x509.CreateCertificate(rand.Reader, cliTpl, caCert, &cliKey.PublicKey, caKey)
+	assert.NoError(t, err, "client certificate creation should not fail")
+	writePEM(t, dir, clientCertFile, "CERTIFICATE", cliDER, 0644)
+	writePEM(t, dir, clientKeyFile, "RSA PRIVATE KEY",
+		x509.MarshalPKCS1PrivateKey(cliKey), 0600)
+
+	return tlsFiles{
+		dir:            dir,
+		rootCACertPath: filepath.Join(dir, rootCACertFile),
+		rootCAKeyPath:  filepath.Join(dir, rootCAKeyFile),
+		serverCertPath: filepath.Join(dir, serverCertFile),
+		serverKeyPath:  filepath.Join(dir, serverKeyFile),
+		clientCertPath: filepath.Join(dir, clientCertFile),
+		clientKeyPath:  filepath.Join(dir, clientKeyFile),
+	}
+}
+
+func writePEM(t *testing.T, dir, name, typ string, der []byte, mode os.FileMode) {
+	t.Helper()
+	p := filepath.Join(dir, name)
+	err := os.WriteFile(p, pem.EncodeToMemory(&pem.Block{Type: typ, Bytes: der}), mode)
+	assert.NoError(t, err)
 }
 
 func TestClientOptionBasics(t *testing.T) {
@@ -66,17 +131,17 @@ func TestClientOptionBasics(t *testing.T) {
 
 	cases := []struct {
 		name string
-		opt  amqppkg.ClientOption
+		opt  amqp.ClientOption
 	}{
-		{"anonymous auth", amqppkg.WithNoAuth()},
-		{"basic auth", amqppkg.WithBasicAuth("user", "pw")},
+		{"anonymous auth", amqp.WithNoAuth()},
+		{"basic auth", amqp.WithBasicAuth("user", "pw")},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			opts := &amqp.ConnOptions{}
+			opts := &stdamqp.ConnOptions{}
 			assert.NoError(t, tc.opt(opts), "option should not return error")
 			assert.NotNil(t, opts.SASLType, "SASLType should be set")
 		})
@@ -89,10 +154,15 @@ func TestWithExternalMTLS(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 
-		cert, key, ca := selfSignedCert(t)
-		opts := &amqp.ConnOptions{}
+		files := createTLSFiles(t)
+		opts := &stdamqp.ConnOptions{}
 
-		err := amqppkg.WithExternalMTLS(cert, key, ca, "broker")(opts)
+		err := amqp.WithExternalMTLS(
+			files.clientCertPath,
+			files.clientKeyPath,
+			files.rootCACertPath,
+			"broker",
+		)(opts)
 		assert.NoError(t, err, "WithExternalMTLS should succeed")
 
 		assert.NotNil(t, opts.SASLType, "SASLType should be set")
@@ -104,29 +174,50 @@ func TestWithExternalMTLS(t *testing.T) {
 	t.Run("key-pair load error", func(t *testing.T) {
 		t.Parallel()
 
-		err := amqppkg.WithExternalMTLS("missing", "missing", "missing", "")(&amqp.ConnOptions{})
+		err := amqp.WithExternalMTLS("missing", "missing", "", "")(&stdamqp.ConnOptions{})
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, amqppkg.ErrTLSPairLoad, "error should be ErrTLSPairLoad")
+		assert.ErrorIs(t, err, amqp.ErrTLSPairLoad, "error should be ErrTLSPairLoad")
+	})
+
+	t.Run("CA read error", func(t *testing.T) {
+		t.Parallel()
+		files := createTLSFiles(t)
+
+		err := amqp.WithExternalMTLS(
+			files.clientCertPath,
+			files.clientKeyPath,
+			"missing",
+			"",
+		)(&stdamqp.ConnOptions{})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, amqp.ErrCARead, "error should be ErrCARead")
 	})
 
 	t.Run("invalid CA", func(t *testing.T) {
 		t.Parallel()
+		files := createTLSFiles(t)
 
-		cert, key, _ := selfSignedCert(t)
-		badCA := writeTemp(t, t.TempDir(), "ca.pem", []byte("bogus"))
-		err := amqppkg.WithExternalMTLS(cert, key, badCA, "")(&amqp.ConnOptions{})
+		badCA := "badCA.pem"
+		writePEM(t, files.dir, badCA, "CERTIFICATE", []byte("bogus"), 0644)
+
+		err := amqp.WithExternalMTLS(
+			files.clientCertPath,
+			files.clientKeyPath,
+			filepath.Join(files.dir, badCA),
+			"",
+		)(&stdamqp.ConnOptions{})
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, amqppkg.ErrInvalidCACert, "error should be ErrInvalidCACert")
+		assert.ErrorIs(t, err, amqp.ErrInvalidCACert, "error should be ErrInvalidCACert")
 	})
 }
 
 func TestWithPropertiesMerges(t *testing.T) {
 	t.Parallel()
 
-	opts := &amqp.ConnOptions{Properties: map[string]any{"keep": 1}}
+	opts := &stdamqp.ConnOptions{Properties: map[string]any{"keep": 1}}
 	props := map[string]any{"vpn": "corp", "client": "orbital"}
 
-	err := amqppkg.WithProperties(props)(opts)
+	err := amqp.WithProperties(props)(opts)
 	assert.NoError(t, err, "WithProperties should not return error")
 
 	expProps := map[string]any{"keep": 1, "vpn": "corp", "client": "orbital"}
@@ -138,20 +229,288 @@ func TestWithPropertiesMerges(t *testing.T) {
 func TestNewClient_WrapsOptionError(t *testing.T) {
 	t.Parallel()
 
-	badOpt := func(*amqp.ConnOptions) error { return errBadOption }
+	badOpt := func(*stdamqp.ConnOptions) error { return errBadOption }
 
-	_, err := amqppkg.NewClient(t.Context(), codec.JSON{}, amqppkg.ConnectionInfo{}, badOpt)
-
+	cli, err := amqp.NewClient(t.Context(), codec.JSON{}, amqp.ConnectionInfo{}, badOpt)
 	assert.Error(t, err)
+	assert.Nil(t, cli)
 
-	assert.ErrorIs(t, err, amqppkg.ErrApplyOption, "error should be ErrApplyOption")
+	assert.ErrorIs(t, err, amqp.ErrApplyOption, "error should be ErrApplyOption")
 	assert.ErrorIs(t, err, errBadOption, "wrapped error should match")
 }
 
 func TestNewClient_CodecError(t *testing.T) {
 	t.Parallel()
 
-	_, err := amqppkg.NewClient(t.Context(), nil, amqppkg.ConnectionInfo{})
+	cli, err := amqp.NewClient(t.Context(), nil, amqp.ConnectionInfo{})
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, amqppkg.ErrCodecNotProvided, "error should be ErrCodecNotProvided")
+	assert.ErrorIs(t, err, amqp.ErrCodecNotProvided, "error should be ErrCodecNotProvided")
+	assert.Nil(t, cli)
+}
+
+func TestWithMessageBroker(t *testing.T) {
+	t.Parallel()
+
+	t.Run("RabbitMQ-Plain", func(t *testing.T) {
+		t.Parallel()
+
+		rmqURL, rmqCleanup := startRabbitMQ(t.Context(), t, false, tlsFiles{})
+		defer rmqCleanup()
+
+		tt := []struct {
+			name     string
+			queue    string
+			testFunc func(t *testing.T, url, queue string)
+		}{
+			{
+				name:     "send and receive task requests",
+				testFunc: testSendReceiveTaskRequests,
+				queue:    "rabbitmq-task-requests",
+			},
+			{
+				name:     "send and receive task responses",
+				testFunc: testSendReceiveTaskResponses,
+				queue:    "rabbitmq-task-responses",
+			},
+		}
+
+		for _, tc := range tt {
+			t.Run(tc.name, func(t *testing.T) {
+				tc.testFunc(t, rmqURL, tc.queue)
+			})
+		}
+	})
+
+	t.Run("RabbitMQ-mTLS", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := t.Context()
+
+		files := createTLSFiles(t)
+		rmqURL, rmqCleanup := startRabbitMQ(ctx, t, true, files)
+		defer rmqCleanup()
+
+		cli, err := amqp.NewClient(ctx, codec.JSON{}, amqp.ConnectionInfo{
+			URL: rmqURL, Target: "mtls-q", Source: "mtls-q",
+		}, amqp.WithExternalMTLS(
+			files.clientCertPath,
+			files.clientKeyPath,
+			files.rootCACertPath,
+			"localhost",
+		))
+		require.NoError(t, err)
+
+		exp := orbital.TaskRequest{TaskID: uuid.New()}
+		assert.NoError(t, cli.SendTaskRequest(ctx, exp))
+		got, err := cli.ReceiveTaskRequest(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, exp.TaskID, got.TaskID)
+	})
+
+	t.Run("Solace", func(t *testing.T) {
+		t.Parallel()
+
+		solURL, solCleanup := startSolace(t.Context(), t)
+		defer solCleanup()
+
+		tt := []struct {
+			name     string
+			queue    string
+			testFunc func(t *testing.T, url, queue string)
+		}{
+			{
+				name:     "send and receive task requests",
+				testFunc: testSendReceiveTaskRequests,
+				queue:    "solace-task-requests",
+			},
+			{
+				name:     "send and receive task responses",
+				testFunc: testSendReceiveTaskResponses,
+				queue:    "solace-task-responses",
+			},
+		}
+
+		for _, tc := range tt {
+			t.Run(tc.name, func(t *testing.T) {
+				tc.testFunc(t, solURL, tc.queue)
+			})
+		}
+	})
+}
+
+func startRabbitMQ(ctx context.Context, t *testing.T, mtls bool, files tlsFiles) (string, func()) {
+	t.Helper()
+
+	req := testcontainers.ContainerRequest{
+		Image:        "rabbitmq:4",
+		ExposedPorts: []string{"5672/tcp", "5671/tcp", "15672/tcp"},
+		WaitingFor:   wait.ForListeningPort("5672/tcp"),
+	}
+
+	if mtls {
+		confFile := filepath.Join(files.dir, rabbitMQConfigFile)
+		confContent := rabbitMQConfig(rootCACertFile, serverCertFile, serverKeyFile)
+		err := os.WriteFile(confFile, []byte(confContent), 0600)
+		assert.NoError(t, err)
+
+		containerCertDir := "/certs"
+		req.Files = []testcontainers.ContainerFile{
+			{
+				HostFilePath:      files.rootCACertPath,
+				ContainerFilePath: filepath.Join(containerCertDir, rootCACertFile),
+				FileMode:          0644,
+			},
+			{
+				HostFilePath:      files.serverCertPath,
+				ContainerFilePath: filepath.Join(containerCertDir, serverCertFile),
+				FileMode:          0644,
+			},
+			{
+				HostFilePath:      files.serverKeyPath,
+				ContainerFilePath: filepath.Join(containerCertDir, serverKeyFile),
+				FileMode:          0600,
+			},
+			{
+				HostFilePath:      confFile,
+				ContainerFilePath: "/etc/rabbitmq/rabbitmq.conf",
+				FileMode:          0644,
+			},
+		}
+
+		cmd := fmt.Sprintf(
+			"chown rabbitmq:rabbitmq %s && chmod 600 %s && "+
+				"rabbitmq-plugins enable --offline rabbitmq_auth_mechanism_ssl && "+
+				"rabbitmq-server",
+			filepath.Join(containerCertDir, serverKeyFile),
+			filepath.Join(containerCertDir, serverKeyFile),
+		)
+		req.Cmd = []string{
+			"sh", "-c", cmd,
+		}
+
+		req.WaitingFor = wait.ForAll(
+			wait.ForListeningPort("5672/tcp"),
+			wait.ForListeningPort("5671/tcp"),
+		)
+	}
+
+	cont, err := testcontainers.GenericContainer(ctx,
+		testcontainers.GenericContainerRequest{ContainerRequest: req, Started: true})
+	assert.NoError(t, err)
+
+	host, err := cont.Host(ctx)
+	assert.NoError(t, err)
+
+	cleanup := func() {
+		err := cont.Terminate(ctx)
+		assert.NoError(t, err, "terminating RabbitMQ container should not fail")
+	}
+
+	if mtls {
+		tls, err := cont.MappedPort(ctx, "5671")
+		assert.NoError(t, err)
+		return fmt.Sprintf("amqps://%s/", net.JoinHostPort(host, tls.Port())), cleanup
+	}
+
+	plain, err := cont.MappedPort(ctx, "5672")
+	assert.NoError(t, err)
+	return fmt.Sprintf("amqp://%s/", net.JoinHostPort(host, plain.Port())), cleanup
+}
+
+func rabbitMQConfig(caCert, serverCert, serverKey string) string {
+	return fmt.Sprintf(`
+listeners.tcp.default = 5672
+listeners.ssl.default = 5671
+
+ssl_options.cacertfile = /certs/%s
+ssl_options.certfile   = /certs/%s
+ssl_options.keyfile    = /certs/%s
+ssl_options.verify     = verify_peer
+ssl_options.fail_if_no_peer_cert = true
+
+auth_mechanisms.1 = PLAIN
+auth_mechanisms.2 = AMQPLAIN
+auth_mechanisms.3 = EXTERNAL
+
+ssl_cert_login_from = common_name
+loopback_users = none
+
+management.tcp.port = 15672
+`, caCert, serverCert, serverKey)
+}
+
+func startSolace(ctx context.Context, t *testing.T) (string, func()) {
+	t.Helper()
+
+	req := testcontainers.ContainerRequest{
+		Image:        "solace/solace-pubsub-standard",
+		ExposedPorts: []string{"5672/tcp"},
+		Env: map[string]string{
+			"username_admin_globalaccesslevel": "admin",
+			"username_admin_password":          "admin",
+			"msgVpnName":                       "default",
+		},
+		HostConfigModifier: func(hc *container.HostConfig) { hc.ShmSize = 2 << 30 },
+		WaitingFor:         wait.ForListeningPort("5672/tcp").WithStartupTimeout(2 * time.Minute),
+	}
+
+	cont, err := testcontainers.GenericContainer(ctx,
+		testcontainers.GenericContainerRequest{ContainerRequest: req, Started: true})
+	assert.NoError(t, err)
+
+	host, err := cont.Host(ctx)
+	assert.NoError(t, err)
+	port, err := cont.MappedPort(ctx, "5672")
+	assert.NoError(t, err)
+
+	return fmt.Sprintf("amqp://%s/", net.JoinHostPort(host, port.Port())), func() {
+		err := cont.Terminate(ctx)
+		assert.NoError(t, err, "terminating Solace container should not fail")
+	}
+}
+
+func testSendReceiveTaskRequests(t *testing.T, url, queue string) {
+	t.Helper()
+
+	ctx := t.Context()
+
+	cli, err := amqp.NewClient(ctx, codec.JSON{}, amqp.ConnectionInfo{
+		URL: url, Target: queue, Source: queue,
+	})
+	assert.NoError(t, err)
+
+	const n = 5
+	exp := make([]orbital.TaskRequest, n)
+	for i := range n {
+		exp[i] = orbital.TaskRequest{TaskID: uuid.New()}
+		assert.NoError(t, cli.SendTaskRequest(ctx, exp[i]))
+	}
+	for i := range n {
+		got, err := cli.ReceiveTaskRequest(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, exp[i].TaskID, got.TaskID)
+	}
+}
+
+func testSendReceiveTaskResponses(t *testing.T, url, queue string) {
+	t.Helper()
+
+	ctx := t.Context()
+
+	cli, err := amqp.NewClient(ctx, codec.JSON{}, amqp.ConnectionInfo{
+		URL: url, Target: queue, Source: queue,
+	})
+	assert.NoError(t, err)
+
+	const n = 5
+	exp := make([]orbital.TaskResponse, n)
+	for i := range n {
+		exp[i] = orbital.TaskResponse{TaskID: uuid.New()}
+		assert.NoError(t, cli.SendTaskResponse(ctx, exp[i]))
+	}
+	for i := range n {
+		got, err := cli.ReceiveTaskResponse(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, exp[i].TaskID, got.TaskID)
+	}
 }
