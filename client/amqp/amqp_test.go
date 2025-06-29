@@ -344,7 +344,10 @@ func startRabbitMQ(ctx context.Context, t *testing.T, mtls bool, files tlsFiles)
 	req := testcontainers.ContainerRequest{
 		Image:        "rabbitmq:4",
 		ExposedPorts: []string{"5672/tcp", "5671/tcp", "15672/tcp"},
-		WaitingFor:   wait.ForListeningPort("5672/tcp"),
+		WaitingFor: wait.ForAll(
+			wait.ForListeningPort("5672/tcp"),
+			wait.ForLog("Server startup complete"),
+		),
 	}
 
 	if mtls {
@@ -391,6 +394,7 @@ func startRabbitMQ(ctx context.Context, t *testing.T, mtls bool, files tlsFiles)
 		req.WaitingFor = wait.ForAll(
 			wait.ForListeningPort("5672/tcp"),
 			wait.ForListeningPort("5671/tcp"),
+			wait.ForLog("Server startup complete"),
 		)
 	}
 
