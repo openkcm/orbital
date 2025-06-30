@@ -66,12 +66,12 @@ func ProcessResponse(m *Manager) func(ctx context.Context, resp TaskResponse) er
 	return m.processResponse
 }
 
-func RecordJobEvent(m *Manager) func(ctx context.Context, repo Repository, jobID uuid.UUID) error {
-	return m.recordJobTerminationEvent
+func RecordJobTerminatedEvent(m *Manager) func(ctx context.Context, repo Repository, job Job) error {
+	return m.recordJobTerminatedEvent
 }
 
-func SendJobEvent(m *Manager) func(ctx context.Context) error {
-	return m.sendJobTerminationEvent
+func SendJobTerminatedEvent(m *Manager) func(ctx context.Context) error {
+	return m.sendJobTerminatedEvent
 }
 
 func CreateRepoJobEvent(r *Repository) func(ctx context.Context, event JobEvent) (JobEvent, error) {
