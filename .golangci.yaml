@@ -43,6 +43,7 @@ linters:
           - funlen
           - goconst
           - maintidx
+          - cyclop
         path: _test.go
     paths:
       - third_party$
