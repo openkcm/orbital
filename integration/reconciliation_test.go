@@ -65,7 +65,7 @@ func TestReconciliationFlows(t *testing.T) {
 func createStore(ctx context.Context, t *testing.T, env *testEnvironment, name string) (*sql.SQL, *stdsql.DB) {
 	t.Helper()
 
-	_, err := env.postgres.db.Exec("CREATE DATABASE " + name)
+	_, err := env.postgres.db.ExecContext(ctx, "CREATE DATABASE "+name)
 	assert.NoError(t, err, "failed to create test database")
 
 	postgresURL := fmt.Sprintf("host=%s port=%s user=postgres password=postgres dbname=%s sslmode=disable",

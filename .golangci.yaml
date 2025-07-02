@@ -18,6 +18,8 @@ linters:
     - wsl
     - mnd
     - ireturn
+    - wsl_v5
+    - noinlineerr
   settings:
     paralleltest:
       ignore-missing: true
