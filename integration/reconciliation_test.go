@@ -19,7 +19,8 @@ import (
 )
 
 // TestReconciliationFlows runs all reconciliation tests as subtests.
-// nolint: tparallel
+//
+//nolint:tparallel
 func TestReconciliationFlows(t *testing.T) {
 	t.Parallel()
 
