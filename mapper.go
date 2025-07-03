@@ -65,7 +65,7 @@ func TransformToEntity(entityName query.EntityName, objs map[string]any) (Entity
 // Init ensures that the metadata of the entity is properly initialized.
 // It sets default values for CreatedAt, UpdatedAt, and ID if they are not already set.
 func Init(e *Entity) {
-	unixTime := time.Now().UTC().Unix()
+	unixTime := time.Now().UTC().UnixNano()
 
 	if e.Values == nil {
 		e.Values = make(map[string]any)

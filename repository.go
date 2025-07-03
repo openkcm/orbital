@@ -204,7 +204,7 @@ func (r *Repository) listTasks(ctx context.Context, tasksQuery ListTasksQuery) (
 		q.Clauses = append(q.Clauses, query.ClauseWithJobID(tasksQuery.JobID))
 	}
 
-	utcUnix := time.Now().UTC().Unix()
+	utcUnix := time.Now().UTC().UnixNano()
 	if tasksQuery.CreatedAt != 0 {
 		q.Clauses = append(q.Clauses, query.ClauseWithCreatedBefore(tasksQuery.CreatedAt))
 	}
@@ -220,7 +220,7 @@ func (r *Repository) listTasks(ctx context.Context, tasksQuery ListTasksQuery) (
 	}
 
 	if tasksQuery.IsReconcileReady {
-		q.Clauses = append(q.Clauses, query.ClauseWithReadyToBeSent(time.Now().Unix()))
+		q.Clauses = append(q.Clauses, query.ClauseWithReadyToBeSent(utcUnix))
 	}
 
 	q.RetrievalMode = query.RetrievalModeDefault

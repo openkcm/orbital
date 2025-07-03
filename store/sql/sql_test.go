@@ -322,7 +322,7 @@ func TestUpdate(t *testing.T) {
 		}
 
 		// when
-		time.Sleep(2 * time.Second) // Ensure the updated_at timestamp is different
+		time.Sleep(1 * time.Microsecond) // Ensure the updated_at timestamp is different
 		entities, err := store.Update(ctx, entityUpdated)
 
 		// then
@@ -1064,5 +1064,5 @@ func validateColumnsAndEntity[T orbital.EntityTypes](t *testing.T, db *stdsql.DB
 }
 
 func utcUnix() int64 {
-	return time.Now().UTC().Unix()
+	return time.Now().UTC().UnixNano()
 }

@@ -263,7 +263,7 @@ func (m *Manager) confirmJob(ctx context.Context) error {
 		nowUTC := time.Now().UTC()
 		jobs, err := repo.listJobs(ctx, ListJobsQuery{
 			Status:             JobStatusCreated,
-			CreatedAt:          nowUTC.Add(-m.Config.ConfirmJobDelay).Unix(),
+			CreatedAt:          nowUTC.Add(-m.Config.ConfirmJobDelay).UnixNano(),
 			Limit:              1,
 			RetrievalModeQueue: true,
 			OrderByUpdatedAt:   true,
@@ -374,7 +374,7 @@ func (m *Manager) createOrUpdateCursor(ctx context.Context, repo Repository, fou
 // and an error if the retrieval fails.
 func (m *Manager) jobForTaskCreation(ctx context.Context, repo Repository) (Job, bool, error) {
 	var empty Job
-	utcUnix := time.Now().UTC().Unix()
+	utcUnix := time.Now().UTC().UnixNano()
 	jobs, err := repo.listJobs(ctx, ListJobsQuery{
 		StatusIn:           []JobStatus{JobStatusResolving, JobStatusConfirmed},
 		CreatedAt:          utcUnix,
@@ -456,7 +456,7 @@ func (m *Manager) reconcile(ctx context.Context) error {
 func (m *Manager) getJobForReconcile(ctx context.Context, repo Repository) (Job, error) {
 	jobs, err := repo.listJobs(ctx, ListJobsQuery{
 		StatusIn:           []JobStatus{JobStatusReady, JobStatusProcessing},
-		CreatedAt:          time.Now().Unix(),
+		CreatedAt:          time.Now().UTC().UnixNano(),
 		OrderByUpdatedAt:   true,
 		RetrievalModeQueue: true,
 		Limit:              1,
@@ -526,7 +526,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 		return
 	}
 
-	task.LastSentAt = time.Now().Unix()
+	task.LastSentAt = time.Now().UTC().UnixNano()
 	task.SentCount++
 	task.Status = TaskStatusProcessing
 

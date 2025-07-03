@@ -160,7 +160,7 @@ func TestTransformToEntities(t *testing.T) {
 
 func TestInit(t *testing.T) {
 	unixTime := utcUnix()
-	time.Sleep(1 * time.Second)
+	time.Sleep(1 * time.Microsecond)
 
 	t.Run("should initialize fields", func(t *testing.T) {
 		// given
@@ -802,5 +802,5 @@ func TestDecodeValueVariants(t *testing.T) {
 }
 
 func utcUnix() int64 {
-	return time.Now().UTC().Unix()
+	return time.Now().UTC().UnixNano()
 }

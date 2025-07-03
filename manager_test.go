@@ -90,7 +90,7 @@ func TestConfirmJob(t *testing.T) {
 				expStatus: orbital.JobStatusConfirmCanceled,
 			},
 			{
-				name: "successful",
+				name: "successfully",
 				confirmFuncResponse: func() (orbital.JobConfirmResult, error) {
 					return orbital.JobConfirmResult{Confirmed: true}, nil
 				},
@@ -112,14 +112,14 @@ func TestConfirmJob(t *testing.T) {
 					mockTaskResolveFunc(),
 					orbital.WithJobConfirmFunc(confirmFunc),
 				)
-				subj.Config.ConfirmJobDelay = 100 * time.Millisecond
+				subj.Config.ConfirmJobDelay = 10 * time.Millisecond
 
 				job := orbital.NewJob("", nil)
 				jobCreated, err := subj.PrepareJob(ctx, job)
 				assert.NoError(t, err)
 
 				// when
-				time.Sleep(1 * time.Second)
+				time.Sleep(100 * time.Millisecond)
 				err = orbital.ConfirmJob(subj)(ctx)
 				assert.NoError(t, err)
 
@@ -148,14 +148,14 @@ func TestConfirmJob(t *testing.T) {
 			mockTaskResolveFunc(),
 			orbital.WithJobConfirmFunc(confirmFunc),
 		)
-		subj.Config.ConfirmJobDelay = 100 * time.Millisecond
+		subj.Config.ConfirmJobDelay = 10 * time.Millisecond
 
 		job := orbital.NewJob("", nil)
 		jobCreated, err := subj.PrepareJob(ctx, job)
 		assert.NoError(t, err)
 
 		// when
-		time.Sleep(1 * time.Second)
+		time.Sleep(100 * time.Millisecond)
 		err = orbital.ConfirmJob(subj)(ctx)
 		assert.NoError(t, err)
 
@@ -182,14 +182,14 @@ func TestConfirmJob(t *testing.T) {
 			orbital.WithJobConfirmFunc(confirmFunc),
 			orbital.WithJobCanceledEventFunc(mockTerminatedFunc()),
 		)
-		subj.Config.ConfirmJobDelay = 100 * time.Millisecond
+		subj.Config.ConfirmJobDelay = 10 * time.Millisecond
 
 		job := orbital.NewJob("", nil)
 		jobCreated, err := subj.PrepareJob(ctx, job)
 		assert.NoError(t, err)
 
 		// when
-		time.Sleep(1 * time.Second)
+		time.Sleep(100 * time.Millisecond)
 		err = orbital.ConfirmJob(subj)(ctx)
 		assert.NoError(t, err)
 
@@ -219,14 +219,14 @@ func TestConfirmJob(t *testing.T) {
 			mockTaskResolveFunc(),
 			orbital.WithJobConfirmFunc(confirmFunc),
 		)
-		subj.Config.ConfirmJobDelay = 100 * time.Millisecond
+		subj.Config.ConfirmJobDelay = 10 * time.Millisecond
 
 		job := orbital.NewJob("", nil)
 		jobCreated, err := subj.PrepareJob(ctx, job)
 		assert.NoError(t, err)
 
 		// when
-		time.Sleep(1 * time.Second)
+		time.Sleep(100 * time.Millisecond)
 		err = orbital.ConfirmJob(subj)(ctx)
 		assert.NoError(t, err)
 
@@ -253,7 +253,7 @@ func TestConfirmJob(t *testing.T) {
 		createdJob1, err := orbital.CreateRepoJob(repo)(ctx, job)
 		assert.NoError(t, err)
 
-		time.Sleep(time.Second)
+		time.Sleep(100 * time.Millisecond)
 		_, err = orbital.CreateRepoJob(repo)(ctx, job)
 		assert.NoError(t, err)
 
@@ -272,7 +272,7 @@ func TestConfirmJob(t *testing.T) {
 			mockTaskResolveFunc(),
 			orbital.WithJobConfirmFunc(confirmFunc),
 		)
-		subj.Config.ConfirmJobDelay = 100 * time.Millisecond
+		subj.Config.ConfirmJobDelay = 10 * time.Millisecond
 
 		// when
 

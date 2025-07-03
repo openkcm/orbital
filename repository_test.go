@@ -117,7 +117,7 @@ func TestRepoUpdateJobState(t *testing.T) {
 
 	job.Status = orbital.JobStatusConfirmed
 
-	time.Sleep(1 * time.Second) // Ensure the updated_at timestamp is different
+	time.Sleep(1 * time.Microsecond) // Ensure the updated_at timestamp is different
 	err = orbital.UpdateRepoJob(repo)(ctx, job)
 	assert.NoError(t, err)
 
@@ -485,7 +485,7 @@ func TestRepoUpdateJobCursor(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	time.Sleep(1 * time.Second) // Ensure the updated_at timestamp is different
+	time.Sleep(1 * time.Microsecond) // Ensure the updated_at timestamp is different
 	jobCursor.Cursor = "cursor-1"
 	err = orbital.UpdateRepoJobCursor(repo)(ctx, jobCursor)
 	assert.NoError(t, err)
@@ -776,7 +776,7 @@ func TestRepoUpdateJobEvent(t *testing.T) {
 
 	jobEvent.IsNotified = true
 
-	time.Sleep(1 * time.Second) // Ensure the updated_at timestamp is different
+	time.Sleep(1 * time.Microsecond) // Ensure the updated_at timestamp is different
 	err = orbital.UpdateRepoJobEvent(repo)(ctx, jobEvent)
 	assert.NoError(t, err)
 
