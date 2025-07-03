@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/openkcm/orbital"
+	"github.com/openkcm/orbital/internal/clock"
 )
 
 var errTransaction = errors.New("transaction error")
@@ -139,7 +140,7 @@ func TestRepoListJobs(t *testing.T) {
 		repo := orbital.NewRepository(store)
 
 		jobs := make([]orbital.Job, 2)
-		now := utcUnix()
+		now := clock.NowUnixNano()
 		for i := range jobs {
 			jobs[i].Status = orbital.JobStatusCreated
 			jobs[i].CreatedAt = now
@@ -200,7 +201,7 @@ func TestRepoListJobs(t *testing.T) {
 
 		createdJobs := make([]orbital.Job, 0, 2)
 		jobToCreate := make([]orbital.Job, 2)
-		now := utcUnix()
+		now := clock.NowUnixNano()
 		for i := range jobToCreate {
 			now++
 			jobToCreate[i].Status = orbital.JobStatusCreated
@@ -518,7 +519,7 @@ func TestRepoTransaction(t *testing.T) {
 
 	jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
 		Status:    orbital.JobStatusConfirmed,
-		CreatedAt: utcUnix(),
+		CreatedAt: clock.NowUnixNano(),
 		Limit:     10,
 	})
 	assert.NoError(t, err)
@@ -546,7 +547,7 @@ func TestRepoTransactionError(t *testing.T) {
 
 	jobs, err := orbital.ListRepoJobs(repo)(t.Context(), orbital.ListJobsQuery{
 		Status:    orbital.JobStatusCreated,
-		CreatedAt: utcUnix(),
+		CreatedAt: clock.NowUnixNano(),
 		Limit:     10,
 	})
 	assert.NoError(t, err)
@@ -605,7 +606,7 @@ func TestRepoTransactionRaceCondition(t *testing.T) {
 				result, err := orbital.ListRepoJobs(&repo)(ctx, orbital.ListJobsQuery{
 					Status:             orbital.JobStatusCreated,
 					RetrievalModeQueue: true,
-					CreatedAt:          utcUnix(),
+					CreatedAt:          clock.NowUnixNano(),
 					Limit:              10,
 				})
 				assert.NoError(t, err)
@@ -629,7 +630,7 @@ func TestRepoTransactionRaceCondition(t *testing.T) {
 		// should fetch the updated job for the first transaction
 		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
 			Status:    orbital.JobStatusResolveCanceled,
-			CreatedAt: utcUnix(),
+			CreatedAt: clock.NowUnixNano(),
 			Limit:     10,
 		})
 		assert.NoError(t, err)
@@ -703,7 +704,7 @@ func TestRepoTransactionRaceCondition(t *testing.T) {
 		// should fetch the updated job for the second transaction
 		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
 			Status:    orbital.JobStatusConfirmCanceled,
-			CreatedAt: utcUnix(),
+			CreatedAt: clock.NowUnixNano(),
 			Limit:     10,
 		})
 		assert.NoError(t, err)

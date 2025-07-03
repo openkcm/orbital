@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/openkcm/orbital/internal/clock"
 	"github.com/openkcm/orbital/internal/worker"
 )
 
@@ -260,10 +261,10 @@ func (m *Manager) CancelJob(ctx context.Context, jobID uuid.UUID) error {
 // and attempts to confirm them within a transaction.
 func (m *Manager) confirmJob(ctx context.Context) error {
 	return m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
-		nowUTC := time.Now().UTC()
+		now := clock.Now()
 		jobs, err := repo.listJobs(ctx, ListJobsQuery{
 			Status:             JobStatusCreated,
-			CreatedAt:          nowUTC.Add(-m.Config.ConfirmJobDelay).UnixNano(),
+			CreatedAt:          clock.ToUnixNano(now.Add(-m.Config.ConfirmJobDelay)),
 			Limit:              1,
 			RetrievalModeQueue: true,
 			OrderByUpdatedAt:   true,
@@ -374,10 +375,9 @@ func (m *Manager) createOrUpdateCursor(ctx context.Context, repo Repository, fou
 // and an error if the retrieval fails.
 func (m *Manager) jobForTaskCreation(ctx context.Context, repo Repository) (Job, bool, error) {
 	var empty Job
-	utcUnix := time.Now().UTC().UnixNano()
 	jobs, err := repo.listJobs(ctx, ListJobsQuery{
 		StatusIn:           []JobStatus{JobStatusResolving, JobStatusConfirmed},
-		CreatedAt:          utcUnix,
+		CreatedAt:          clock.NowUnixNano(),
 		Limit:              1,
 		RetrievalModeQueue: true,
 		OrderByUpdatedAt:   true,
@@ -456,7 +456,7 @@ func (m *Manager) reconcile(ctx context.Context) error {
 func (m *Manager) getJobForReconcile(ctx context.Context, repo Repository) (Job, error) {
 	jobs, err := repo.listJobs(ctx, ListJobsQuery{
 		StatusIn:           []JobStatus{JobStatusReady, JobStatusProcessing},
-		CreatedAt:          time.Now().UTC().UnixNano(),
+		CreatedAt:          clock.NowUnixNano(),
 		OrderByUpdatedAt:   true,
 		RetrievalModeQueue: true,
 		Limit:              1,
@@ -526,7 +526,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 		return
 	}
 
-	task.LastSentAt = time.Now().UTC().UnixNano()
+	task.LastSentAt = clock.NowUnixNano()
 	task.SentCount++
 	task.Status = TaskStatusProcessing
 

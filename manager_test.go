@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/openkcm/orbital"
+	"github.com/openkcm/orbital/internal/clock"
 )
 
 var errResourceNotFound = errors.New("resource not found")
@@ -283,7 +284,7 @@ func TestConfirmJob(t *testing.T) {
 		assert.Equal(t, "start second retrieval mode list", <-callerChan)
 		actJobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
 			RetrievalModeQueue: true,
-			CreatedAt:          utcUnix(),
+			CreatedAt:          clock.NowUnixNano(),
 		})
 		assert.NoError(t, err)
 		assert.Len(t, actJobs, 1)
@@ -476,7 +477,7 @@ func TestCreateTasks(t *testing.T) {
 		assert.Equal(t, "start second retrieval mode list", <-callerChan)
 		actJobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
 			RetrievalModeQueue: true,
-			CreatedAt:          utcUnix(),
+			CreatedAt:          clock.NowUnixNano(),
 		})
 		assert.NoError(t, err)
 		assert.Len(t, actJobs, 1)
