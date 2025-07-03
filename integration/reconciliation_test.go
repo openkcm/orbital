@@ -1,46 +1,89 @@
-//go:build integration
-// +build integration
-
 package integration_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	stdsql "database/sql"
+
 	"github.com/openkcm/orbital"
+	"github.com/openkcm/orbital/store/sql"
 )
 
 // TestReconciliationFlows runs all reconciliation tests as subtests.
+//
+//nolint:tparallel
 func TestReconciliationFlows(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
-		test func(ctx context.Context, t *testing.T, env *TestEnvironment)
+		test func(ctx context.Context, t *testing.T, env *testEnvironment, store *sql.SQL)
 	}{
-		{"Reconcile", testReconcile},
-		{"Reconcile With MultipleTasks", testReconcileWithMultipleTasks},
-		{"TaskFailureScenario", testTaskFailureScenario},
-		{"ReconcileAfterSec", testReconcileAfterSec},
-		{"MultipleRequestResponseCycles", testMultipleRequestResponseCycles},
+		{"reconcile", testReconcile},
+		{"reconcile with multiple tasks", testReconcileWithMultipleTasks},
+		{"handle failed task", testTaskFailureScenario},
+		{"handle multiple cycles", testMultipleRequestResponseCycles},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			runTestWithEnvironment(t, tt.test)
-		})
-	}
+	ctx := t.Context()
+
+	env, err := setupTestEnvironment(ctx, t)
+	require.NoError(t, err, "failed to set up test environment")
+	defer func() {
+		err := env.Cleanup(ctx)
+		assert.NoError(t, err, "failed to clean up test environment")
+	}()
+
+	t.Run("should", func(t *testing.T) {
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				dbName := strings.ReplaceAll(tt.name, " ", "_")
+				store, db := createStore(ctx, t, env, dbName)
+				t.Cleanup(func() {
+					err := db.Close()
+					assert.NoError(t, err, "failed to close test database connection")
+				})
+
+				tt.test(ctx, t, env, store)
+			})
+		}
+	})
+}
+
+// createStore creates a new test database and returns the store and database connection.
+func createStore(ctx context.Context, t *testing.T, env *testEnvironment, name string) (*sql.SQL, *stdsql.DB) {
+	t.Helper()
+
+	_, err := env.postgres.db.ExecContext(ctx, "CREATE DATABASE "+name)
+	assert.NoError(t, err, "failed to create test database")
+
+	postgresURL := fmt.Sprintf("host=%s port=%s user=postgres password=postgres dbname=%s sslmode=disable",
+		env.postgres.host, env.postgres.port, name)
+
+	db, err := stdsql.Open("postgres", postgresURL)
+	assert.NoError(t, err, "failed to connect to test database")
+
+	store, err := sql.New(ctx, db)
+	assert.NoError(t, err, "failed to create store for test")
+
+	return store, db
 }
 
 // testReconcile tests the basic flow: create job → create 1 task → job processing → job done.
-func testReconcile(ctx context.Context, t *testing.T, env *TestEnvironment) {
+func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, store *sql.SQL) {
+	t.Helper()
+
 	const (
 		taskType   = "test-task"
 		taskTarget = "test-target"
@@ -49,11 +92,11 @@ func testReconcile(ctx context.Context, t *testing.T, env *TestEnvironment) {
 	tasksQueue := fmt.Sprintf("tasks-minimal-%d", time.Now().UnixNano())
 	responsesQueue := fmt.Sprintf("responses-minimal-%d", time.Now().UnixNano())
 
-	managerClient, err := createAMQPClient(ctx, env, env.RabbitMQURL, tasksQueue, responsesQueue)
-	require.NoError(t, err)
+	managerClient, err := createAMQPClient(ctx, env.rabbitMQ.url, tasksQueue, responsesQueue)
+	assert.NoError(t, err)
 
-	operatorClient, err := createAMQPClient(ctx, env, env.RabbitMQURL, responsesQueue, tasksQueue)
-	require.NoError(t, err)
+	operatorClient, err := createAMQPClient(ctx, env.rabbitMQ.url, responsesQueue, tasksQueue)
+	assert.NoError(t, err)
 
 	operatorDone := make(chan struct{})
 	var operatorOnce sync.Once
@@ -61,8 +104,8 @@ func testReconcile(ctx context.Context, t *testing.T, env *TestEnvironment) {
 	var jobDoneCalls, jobCanceledCalls, jobFailedCalls int32
 	terminationDone := make(chan orbital.Job, 1)
 
-	managerConfig := ManagerConfig{
-		TaskResolveFunc: func(_ context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
+	managerConfig := managerConfig{
+		taskResolveFunc: func(_ context.Context, job orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			t.Logf("TaskResolver called for job %s", job.ID)
 			return orbital.TaskResolverResult{
 				TaskInfos: []orbital.TaskInfo{
@@ -75,14 +118,14 @@ func testReconcile(ctx context.Context, t *testing.T, env *TestEnvironment) {
 				Done: true,
 			}, nil
 		},
-		JobConfirmFunc: func(_ context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
+		jobConfirmFunc: func(_ context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
 			t.Logf("JobConfirmFunc called for job %s", job.ID)
 			return orbital.JobConfirmResult{Confirmed: true}, nil
 		},
-		TargetClients: map[string]orbital.Initiator{
+		targetClients: map[string]orbital.Initiator{
 			taskTarget: managerClient,
 		},
-		JobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
+		jobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobDoneCalls, 1)
 			t.Logf("JobDoneEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
@@ -92,7 +135,7 @@ func testReconcile(ctx context.Context, t *testing.T, env *TestEnvironment) {
 			}
 			return nil
 		},
-		JobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
+		jobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobCanceledCalls, 1)
 			t.Logf("JobCanceledEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
@@ -102,7 +145,7 @@ func testReconcile(ctx context.Context, t *testing.T, env *TestEnvironment) {
 			}
 			return nil
 		},
-		JobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
+		jobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobFailedCalls, 1)
 			t.Logf("JobFailedEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
@@ -114,11 +157,13 @@ func testReconcile(ctx context.Context, t *testing.T, env *TestEnvironment) {
 		},
 	}
 
-	manager, err := createManager(t, ctx, env, managerConfig)
-	require.NoError(t, err)
+	ctxCancel, cancel := context.WithCancel(ctx)
+	defer cancel()
+	manager, err := createAndStartManager(ctxCancel, t, store, managerConfig)
+	assert.NoError(t, err)
 
-	operatorConfig := OperatorConfig{
-		Handlers: map[string]orbital.Handler{
+	operatorConfig := operatorConfig{
+		handlers: map[string]orbital.Handler{
 			taskType: func(_ context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
 				operatorOnce.Do(func() {
 					close(operatorDone)
@@ -138,11 +183,13 @@ func testReconcile(ctx context.Context, t *testing.T, env *TestEnvironment) {
 		},
 	}
 
-	_, err = createOperator(ctx, t, operatorClient, operatorConfig)
-	require.NoError(t, err)
+	ctxCancel, cancel = context.WithCancel(ctx)
+	defer cancel()
+	err = createAndStartOperator(ctxCancel, t, operatorClient, operatorConfig)
+	assert.NoError(t, err)
 
-	job, err := createTestJob(t, ctx, manager, "test-job", []byte("job-data"))
-	require.NoError(t, err)
+	job, err := createTestJob(ctx, t, manager, "test-job", []byte("job-data"))
+	assert.NoError(t, err)
 
 	select {
 	case <-operatorDone:
@@ -161,8 +208,8 @@ func testReconcile(ctx context.Context, t *testing.T, env *TestEnvironment) {
 	}
 
 	finalJob, found, err := manager.GetJob(ctx, job.ID)
-	require.NoError(t, err)
-	require.True(t, found)
+	assert.NoError(t, err)
+	assert.True(t, found)
 	assert.Equal(t, orbital.JobStatusDone, finalJob.Status)
 	assert.Empty(t, finalJob.ErrorMessage)
 
@@ -170,8 +217,8 @@ func testReconcile(ctx context.Context, t *testing.T, env *TestEnvironment) {
 		JobID: job.ID,
 		Limit: 10,
 	})
-	require.NoError(t, err)
-	require.Len(t, tasks, 1)
+	assert.NoError(t, err)
+	assert.Len(t, tasks, 1)
 
 	task := tasks[0]
 	assert.Equal(t, orbital.TaskStatusDone, task.Status)
@@ -190,7 +237,9 @@ func testReconcile(ctx context.Context, t *testing.T, env *TestEnvironment) {
 }
 
 // testReconcileWithMultipleTasks tests a job with multiple tasks.
-func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *TestEnvironment) {
+func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *testEnvironment, store *sql.SQL) {
+	t.Helper()
+
 	const (
 		taskType1   = "task-type-1"
 		taskType2   = "task-type-2"
@@ -203,15 +252,15 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *Test
 	queue2 := fmt.Sprintf("queue-2-multi-%d", time.Now().UnixNano())
 	response2 := fmt.Sprintf("response-2-multi-%d", time.Now().UnixNano())
 
-	client1, err := createAMQPClient(ctx, env, env.RabbitMQURL, queue1, response1)
-	require.NoError(t, err)
-	operatorClient1, err := createAMQPClient(ctx, env, env.RabbitMQURL, response1, queue1)
-	require.NoError(t, err)
+	managerClient1, err := createAMQPClient(ctx, env.rabbitMQ.url, queue1, response1)
+	assert.NoError(t, err)
+	operatorClient1, err := createAMQPClient(ctx, env.rabbitMQ.url, response1, queue1)
+	assert.NoError(t, err)
 
-	client2, err := createAMQPClient(ctx, env, env.RabbitMQURL, queue2, response2)
-	require.NoError(t, err)
-	operatorClient2, err := createAMQPClient(ctx, env, env.RabbitMQURL, response2, queue2)
-	require.NoError(t, err)
+	managerClient2, err := createAMQPClient(ctx, env.rabbitMQ.url, queue2, response2)
+	assert.NoError(t, err)
+	operatorClient2, err := createAMQPClient(ctx, env.rabbitMQ.url, response2, queue2)
+	assert.NoError(t, err)
 
 	var operator1Once, operator2Once sync.Once
 	operator1Done := make(chan struct{})
@@ -221,8 +270,8 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *Test
 	var jobDoneCalls, jobCanceledCalls, jobFailedCalls int32
 	terminationDone := make(chan orbital.Job, 1)
 
-	managerConfig := ManagerConfig{
-		TaskResolveFunc: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
+	managerConfig := managerConfig{
+		taskResolveFunc: func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			return orbital.TaskResolverResult{
 				TaskInfos: []orbital.TaskInfo{
 					{
@@ -239,14 +288,14 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *Test
 				Done: true,
 			}, nil
 		},
-		JobConfirmFunc: func(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
+		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 			return orbital.JobConfirmResult{Confirmed: true}, nil
 		},
-		TargetClients: map[string]orbital.Initiator{
-			taskTarget1: client1,
-			taskTarget2: client2,
+		targetClients: map[string]orbital.Initiator{
+			taskTarget1: managerClient1,
+			taskTarget2: managerClient2,
 		},
-		JobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
+		jobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobDoneCalls, 1)
 			t.Logf("JobDoneEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
@@ -256,7 +305,7 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *Test
 			}
 			return nil
 		},
-		JobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
+		jobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobCanceledCalls, 1)
 			t.Logf("JobCanceledEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
@@ -266,7 +315,7 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *Test
 			}
 			return nil
 		},
-		JobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
+		jobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobFailedCalls, 1)
 			t.Logf("JobFailedEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
@@ -278,12 +327,14 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *Test
 		},
 	}
 
-	manager, err := createManager(t, ctx, env, managerConfig)
-	require.NoError(t, err)
+	ctxCancel, cancel := context.WithCancel(ctx)
+	defer cancel()
+	manager, err := createAndStartManager(ctxCancel, t, store, managerConfig)
+	assert.NoError(t, err)
 
-	operatorConfig1 := OperatorConfig{
-		Handlers: map[string]orbital.Handler{
-			taskType1: func(ctx context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+	operatorConfig1 := operatorConfig{
+		handlers: map[string]orbital.Handler{
+			taskType1: func(_ context.Context, _ orbital.HandlerRequest) (orbital.HandlerResponse, error) {
 				operator1Once.Do(func() {
 					close(operator1Done)
 				})
@@ -297,12 +348,14 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *Test
 			},
 		},
 	}
-	_, err = createOperator(ctx, t, operatorClient1, operatorConfig1)
-	require.NoError(t, err)
+	ctxCancel, cancel = context.WithCancel(ctx)
+	defer cancel()
+	err = createAndStartOperator(ctxCancel, t, operatorClient1, operatorConfig1)
+	assert.NoError(t, err)
 
-	operatorConfig2 := OperatorConfig{
-		Handlers: map[string]orbital.Handler{
-			taskType2: func(ctx context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+	operatorConfig2 := operatorConfig{
+		handlers: map[string]orbital.Handler{
+			taskType2: func(_ context.Context, _ orbital.HandlerRequest) (orbital.HandlerResponse, error) {
 				operator2Once.Do(func() {
 					close(operator2Done)
 				})
@@ -316,8 +369,10 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *Test
 			},
 		},
 	}
-	_, err = createOperator(ctx, t, operatorClient2, operatorConfig2)
-	require.NoError(t, err)
+	ctxCancel, cancel = context.WithCancel(ctx)
+	defer cancel()
+	err = createAndStartOperator(ctxCancel, t, operatorClient2, operatorConfig2)
+	assert.NoError(t, err)
 
 	go func() {
 		<-operator1Done
@@ -325,8 +380,8 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *Test
 		close(allOperatorsDone)
 	}()
 
-	job, err := createTestJob(t, ctx, manager, "multi-task-job", []byte("job-data"))
-	require.NoError(t, err)
+	job, err := createTestJob(ctx, t, manager, "multi-task-job", []byte("job-data"))
+	assert.NoError(t, err)
 
 	select {
 	case <-allOperatorsDone:
@@ -345,8 +400,8 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *Test
 	}
 
 	job, found, err := manager.GetJob(ctx, job.ID)
-	require.NoError(t, err)
-	require.True(t, found)
+	assert.NoError(t, err)
+	assert.True(t, found)
 	assert.Equal(t, orbital.JobStatusDone, job.Status)
 	assert.Empty(t, job.ErrorMessage)
 
@@ -354,7 +409,7 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *Test
 		JobID: job.ID,
 		Limit: 10,
 	})
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	assert.Len(t, tasks, 2)
 
 	tasksByType := make(map[string]orbital.Task)
@@ -363,14 +418,14 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *Test
 	}
 
 	task1, ok := tasksByType[taskType1]
-	require.True(t, ok)
+	assert.True(t, ok)
 	assert.Equal(t, orbital.TaskStatusDone, task1.Status)
 	assert.Equal(t, []byte("data-1"), task1.Data)
 	assert.Equal(t, []byte("task 1 done"), task1.WorkingState)
 	assert.Equal(t, int64(1), task1.SentCount)
 
 	task2, ok := tasksByType[taskType2]
-	require.True(t, ok)
+	assert.True(t, ok)
 	assert.Equal(t, orbital.TaskStatusDone, task2.Status)
 	assert.Equal(t, []byte("data-2"), task2.Data)
 	assert.Equal(t, []byte("task 2 done"), task2.WorkingState)
@@ -382,7 +437,9 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *Test
 }
 
 // testTaskFailureScenario tests how the system handles task failures.
-func testTaskFailureScenario(ctx context.Context, t *testing.T, env *TestEnvironment) {
+func testTaskFailureScenario(ctx context.Context, t *testing.T, env *testEnvironment, store *sql.SQL) {
+	t.Helper()
+
 	const (
 		taskType   = "failing-task"
 		taskTarget = "target"
@@ -391,10 +448,10 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *TestEnviron
 	tasksQueue := fmt.Sprintf("tasks-failure-%d", time.Now().UnixNano())
 	responsesQueue := fmt.Sprintf("responses-failure-%d", time.Now().UnixNano())
 
-	managerClient, err := createAMQPClient(ctx, env, env.RabbitMQURL, tasksQueue, responsesQueue)
-	require.NoError(t, err)
-	operatorClient, err := createAMQPClient(ctx, env, env.RabbitMQURL, responsesQueue, tasksQueue)
-	require.NoError(t, err)
+	managerClient, err := createAMQPClient(ctx, env.rabbitMQ.url, tasksQueue, responsesQueue)
+	assert.NoError(t, err)
+	operatorClient, err := createAMQPClient(ctx, env.rabbitMQ.url, responsesQueue, tasksQueue)
+	assert.NoError(t, err)
 
 	operatorDone := make(chan struct{})
 	var operatorOnce sync.Once
@@ -402,8 +459,8 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *TestEnviron
 	var jobDoneCalls, jobCanceledCalls, jobFailedCalls int32
 	terminationDone := make(chan orbital.Job, 1)
 
-	managerConfig := ManagerConfig{
-		TaskResolveFunc: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
+	managerConfig := managerConfig{
+		taskResolveFunc: func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			return orbital.TaskResolverResult{
 				TaskInfos: []orbital.TaskInfo{
 					{
@@ -415,13 +472,13 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *TestEnviron
 				Done: true,
 			}, nil
 		},
-		JobConfirmFunc: func(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
+		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 			return orbital.JobConfirmResult{Confirmed: true}, nil
 		},
-		TargetClients: map[string]orbital.Initiator{
+		targetClients: map[string]orbital.Initiator{
 			taskTarget: managerClient,
 		},
-		JobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
+		jobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobDoneCalls, 1)
 			t.Logf("JobDoneEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
@@ -431,7 +488,7 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *TestEnviron
 			}
 			return nil
 		},
-		JobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
+		jobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobCanceledCalls, 1)
 			t.Logf("JobCanceledEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
@@ -441,7 +498,7 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *TestEnviron
 			}
 			return nil
 		},
-		JobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
+		jobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobFailedCalls, 1)
 			t.Logf("JobFailedEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
@@ -453,12 +510,14 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *TestEnviron
 		},
 	}
 
-	manager, err := createManager(t, ctx, env, managerConfig)
-	require.NoError(t, err)
+	ctxCancel, cancel := context.WithCancel(ctx)
+	defer cancel()
+	manager, err := createAndStartManager(ctxCancel, t, store, managerConfig)
+	assert.NoError(t, err)
 
-	operatorConfig := OperatorConfig{
-		Handlers: map[string]orbital.Handler{
-			taskType: func(ctx context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+	operatorConfig := operatorConfig{
+		handlers: map[string]orbital.Handler{
+			taskType: func(_ context.Context, _ orbital.HandlerRequest) (orbital.HandlerResponse, error) {
 				operatorOnce.Do(func() {
 					close(operatorDone)
 				})
@@ -472,11 +531,13 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *TestEnviron
 			},
 		},
 	}
-	_, err = createOperator(ctx, t, operatorClient, operatorConfig)
-	require.NoError(t, err)
+	ctxCancel, cancel = context.WithCancel(ctx)
+	defer cancel()
+	err = createAndStartOperator(ctxCancel, t, operatorClient, operatorConfig)
+	assert.NoError(t, err)
 
-	job, err := createTestJob(t, ctx, manager, "failing-job", []byte("job-data"))
-	require.NoError(t, err)
+	job, err := createTestJob(ctx, t, manager, "failing-job", []byte("job-data"))
+	assert.NoError(t, err)
 
 	select {
 	case <-operatorDone:
@@ -496,8 +557,8 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *TestEnviron
 	}
 
 	finalJob, found, err := manager.GetJob(ctx, job.ID)
-	require.NoError(t, err)
-	require.True(t, found)
+	assert.NoError(t, err)
+	assert.True(t, found)
 	assert.Equal(t, orbital.JobStatusFailed, finalJob.Status)
 	assert.Equal(t, orbital.ErrMsgFailedTasks, finalJob.ErrorMessage)
 
@@ -505,8 +566,8 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *TestEnviron
 		JobID: job.ID,
 		Limit: 10,
 	})
-	require.NoError(t, err)
-	require.Len(t, tasks, 1)
+	assert.NoError(t, err)
+	assert.Len(t, tasks, 1)
 
 	task := tasks[0]
 	assert.Equal(t, orbital.TaskStatusFailed, task.Status)
@@ -518,175 +579,10 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *TestEnviron
 	assert.Equal(t, int32(1), atomic.LoadInt32(&jobFailedCalls), "job failed event function should be called exactly once")
 }
 
-// testReconcileAfterSec tests the reconciliation delay functionality.
-func testReconcileAfterSec(ctx context.Context, t *testing.T, env *TestEnvironment) {
-	const (
-		taskType   = "reconcile-task"
-		taskTarget = "target"
-	)
-
-	var handlerCalls int32
-	handlerCallTimes := make([]time.Time, 0, 3)
-	var mu sync.Mutex
-	operatorDone := make(chan struct{})
-
-	var jobDoneCalls, jobCanceledCalls, jobFailedCalls int32
-	terminationDone := make(chan orbital.Job, 1)
-
-	tasksQueue := fmt.Sprintf("tasks-reconcile-%d", time.Now().UnixNano())
-	responsesQueue := fmt.Sprintf("responses-reconcile-%d", time.Now().UnixNano())
-
-	managerClient, err := createAMQPClient(ctx, env, env.RabbitMQURL, tasksQueue, responsesQueue)
-	require.NoError(t, err)
-	operatorClient, err := createAMQPClient(ctx, env, env.RabbitMQURL, responsesQueue, tasksQueue)
-	require.NoError(t, err)
-
-	managerConfig := ManagerConfig{
-		TaskResolveFunc: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
-			return orbital.TaskResolverResult{
-				TaskInfos: []orbital.TaskInfo{
-					{
-						Data:   []byte("reconcile-data"),
-						Type:   taskType,
-						Target: taskTarget,
-					},
-				},
-				Done: true,
-			}, nil
-		},
-		JobConfirmFunc: func(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
-			return orbital.JobConfirmResult{Confirmed: true}, nil
-		},
-		TargetClients: map[string]orbital.Initiator{
-			taskTarget: managerClient,
-		},
-		JobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
-			calls := atomic.AddInt32(&jobDoneCalls, 1)
-			t.Logf("JobDoneEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
-
-			select {
-			case terminationDone <- job:
-			default:
-			}
-			return nil
-		},
-		JobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
-			calls := atomic.AddInt32(&jobCanceledCalls, 1)
-			t.Logf("JobCanceledEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
-
-			select {
-			case terminationDone <- job:
-			default:
-			}
-			return nil
-		},
-		JobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
-			calls := atomic.AddInt32(&jobFailedCalls, 1)
-			t.Logf("JobFailedEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
-
-			select {
-			case terminationDone <- job:
-			default:
-			}
-			return nil
-		},
-	}
-
-	manager, err := createManager(t, ctx, env, managerConfig)
-	require.NoError(t, err)
-
-	var taskID atomic.Value
-	var reconcileAfterSec atomic.Int64
-
-	operatorConfig := OperatorConfig{
-		Handlers: map[string]orbital.Handler{
-			taskType: func(ctx context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
-				mu.Lock()
-				defer mu.Unlock()
-
-				if taskID.Load() == nil {
-					taskID.Store(req.TaskID)
-				}
-
-				calls := atomic.AddInt32(&handlerCalls, 1)
-				handlerCallTimes = append(handlerCallTimes, time.Now())
-				t.Logf("Handler call #%d for task %s at %v", calls, req.TaskID, time.Now())
-
-				time.Sleep(100 * time.Millisecond)
-
-				if calls == 1 {
-					reconcileAfterSec.Add(time.Now().Unix() + 2)
-					return orbital.HandlerResponse{
-						WorkingState:      []byte("in progress"),
-						Result:            orbital.ResultProcessing,
-						ReconcileAfterSec: 2,
-					}, nil
-				}
-
-				if calls == 2 {
-					if time.Now().Unix() < reconcileAfterSec.Load() {
-						t.Errorf("reconciliation should happen after at least 2 seconds, but was called too early")
-					}
-					close(operatorDone)
-					return orbital.HandlerResponse{
-						WorkingState: []byte("completed"),
-						Result:       orbital.ResultDone,
-					}, nil
-				}
-
-				t.Errorf("Unexpected handler call #%d", calls)
-				return orbital.HandlerResponse{}, errors.New("unexpected call")
-			},
-		},
-	}
-	_, err = createOperator(ctx, t, operatorClient, operatorConfig)
-	require.NoError(t, err)
-
-	job, err := createTestJob(t, ctx, manager, "reconcile-job", []byte("job-data"))
-	require.NoError(t, err)
-
-	select {
-	case <-operatorDone:
-		t.Log("Operator completed after reconciliation delay")
-	case <-time.After(45 * time.Second):
-		t.Fatal("Operator second call did not happen within timeout")
-	}
-
-	select {
-	case terminatedJob := <-terminationDone:
-		t.Logf("Termination event function called for reconcile job %s", terminatedJob.ID)
-		assert.Equal(t, job.ID, terminatedJob.ID)
-		assert.Equal(t, orbital.JobStatusDone, terminatedJob.Status)
-	case <-time.After(15 * time.Second):
-		t.Fatal("Termination event function was not called within timeout")
-	}
-
-	finalCalls := atomic.LoadInt32(&handlerCalls)
-	assert.Equal(t, int32(2), finalCalls, "handler should be called exactly twice")
-
-	if tid := taskID.Load(); tid != nil {
-		tasks, err := manager.ListTasks(ctx, orbital.ListTasksQuery{
-			JobID: job.ID,
-			Limit: 10,
-		})
-		require.NoError(t, err)
-		require.Len(t, tasks, 1)
-
-		task := tasks[0]
-		assert.Equal(t, tid.(uuid.UUID), task.ID)
-		assert.Equal(t, orbital.TaskStatusDone, task.Status)
-		assert.Equal(t, int64(2), task.SentCount, "task should be sent exactly twice")
-		assert.Equal(t, []byte("completed"), task.WorkingState)
-		assert.Equal(t, int64(0), task.ReconcileAfterSec, "reconcile_after_sec should be 0 for completed task")
-	}
-
-	assert.Equal(t, int32(1), atomic.LoadInt32(&jobDoneCalls), "job done event function should be called exactly once")
-	assert.Equal(t, int32(0), atomic.LoadInt32(&jobCanceledCalls), "job canceled event function should not be called")
-	assert.Equal(t, int32(0), atomic.LoadInt32(&jobFailedCalls), "job failed event function should not be called")
-}
-
 // testMultipleRequestResponseCycles tests tasks that complete after multiple request/response cycles.
-func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *TestEnvironment) {
+func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *testEnvironment, store *sql.SQL) {
+	t.Helper()
+
 	const (
 		taskType   = "multi-cycle-task"
 		taskTarget = "target"
@@ -702,13 +598,13 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *T
 	tasksQueue := fmt.Sprintf("tasks-multi-cycle-%d", time.Now().UnixNano())
 	responsesQueue := fmt.Sprintf("responses-multi-cycle-%d", time.Now().UnixNano())
 
-	managerClient, err := createAMQPClient(ctx, env, env.RabbitMQURL, tasksQueue, responsesQueue)
-	require.NoError(t, err)
-	operatorClient, err := createAMQPClient(ctx, env, env.RabbitMQURL, responsesQueue, tasksQueue)
-	require.NoError(t, err)
+	managerClient, err := createAMQPClient(ctx, env.rabbitMQ.url, tasksQueue, responsesQueue)
+	assert.NoError(t, err)
+	operatorClient, err := createAMQPClient(ctx, env.rabbitMQ.url, responsesQueue, tasksQueue)
+	assert.NoError(t, err)
 
-	managerConfig := ManagerConfig{
-		TaskResolveFunc: func(ctx context.Context, job orbital.Job, cursor orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
+	managerConfig := managerConfig{
+		taskResolveFunc: func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			return orbital.TaskResolverResult{
 				TaskInfos: []orbital.TaskInfo{
 					{
@@ -720,13 +616,13 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *T
 				Done: true,
 			}, nil
 		},
-		JobConfirmFunc: func(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
+		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 			return orbital.JobConfirmResult{Confirmed: true}, nil
 		},
-		TargetClients: map[string]orbital.Initiator{
+		targetClients: map[string]orbital.Initiator{
 			taskTarget: managerClient,
 		},
-		JobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
+		jobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobDoneCalls, 1)
 			t.Logf("JobDoneEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
@@ -736,7 +632,7 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *T
 			}
 			return nil
 		},
-		JobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
+		jobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobCanceledCalls, 1)
 			t.Logf("JobCanceledEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
@@ -746,7 +642,7 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *T
 			}
 			return nil
 		},
-		JobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
+		jobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobFailedCalls, 1)
 			t.Logf("JobFailedEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
 
@@ -758,15 +654,17 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *T
 		},
 	}
 
-	manager, err := createManager(t, ctx, env, managerConfig)
-	require.NoError(t, err)
+	ctxCancel, cancel := context.WithCancel(ctx)
+	defer cancel()
+	manager, err := createAndStartManager(ctxCancel, t, store, managerConfig)
+	assert.NoError(t, err)
 
 	workingStates := make([][]byte, 0, expectedCycles)
 	var mu sync.Mutex
 
-	operatorConfig := OperatorConfig{
-		Handlers: map[string]orbital.Handler{
-			taskType: func(ctx context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+	operatorConfig := operatorConfig{
+		handlers: map[string]orbital.Handler{
+			taskType: func(_ context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
 				mu.Lock()
 				defer mu.Unlock()
 
@@ -776,7 +674,7 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *T
 				time.Sleep(100 * time.Millisecond)
 
 				if int64(calls) < expectedCycles {
-					state := []byte(fmt.Sprintf("cycle %d in progress", calls))
+					state := fmt.Appendf(nil, "cycle %d in progress", calls)
 					workingStates = append(workingStates, state)
 					return orbital.HandlerResponse{
 						WorkingState:      state,
@@ -796,11 +694,13 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *T
 			},
 		},
 	}
-	_, err = createOperator(ctx, t, operatorClient, operatorConfig)
-	require.NoError(t, err)
+	ctxCancel, cancel = context.WithCancel(ctx)
+	defer cancel()
+	err = createAndStartOperator(ctxCancel, t, operatorClient, operatorConfig)
+	assert.NoError(t, err)
 
-	job, err := createTestJob(t, ctx, manager, "multi-cycle-job", []byte("job-data"))
-	require.NoError(t, err)
+	job, err := createTestJob(ctx, t, manager, "multi-cycle-job", []byte("job-data"))
+	assert.NoError(t, err)
 
 	select {
 	case <-operatorDone:
@@ -822,17 +722,17 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *T
 	assert.Equal(t, expectedCycles, int64(finalCalls), "handler should be called exactly %d times", expectedCycles)
 
 	job, found, err := manager.GetJob(ctx, job.ID)
-	require.NoError(t, err)
-	require.True(t, found)
-	require.Equal(t, orbital.JobStatusDone, job.Status)
+	assert.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, orbital.JobStatusDone, job.Status)
 	assert.Empty(t, job.ErrorMessage, "job should not have an error message")
 
 	tasks, err := manager.ListTasks(ctx, orbital.ListTasksQuery{
 		JobID: job.ID,
 		Limit: 10,
 	})
-	require.NoError(t, err)
-	require.Len(t, tasks, 1)
+	assert.NoError(t, err)
+	assert.Len(t, tasks, 1)
 
 	task := tasks[0]
 	assert.Equal(t, orbital.TaskStatusDone, task.Status)

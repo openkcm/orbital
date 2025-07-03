@@ -27,7 +27,7 @@ test-single:
 
 # run integration tests
 test-integration:
-	go test -tags=integration ./integration/... -v
+	go test -p 10 -count=1 ./integration/... -v
 
 clean:
 	rm -rf $(CERTS_DIR) cover.out cover.html

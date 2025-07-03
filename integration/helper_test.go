@@ -1,20 +1,17 @@
-//go:build integration
-// +build integration
-
 package integration_test
 
 import (
 	"context"
 	"fmt"
-	"sync"
+	"net"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/modules/rabbitmq"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"golang.org/x/sync/errgroup"
 
 	_ "github.com/lib/pq"
 
@@ -26,156 +23,181 @@ import (
 	"github.com/openkcm/orbital/store/sql"
 )
 
-// TestEnvironment holds all the test containers and clients.
-type TestEnvironment struct {
-	PostgresContainer testcontainers.Container
-	RabbitMQContainer testcontainers.Container
-	PostgresURL       string
-	RabbitMQURL       string
-	DB                *stdsql.DB
-	Store             *sql.SQL
-	AMQPClients       []*amqp.AMQP       // Track all AMQP clients for cleanup
-	Managers          []*orbital.Manager // Track managers for proper shutdown
-	mu                sync.Mutex         // Protect concurrent access to slices
+// testEnvironment holds all the test containers and information needed for testing.
+type testEnvironment struct {
+	postgres postgresContainer
+	rabbitMQ rabbitMQContainer
 }
 
-// ManagerConfig holds configuration for the manager.
-type ManagerConfig struct {
-	TaskResolveFunc      orbital.TaskResolveFunc
-	JobConfirmFunc       orbital.JobConfirmFunc
-	TargetClients        map[string]orbital.Initiator
-	JobDoneEventFunc     orbital.JobTerminatedEventFunc
-	JobCanceledEventFunc orbital.JobTerminatedEventFunc
-	JobFailedEventFunc   orbital.JobTerminatedEventFunc
+// postgresContainer holds the Postgres container and its connection details.
+type postgresContainer struct {
+	container testcontainers.Container
+	host      string
+	port      string
+	db        *stdsql.DB
 }
 
-// OperatorConfig holds configuration for the operator.
-type OperatorConfig struct {
-	Handlers map[string]orbital.Handler
+// rabbitMQContainer holds the RabbitMQ container and its connection URL.
+type rabbitMQContainer struct {
+	container testcontainers.Container
+	url       string
+}
+
+// managerConfig holds configuration for the manager.
+type managerConfig struct {
+	taskResolveFunc      orbital.TaskResolveFunc
+	jobConfirmFunc       orbital.JobConfirmFunc
+	targetClients        map[string]orbital.Initiator
+	jobDoneEventFunc     orbital.JobTerminatedEventFunc
+	jobCanceledEventFunc orbital.JobTerminatedEventFunc
+	jobFailedEventFunc   orbital.JobTerminatedEventFunc
+}
+
+// operatorConfig holds configuration for the operator.
+type operatorConfig struct {
+	handlers map[string]orbital.Handler
 }
 
 // setupTestEnvironment creates all necessary containers for testing.
-func setupTestEnvironment(t *testing.T, ctx context.Context) (*TestEnvironment, error) {
+func setupTestEnvironment(ctx context.Context, t *testing.T) (*testEnvironment, error) {
 	t.Helper()
 
-	env := &TestEnvironment{
-		AMQPClients: make([]*amqp.AMQP, 0),
-		Managers:    make([]*orbital.Manager, 0),
+	env := &testEnvironment{
+		postgres: postgresContainer{},
+		rabbitMQ: rabbitMQContainer{},
 	}
 
-	pgContainer, err := postgres.Run(ctx, "postgres:17-alpine",
-		postgres.WithDatabase("orbital"),
-		postgres.WithUsername("postgres"),
-		postgres.WithPassword("postgres"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(30*time.Second),
-		),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start postgres container: %w", err)
-	}
-	env.PostgresContainer = pgContainer
+	g := errgroup.Group{}
 
-	pgHost, err := pgContainer.Host(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get postgres host: %w", err)
-	}
+	g.Go(func() error {
+		t.Log("Starting Postgres container...")
 
-	pgPort, err := pgContainer.MappedPort(ctx, "5432")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get postgres port: %w", err)
-	}
+		pgContainer, err := postgres.Run(ctx, "postgres:17-alpine",
+			postgres.WithDatabase("orbital"),
+			postgres.WithUsername("postgres"),
+			postgres.WithPassword("postgres"),
+			postgres.BasicWaitStrategies(),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to start postgres container: %w", err)
+		}
+		env.postgres.container = pgContainer
 
-	env.PostgresURL = fmt.Sprintf("host=%s port=%s user=postgres password=postgres dbname=orbital sslmode=disable",
-		pgHost, pgPort.Port())
+		pgHost, err := pgContainer.Host(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get postgres host: %w", err)
+		}
+		env.postgres.host = pgHost
 
-	rabbitContainer, err := rabbitmq.Run(ctx, "rabbitmq:4-management",
-		rabbitmq.WithAdminUsername("guest"),
-		rabbitmq.WithAdminPassword("guest"),
-		testcontainers.WithWaitStrategy(
-			wait.ForAll(
-				wait.ForLog("Server startup complete").WithStartupTimeout(60*time.Second),
-				wait.ForListeningPort("5672/tcp").WithStartupTimeout(60*time.Second),
+		pgPort, err := pgContainer.MappedPort(ctx, "5432")
+		if err != nil {
+			return fmt.Errorf("failed to get postgres port: %w", err)
+		}
+		env.postgres.port = pgPort.Port()
+
+		postgresURL := fmt.Sprintf("host=%s port=%s user=postgres password=postgres dbname=orbital sslmode=disable",
+			pgHost, pgPort.Port())
+
+		db, err := stdsql.Open("postgres", postgresURL)
+		if err != nil {
+			return fmt.Errorf("failed to connect to postgres: %w", err)
+		}
+		env.postgres.db = db
+
+		return nil
+	})
+
+	g.Go(func() error {
+		t.Log("Starting RabbitMQ container...")
+
+		rabbitContainer, err := rabbitmq.Run(ctx, "rabbitmq:4-management",
+			rabbitmq.WithAdminUsername("guest"),
+			rabbitmq.WithAdminPassword("guest"),
+			testcontainers.WithWaitStrategy(
+				wait.ForAll(
+					wait.ForLog("Server startup complete").WithStartupTimeout(60*time.Second),
+					wait.ForListeningPort("5672/tcp").WithStartupTimeout(60*time.Second),
+				),
 			),
-		),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start rabbitmq container: %w", err)
-	}
-	env.RabbitMQContainer = rabbitContainer
+		)
+		if err != nil {
+			return fmt.Errorf("failed to start rabbitmq container: %w", err)
+		}
+		env.rabbitMQ.container = rabbitContainer
 
-	rabbitHost, err := rabbitContainer.Host(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get rabbitmq host: %w", err)
-	}
+		rabbitHost, err := rabbitContainer.Host(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get rabbitmq host: %w", err)
+		}
 
-	rabbitPort, err := rabbitContainer.MappedPort(ctx, "5672")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get rabbitmq port: %w", err)
-	}
+		rabbitPort, err := rabbitContainer.MappedPort(ctx, "5672")
+		if err != nil {
+			return fmt.Errorf("failed to get rabbitmq port: %w", err)
+		}
 
-	env.RabbitMQURL = fmt.Sprintf("amqp://guest:guest@%s:%s/", rabbitHost, rabbitPort.Port())
+		env.rabbitMQ.url = fmt.Sprintf("amqp://guest:guest@%s/", net.JoinHostPort(rabbitHost, rabbitPort.Port()))
 
-	err = waitForRabbitMQReady(ctx, env.RabbitMQURL)
-	if err != nil {
-		return nil, fmt.Errorf("RabbitMQ not ready: %w", err)
-	}
+		return nil
+	})
 
-	db, err := stdsql.Open("postgres", env.PostgresURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to postgres: %w", err)
+	if err := g.Wait(); err != nil {
+		return nil, fmt.Errorf("failed to set up test environment: %w", err)
 	}
-	env.DB = db
-
-	store, err := sql.New(ctx, db)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize store: %w", err)
-	}
-	env.Store = store
 
 	return env, nil
 }
 
-// Cleanup tears down all containers.
-func (env *TestEnvironment) Cleanup(ctx context.Context) {
-	env.mu.Lock()
-
-	env.Managers = nil
-
-	env.AMQPClients = nil
-	env.mu.Unlock()
-
-	if env.DB != nil {
-		env.DB.Close()
+// Cleanup closes the database connection and terminates the containers.
+func (env *testEnvironment) Cleanup(ctx context.Context) error {
+	err := env.postgres.db.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close Postgres DB connection: %w", err)
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	err = env.postgres.container.Terminate(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to terminate Postgres container: %w", err)
+	}
 
-	if env.RabbitMQContainer != nil {
-		env.RabbitMQContainer.Terminate(ctx)
+	err = env.rabbitMQ.container.Terminate(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to terminate RabbitMQ container: %w", err)
 	}
-	if env.PostgresContainer != nil {
-		env.PostgresContainer.Terminate(ctx)
-	}
+
+	return nil
 }
 
-// createManager creates and starts a manager instance.
-func createManager(t *testing.T, ctx context.Context, env *TestEnvironment, config ManagerConfig) (*orbital.Manager, error) {
-	t.Helper()
-
-	repo := orbital.NewRepository(env.Store)
-
-	managerOpts := []orbital.ManagerOptsFunc{
-		orbital.WithJobConfirmFunc(config.JobConfirmFunc),
-		orbital.WithTargetClients(config.TargetClients),
-		orbital.WithJobDoneEventFunc(config.JobDoneEventFunc),
-		orbital.WithJobCanceledEventFunc(config.JobCanceledEventFunc),
-		orbital.WithJobFailedEventFunc(config.JobFailedEventFunc),
+// createAMQPClient creates an AMQP client for communication.
+func createAMQPClient(ctx context.Context, rabbitURL, target, source string) (*amqp.AMQP, error) {
+	connInfo := amqp.ConnectionInfo{
+		URL:    rabbitURL,
+		Target: target,
+		Source: source,
 	}
 
-	manager, err := orbital.NewManager(repo, config.TaskResolveFunc, managerOpts...)
+	client, err := amqp.NewClient(ctx, codec.JSON{}, connInfo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create AMQP client: %w", err)
+	}
+
+	return client, nil
+}
+
+// createAndStartManager creates and starts a manager instance.
+func createAndStartManager(ctx context.Context, t *testing.T, store *sql.SQL, config managerConfig) (*orbital.Manager, error) {
+	t.Helper()
+
+	repo := orbital.NewRepository(store)
+
+	managerOpts := []orbital.ManagerOptsFunc{
+		orbital.WithJobConfirmFunc(config.jobConfirmFunc),
+		orbital.WithTargetClients(config.targetClients),
+		orbital.WithJobDoneEventFunc(config.jobDoneEventFunc),
+		orbital.WithJobCanceledEventFunc(config.jobCanceledEventFunc),
+		orbital.WithJobFailedEventFunc(config.jobFailedEventFunc),
+	}
+
+	manager, err := orbital.NewManager(repo, config.taskResolveFunc, managerOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create manager: %w", err)
 	}
@@ -191,98 +213,34 @@ func createManager(t *testing.T, ctx context.Context, env *TestEnvironment, conf
 		return nil, fmt.Errorf("failed to start manager: %w", err)
 	}
 
-	env.mu.Lock()
-	env.Managers = append(env.Managers, manager)
-	env.mu.Unlock()
-
 	return manager, nil
 }
 
-// createOperator creates and starts an operator instance.
-func createOperator(ctx context.Context, t *testing.T, responder orbital.Responder, config OperatorConfig) (*orbital.Operator, error) {
+// createAndStartOperator creates and starts an operator instance.
+func createAndStartOperator(ctx context.Context, t *testing.T, responder orbital.Responder, config operatorConfig) error {
 	t.Helper()
 
 	operator, err := orbital.NewOperator(responder)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create operator: %w", err)
+		return fmt.Errorf("failed to create operator: %w", err)
 	}
 
-	for taskType, handler := range config.Handlers {
+	for taskType, handler := range config.handlers {
 		err = operator.RegisterHandler(taskType, handler)
 		if err != nil {
-			return nil, fmt.Errorf("failed to register handler for %s: %w", taskType, err)
+			return fmt.Errorf("failed to register handler for %s: %w", taskType, err)
 		}
 	}
 
 	go operator.ListenAndRespond(ctx)
 
-	return operator, nil
-}
-
-// createAMQPClient creates an AMQP client for communication.
-func createAMQPClient(ctx context.Context, env *TestEnvironment, rabbitURL, target, source string) (*amqp.AMQP, error) {
-	connInfo := amqp.ConnectionInfo{
-		URL:    rabbitURL,
-		Target: target,
-		Source: source,
-	}
-
-	client, err := amqp.NewClient(ctx, codec.JSON{}, connInfo)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create AMQP client: %w", err)
-	}
-
-	env.mu.Lock()
-	env.AMQPClients = append(env.AMQPClients, client)
-	env.mu.Unlock()
-
-	return client, nil
-}
-
-// runTestWithEnvironment runs a test function with proper environment setup and cleanup.
-func runTestWithEnvironment(t *testing.T, testFunc func(ctx context.Context, t *testing.T, env *TestEnvironment)) {
-	t.Helper()
-
-	envCtx, envCancel := context.WithTimeout(t.Context(), 3*time.Minute)
-	defer envCancel()
-
-	env, err := setupTestEnvironment(t, envCtx)
-	require.NoError(t, err)
-
-	testCtx, testCancel := context.WithTimeout(envCtx, 2*time.Minute)
-
-	defer func() {
-		testCancel()
-		time.Sleep(300 * time.Millisecond)
-		env.Cleanup(envCtx)
-	}()
-
-	testFunc(testCtx, t, env)
-}
-
-// waitForRabbitMQReady waits for RabbitMQ to be ready to accept connections.
-func waitForRabbitMQReady(ctx context.Context, rabbitURL string) error {
-	timeout := 30 * time.Second
-	startTime := time.Now()
-
-	for time.Since(startTime) < timeout {
-		testClient, err := createAMQPClient(ctx, &TestEnvironment{AMQPClients: make([]*amqp.AMQP, 0)}, rabbitURL, "test-queue", "test-source")
-		if err == nil && testClient != nil {
-			return nil
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(1 * time.Second):
-		}
-	}
-
-	return fmt.Errorf("RabbitMQ not ready within %v", timeout)
+	return nil
 }
 
 // createTestJob creates a job with test data.
-func createTestJob(t *testing.T, ctx context.Context, manager *orbital.Manager, jobType string, data []byte) (orbital.Job, error) {
+func createTestJob(ctx context.Context, t *testing.T, manager *orbital.Manager, jobType string, data []byte) (orbital.Job, error) {
+	t.Helper()
+
 	job := orbital.NewJob(jobType, data)
 	createdJob, err := manager.PrepareJob(ctx, job)
 	if err != nil {
