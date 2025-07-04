@@ -471,8 +471,8 @@ func startSolace(ctx context.Context, t *testing.T) (string, func()) {
 
 	// Even tought the container listens on port 5672, it may take more time
 	// for Solace to be ready to accept connections.
-	err = waitForSolaceReady(ctx, t, url)
-	assert.NoError(t, err, "waiting for Solace to be ready should not fail")
+	err = waitForClientReady(ctx, t, url)
+	assert.NoError(t, err, "waiting for client to be ready should not fail")
 
 	return url, func() {
 		err := cont.Terminate(ctx)
@@ -480,7 +480,7 @@ func startSolace(ctx context.Context, t *testing.T) (string, func()) {
 	}
 }
 
-func waitForSolaceReady(ctx context.Context, t *testing.T, url string) error {
+func waitForClientReady(ctx context.Context, t *testing.T, url string) error {
 	t.Helper()
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -493,7 +493,7 @@ func waitForSolaceReady(ctx context.Context, t *testing.T, url string) error {
 	for {
 		select {
 		case <-timeoutCtx.Done():
-			return fmt.Errorf("waiting for Solace to be ready: %w", lastErr)
+			return fmt.Errorf("waiting for client to be ready: %w", lastErr)
 		case <-ticker.C:
 			cli, err := amqp.NewClient(timeoutCtx, codec.JSON{}, amqp.ConnectionInfo{
 				URL:    url,
@@ -501,7 +501,7 @@ func waitForSolaceReady(ctx context.Context, t *testing.T, url string) error {
 				Source: "ready-check",
 			})
 			if err == nil {
-				// Successfully connected, Solace is ready.
+				// Successfully connected, client is ready.
 				return cli.Close(timeoutCtx)
 			}
 			lastErr = err
