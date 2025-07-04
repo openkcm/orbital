@@ -202,3 +202,23 @@ func (a *AMQP) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse, e
 
 	return resp, nil
 }
+
+// Close closes the AMQP connection, sender, and receiver.
+func (a *AMQP) Close(ctx context.Context) error {
+	if a.receiver != nil {
+		if err := a.receiver.Close(ctx); err != nil {
+			return fmt.Errorf("failed to close receiver: %w", err)
+		}
+	}
+	if a.sender != nil {
+		if err := a.sender.Close(ctx); err != nil {
+			return fmt.Errorf("failed to close sender: %w", err)
+		}
+	}
+	if a.conn != nil {
+		if err := a.conn.Close(); err != nil {
+			return fmt.Errorf("failed to close connection: %w", err)
+		}
+	}
+	return nil
+}
