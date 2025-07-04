@@ -9,13 +9,14 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/openkcm/orbital"
+	"github.com/openkcm/orbital/internal/clock"
 	"github.com/openkcm/orbital/store/query"
 )
 
 func TestTransformToEntities(t *testing.T) {
 	// given
 	uID := uuid.New()
-	unixTime := utcUnix()
+	now := clock.NowUnixNano()
 	tests := []struct {
 		name       string
 		entityName query.EntityName
@@ -29,7 +30,7 @@ func TestTransformToEntities(t *testing.T) {
 			input: []map[string]any{
 				{
 					"id":         uID.String(),
-					"created_at": unixTime, "updated_at": unixTime, "state": "state",
+					"created_at": now, "updated_at": now, "state": "state",
 					"error_message": "error",
 				},
 			},
@@ -37,11 +38,11 @@ func TestTransformToEntities(t *testing.T) {
 				{
 					Name:      query.EntityNameJobs,
 					ID:        uID,
-					CreatedAt: unixTime,
-					UpdatedAt: unixTime,
+					CreatedAt: now,
+					UpdatedAt: now,
 					Values: map[string]any{
 						"id":         uID.String(),
-						"created_at": unixTime, "updated_at": unixTime, "state": "state",
+						"created_at": now, "updated_at": now, "state": "state",
 						"error_message": "error",
 					},
 				},
@@ -53,18 +54,18 @@ func TestTransformToEntities(t *testing.T) {
 			input: []map[string]any{
 				{
 					"id":         uID.String(),
-					"created_at": unixTime, "updated_at": unixTime, "job_id": "job_id",
+					"created_at": now, "updated_at": now, "job_id": "job_id",
 				},
 			},
 			expected: []orbital.Entity{
 				{
 					Name:      query.EntityNameTasks,
 					ID:        uID,
-					CreatedAt: unixTime,
-					UpdatedAt: unixTime,
+					CreatedAt: now,
+					UpdatedAt: now,
 					Values: map[string]any{
 						"id":         uID.String(),
-						"created_at": unixTime, "updated_at": unixTime, "job_id": "job_id",
+						"created_at": now, "updated_at": now, "job_id": "job_id",
 					},
 				},
 			},
@@ -75,18 +76,18 @@ func TestTransformToEntities(t *testing.T) {
 			input: []map[string]any{
 				{
 					"id":         uID.String(),
-					"created_at": unixTime, "updated_at": unixTime, "job_id": "job_id",
+					"created_at": now, "updated_at": now, "job_id": "job_id",
 				},
 			},
 			expected: []orbital.Entity{
 				{
 					Name:      query.EntityNameJobCursor,
 					ID:        uID,
-					CreatedAt: unixTime,
-					UpdatedAt: unixTime,
+					CreatedAt: now,
+					UpdatedAt: now,
 					Values: map[string]any{
 						"id":         uID.String(),
-						"created_at": unixTime, "updated_at": unixTime, "job_id": "job_id",
+						"created_at": now, "updated_at": now, "job_id": "job_id",
 					},
 				},
 			},
@@ -97,18 +98,18 @@ func TestTransformToEntities(t *testing.T) {
 			input: []map[string]any{
 				{
 					"id":         uID.String(),
-					"created_at": unixTime, "updated_at": unixTime, "is_notified": true,
+					"created_at": now, "updated_at": now, "is_notified": true,
 				},
 			},
 			expected: []orbital.Entity{
 				{
 					Name:      query.EntityNameJobEvent,
 					ID:        uID,
-					CreatedAt: unixTime,
-					UpdatedAt: unixTime,
+					CreatedAt: now,
+					UpdatedAt: now,
 					Values: map[string]any{
 						"id":         uID.String(),
-						"created_at": unixTime, "updated_at": unixTime, "is_notified": true,
+						"created_at": now, "updated_at": now, "is_notified": true,
 					},
 				},
 			},
@@ -119,7 +120,7 @@ func TestTransformToEntities(t *testing.T) {
 			input: []map[string]any{
 				{
 					"id":         uID.String(),
-					"updated_at": unixTime, "job_id": "job_id",
+					"updated_at": now, "job_id": "job_id",
 				},
 			},
 			expected:  nil,
@@ -159,8 +160,8 @@ func TestTransformToEntities(t *testing.T) {
 }
 
 func TestInit(t *testing.T) {
-	unixTime := utcUnix()
-	time.Sleep(1 * time.Second)
+	now := clock.NowUnixNano()
+	time.Sleep(1 * time.Microsecond)
 
 	t.Run("should initialize fields", func(t *testing.T) {
 		// given
@@ -170,8 +171,8 @@ func TestInit(t *testing.T) {
 		orbital.Init(entity)
 
 		// then
-		assert.Less(t, unixTime, entity.CreatedAt)
-		assert.Less(t, unixTime, entity.UpdatedAt)
+		assert.Less(t, now, entity.CreatedAt)
+		assert.Less(t, now, entity.UpdatedAt)
 		assert.NotEqual(t, uuid.Nil, entity.ID)
 		_, ok := entity.Values["id"]
 		assert.True(t, ok)
@@ -186,14 +187,14 @@ func TestInit(t *testing.T) {
 		uID := uuid.New()
 
 		entity := &orbital.Entity{
-			CreatedAt: unixTime,
-			UpdatedAt: unixTime,
+			CreatedAt: now,
+			UpdatedAt: now,
 			ID:        uID,
 		}
 		expected := &orbital.Entity{
 			ID:        uID,
-			UpdatedAt: unixTime,
-			CreatedAt: unixTime,
+			UpdatedAt: now,
+			CreatedAt: now,
 			Values:    map[string]any{},
 		}
 
@@ -207,7 +208,7 @@ func TestInit(t *testing.T) {
 
 func TestEncodes(t *testing.T) {
 	uID := uuid.New()
-	unixTime := utcUnix()
+	unixTime := clock.NowUnixNano()
 	t.Run("success Job", func(t *testing.T) {
 		input := []orbital.Job{
 			{
@@ -360,8 +361,8 @@ func TestDecodes(t *testing.T) {
 				Type:         "type-1",
 				Status:       orbital.JobStatusConfirmed,
 				ErrorMessage: "error-message-1",
-				UpdatedAt:    utcUnix(),
-				CreatedAt:    utcUnix(),
+				UpdatedAt:    clock.NowUnixNano(),
+				CreatedAt:    clock.NowUnixNano(),
 			}
 			job2 := orbital.Job{
 				ID:           uuid.New(),
@@ -369,8 +370,8 @@ func TestDecodes(t *testing.T) {
 				Type:         "type-2",
 				Status:       orbital.JobStatusCreated,
 				ErrorMessage: "error-message-2",
-				UpdatedAt:    utcUnix(),
-				CreatedAt:    utcUnix(),
+				UpdatedAt:    clock.NowUnixNano(),
+				CreatedAt:    clock.NowUnixNano(),
 			}
 
 			in, _ := orbital.Encodes(job1, job2)
@@ -441,31 +442,31 @@ func TestDecodes(t *testing.T) {
 				JobID:             uuid.New(),
 				Type:              "type-1",
 				WorkingState:      []byte("working-state-1"),
-				LastSentAt:        utcUnix(),
+				LastSentAt:        clock.NowUnixNano(),
 				SentCount:         2,
 				MaxSentCount:      5,
-				ReconcileAfterSec: utcUnix(),
+				ReconcileAfterSec: clock.NowUnixNano(),
 				ETag:              "etag-1",
 				Status:            orbital.TaskStatusCreated,
 				Target:            "target-1",
 				ErrorMessage:      "error-message-1",
-				UpdatedAt:         utcUnix(),
-				CreatedAt:         utcUnix(),
+				UpdatedAt:         clock.NowUnixNano(),
+				CreatedAt:         clock.NowUnixNano(),
 			}
 			task2 := orbital.Task{
 				ID:                uuid.New(),
 				JobID:             uuid.New(),
 				Type:              "type-2",
-				LastSentAt:        utcUnix(),
+				LastSentAt:        clock.NowUnixNano(),
 				SentCount:         2,
 				MaxSentCount:      5,
-				ReconcileAfterSec: utcUnix(),
+				ReconcileAfterSec: clock.NowUnixNano(),
 				ETag:              "etag-2",
 				Status:            orbital.TaskStatusCreated,
 				Target:            "target-2",
 				ErrorMessage:      "error-message-2",
-				UpdatedAt:         utcUnix(),
-				CreatedAt:         utcUnix(),
+				UpdatedAt:         clock.NowUnixNano(),
+				CreatedAt:         clock.NowUnixNano(),
 			}
 
 			in, _ := orbital.Encodes(task1, task2)
@@ -574,14 +575,14 @@ func TestDecodes(t *testing.T) {
 			cursor1 := orbital.JobCursor{
 				ID:        uuid.New(),
 				Cursor:    "cursor-1",
-				UpdatedAt: utcUnix(),
-				CreatedAt: utcUnix(),
+				UpdatedAt: clock.NowUnixNano(),
+				CreatedAt: clock.NowUnixNano(),
 			}
 			cursor2 := orbital.JobCursor{
 				ID:        uuid.New(),
 				Cursor:    "cursor-2",
-				UpdatedAt: utcUnix(),
-				CreatedAt: utcUnix(),
+				UpdatedAt: clock.NowUnixNano(),
+				CreatedAt: clock.NowUnixNano(),
 			}
 
 			in, _ := orbital.Encodes(cursor1, cursor2)
@@ -636,14 +637,14 @@ func TestDecodes(t *testing.T) {
 			event1 := orbital.JobEvent{
 				ID:         uuid.New(),
 				IsNotified: true,
-				UpdatedAt:  utcUnix(),
-				CreatedAt:  utcUnix(),
+				UpdatedAt:  clock.NowUnixNano(),
+				CreatedAt:  clock.NowUnixNano(),
 			}
 			event2 := orbital.JobEvent{
 				ID:         uuid.New(),
 				IsNotified: false,
-				UpdatedAt:  utcUnix(),
-				CreatedAt:  utcUnix(),
+				UpdatedAt:  clock.NowUnixNano(),
+				CreatedAt:  clock.NowUnixNano(),
 			}
 
 			in, _ := orbital.Encodes(event1, event2)
@@ -703,7 +704,7 @@ func TestDecodes(t *testing.T) {
 
 func TestDecodeValueVariants(t *testing.T) {
 	id := uuid.New()
-	now := utcUnix()
+	now := clock.NowUnixNano()
 
 	t.Run("status as alias type", func(t *testing.T) {
 		e := orbital.Entity{
@@ -799,8 +800,4 @@ func TestDecodeValueVariants(t *testing.T) {
 		_, err := orbital.Decode[orbital.Job](e)
 		assert.ErrorIs(t, errors.Unwrap(err), orbital.ErrInvalidEntityType)
 	})
-}
-
-func utcUnix() int64 {
-	return time.Now().UTC().Unix()
 }

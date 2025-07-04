@@ -17,6 +17,7 @@ import (
 	stdsql "database/sql"
 
 	"github.com/openkcm/orbital"
+	"github.com/openkcm/orbital/internal/clock"
 	"github.com/openkcm/orbital/store/query"
 	"github.com/openkcm/orbital/store/sql"
 )
@@ -77,7 +78,7 @@ func TestColumnsAndStruct(t *testing.T) {
 func TestCreate(t *testing.T) {
 	// given
 	id := uuid.New()
-	utcTime := utcUnix()
+	now := clock.NowUnixNano()
 
 	t.Run("should return error if entity is empty", func(t *testing.T) {
 		// given
@@ -97,13 +98,13 @@ func TestCreate(t *testing.T) {
 		entity := orbital.Entity{
 			Name:      "unknown",
 			ID:        id,
-			CreatedAt: utcTime,
-			UpdatedAt: utcTime,
+			CreatedAt: now,
+			UpdatedAt: now,
 			Values: map[string]any{
 				"id":         id.String(),
 				"cursor":     "cursor",
-				"created_at": utcTime,
-				"updated_at": utcTime,
+				"created_at": now,
+				"updated_at": now,
 			},
 		}
 		ctx := t.Context()
@@ -123,13 +124,13 @@ func TestCreate(t *testing.T) {
 		entity := orbital.Entity{
 			Name:      "job_cursor",
 			ID:        id,
-			CreatedAt: utcTime,
-			UpdatedAt: utcTime,
+			CreatedAt: now,
+			UpdatedAt: now,
 			Values: map[string]any{
 				"id":         []uint8(id.String()),
 				"cursor":     "cursor",
-				"created_at": utcTime,
-				"updated_at": utcTime,
+				"created_at": now,
+				"updated_at": now,
 			},
 		}
 		ctx := t.Context()
@@ -160,25 +161,25 @@ func TestCreate(t *testing.T) {
 			{
 				Name:      "job_cursor",
 				ID:        id,
-				CreatedAt: utcTime,
-				UpdatedAt: utcTime,
+				CreatedAt: now,
+				UpdatedAt: now,
 				Values: map[string]any{
 					"id":         []uint8(id.String()),
 					"cursor":     "cursor",
-					"created_at": utcTime,
-					"updated_at": utcTime,
+					"created_at": now,
+					"updated_at": now,
 				},
 			},
 			{
 				Name:      "job_cursor",
 				ID:        id2,
-				CreatedAt: utcTime + 1,
-				UpdatedAt: utcTime + 1,
+				CreatedAt: now + 1,
+				UpdatedAt: now + 1,
 				Values: map[string]any{
 					"id":         []uint8(id2.String()),
 					"cursor":     "cursor-1",
-					"created_at": utcTime + 1,
-					"updated_at": utcTime + 1,
+					"created_at": now + 1,
+					"updated_at": now + 1,
 				},
 			},
 		}
@@ -210,24 +211,24 @@ func TestCreate(t *testing.T) {
 			{
 				Name:      "job_cursor",
 				ID:        id,
-				CreatedAt: utcTime,
-				UpdatedAt: utcTime,
+				CreatedAt: now,
+				UpdatedAt: now,
 				Values: map[string]any{
 					"id":         id,
 					"cursor":     "cursor",
-					"created_at": utcTime,
-					"updated_at": utcTime,
+					"created_at": now,
+					"updated_at": now,
 				},
 			},
 			{
 				Name:      "job_cursor",
 				ID:        id2,
-				CreatedAt: utcTime,
-				UpdatedAt: utcTime,
+				CreatedAt: now,
+				UpdatedAt: now,
 				Values: map[string]any{
 					"id":         id2,
-					"created_at": utcTime,
-					"updated_at": utcTime,
+					"created_at": now,
+					"updated_at": now,
 				},
 			},
 		}
@@ -260,20 +261,20 @@ func TestUpdate(t *testing.T) {
 	t.Run("should not return error if there are no entity to updated", func(t *testing.T) {
 		// given
 		id := uuid.New()
-		utcTime := utcUnix()
+		now := clock.NowUnixNano()
 		ctx := t.Context()
 		_, store := createSQLStore(t)
 
 		entityUpdated := orbital.Entity{
 			Name:      "job_cursor",
 			ID:        id,
-			CreatedAt: utcTime,
-			UpdatedAt: utcTime,
+			CreatedAt: now,
+			UpdatedAt: now,
 			Values: map[string]any{
 				"id":         id.String(),
 				"cursor":     "cursor-2",
-				"created_at": utcTime,
-				"updated_at": utcTime,
+				"created_at": now,
+				"updated_at": now,
 			},
 		}
 
@@ -288,17 +289,17 @@ func TestUpdate(t *testing.T) {
 	t.Run("should update the entity", func(t *testing.T) {
 		// given
 		id := uuid.New()
-		utcTime := utcUnix()
+		now := clock.NowUnixNano()
 		entity := orbital.Entity{
 			Name:      "job_cursor",
 			ID:        id,
-			CreatedAt: utcTime,
-			UpdatedAt: utcTime,
+			CreatedAt: now,
+			UpdatedAt: now,
 			Values: map[string]any{
 				"id":         []uint8(id.String()),
 				"cursor":     "cursor",
-				"created_at": utcTime,
-				"updated_at": utcTime,
+				"created_at": now,
+				"updated_at": now,
 			},
 		}
 		ctx := t.Context()
@@ -311,18 +312,18 @@ func TestUpdate(t *testing.T) {
 		entityUpdated := orbital.Entity{
 			Name:      "job_cursor",
 			ID:        id,
-			CreatedAt: utcTime,
-			UpdatedAt: utcTime,
+			CreatedAt: now,
+			UpdatedAt: now,
 			Values: map[string]any{
 				"id":         []uint8(id.String()),
 				"cursor":     "cursor-2",
-				"created_at": utcTime,
-				"updated_at": utcTime,
+				"created_at": now,
+				"updated_at": now,
 			},
 		}
 
 		// when
-		time.Sleep(2 * time.Second) // Ensure the updated_at timestamp is different
+		time.Sleep(1 * time.Microsecond) // Ensure the updated_at timestamp is different
 		entities, err := store.Update(ctx, entityUpdated)
 
 		// then
@@ -362,31 +363,31 @@ func TestFind(t *testing.T) {
 		// given
 		id := uuid.New()
 		id2 := uuid.New()
-		utcTime := utcUnix()
+		now := clock.NowUnixNano()
 		expEntitys := []orbital.Entity{
 			{
 				Name:      "job_cursor",
 				ID:        id,
-				CreatedAt: utcTime,
-				UpdatedAt: utcTime,
+				CreatedAt: now,
+				UpdatedAt: now,
 				Values: map[string]any{
 					"id":         []uint8(id.String()),
 					"cursor":     "cursor",
-					"created_at": utcTime,
-					"updated_at": utcTime,
+					"created_at": now,
+					"updated_at": now,
 				},
 			},
 
 			{
 				Name:      "job_cursor",
 				ID:        id2,
-				CreatedAt: utcTime + 1,
-				UpdatedAt: utcTime + 1,
+				CreatedAt: now + 1,
+				UpdatedAt: now + 1,
 				Values: map[string]any{
 					"id":         []uint8(id2.String()),
 					"cursor":     "cursor-2",
-					"created_at": utcTime + 1,
-					"updated_at": utcTime + 1,
+					"created_at": now + 1,
+					"updated_at": now + 1,
 				},
 			},
 		}
@@ -412,30 +413,30 @@ func TestFind(t *testing.T) {
 		// given
 		id := uuid.New()
 		id2 := uuid.New()
-		utcTime := utcUnix()
+		now := clock.NowUnixNano()
 		expEntitys := []orbital.Entity{
 			{
 				Name:      "job_cursor",
 				ID:        id,
-				CreatedAt: utcTime,
-				UpdatedAt: utcTime,
+				CreatedAt: now,
+				UpdatedAt: now,
 				Values: map[string]any{
 					"id":         []uint8(id.String()),
 					"cursor":     "cursor",
-					"created_at": utcTime,
-					"updated_at": utcTime,
+					"created_at": now,
+					"updated_at": now,
 				},
 			},
 			{
 				Name:      "job_cursor",
 				ID:        id2,
-				CreatedAt: utcTime,
-				UpdatedAt: utcTime,
+				CreatedAt: now,
+				UpdatedAt: now,
 				Values: map[string]any{
 					"id":         []uint8(id2.String()),
 					"cursor":     "cursor-2",
-					"created_at": utcTime,
-					"updated_at": utcTime,
+					"created_at": now,
+					"updated_at": now,
 				},
 			},
 		}
@@ -464,20 +465,20 @@ func TestFind(t *testing.T) {
 
 func TestList(t *testing.T) {
 	// given
-	utcTime := utcUnix()
+	now := clock.NowUnixNano()
 	expEntities := make([]orbital.Entity, 3)
 	for i := range 3 {
 		id := uuid.New()
 		expEntities[i] = orbital.Entity{
 			ID:        id,
 			Name:      "job_cursor",
-			CreatedAt: utcTime,
-			UpdatedAt: utcTime,
+			CreatedAt: now,
+			UpdatedAt: now,
 			Values: map[string]any{
 				"id":         []uint8(id.String()),
 				"cursor":     "cursor",
-				"created_at": utcTime,
-				"updated_at": utcTime,
+				"created_at": now,
+				"updated_at": now,
 			},
 		}
 	}
@@ -613,21 +614,21 @@ type callParams struct {
 
 func TestWithRetrievalModeQueue(t *testing.T) {
 	// given
-	utcTime := utcUnix()
+	now := clock.NowUnixNano()
 	records := make([]orbital.Entity, 0, 10)
 	for i := range 10 {
 		id := uuid.New()
-		utcTime++
+		now++
 		entity := orbital.Entity{
 			Name:      "job_cursor",
 			ID:        id,
-			CreatedAt: utcTime,
-			UpdatedAt: utcTime,
+			CreatedAt: now,
+			UpdatedAt: now,
 			Values: map[string]any{
 				"id":         []uint8(id.String()),
 				"cursor":     fmt.Sprintf("cursor-%v", i),
-				"created_at": utcTime,
-				"updated_at": utcTime,
+				"created_at": now,
+				"updated_at": now,
 			},
 		}
 		records = append(records, entity)
@@ -972,17 +973,17 @@ func TestWithRetrievalModeQueue(t *testing.T) {
 func TestTransaction(t *testing.T) {
 	// given
 	id := uuid.New()
-	utcTime := utcUnix()
+	now := clock.NowUnixNano()
 	entity := orbital.Entity{
 		Name:      "job_cursor",
 		ID:        id,
-		CreatedAt: utcTime,
-		UpdatedAt: utcTime,
+		CreatedAt: now,
+		UpdatedAt: now,
 		Values: map[string]any{
 			"id":         []uint8(id.String()),
 			"cursor":     "cursor",
-			"created_at": utcTime,
-			"updated_at": utcTime,
+			"created_at": now,
+			"updated_at": now,
 		},
 	}
 
@@ -1061,8 +1062,4 @@ func validateColumnsAndEntity[T orbital.EntityTypes](t *testing.T, db *stdsql.DB
 		_, ok := encodedEntity.Values[column]
 		assert.True(t, ok, "column %s not found in entity values", column)
 	}
-}
-
-func utcUnix() int64 {
-	return time.Now().UTC().Unix()
 }

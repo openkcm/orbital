@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/openkcm/orbital/internal/clock"
 	"github.com/openkcm/orbital/store/query"
 )
 
@@ -204,23 +204,23 @@ func (r *Repository) listTasks(ctx context.Context, tasksQuery ListTasksQuery) (
 		q.Clauses = append(q.Clauses, query.ClauseWithJobID(tasksQuery.JobID))
 	}
 
-	utcUnix := time.Now().UTC().Unix()
+	now := clock.NowUnixNano()
 	if tasksQuery.CreatedAt != 0 {
 		q.Clauses = append(q.Clauses, query.ClauseWithCreatedBefore(tasksQuery.CreatedAt))
 	}
-	q.Clauses = append(q.Clauses, query.ClauseWithCreatedBefore(utcUnix))
+	q.Clauses = append(q.Clauses, query.ClauseWithCreatedBefore(now))
 
 	if tasksQuery.UpdatedAt != 0 {
 		q.Clauses = append(q.Clauses, query.ClauseWithUpdatedBefore(tasksQuery.UpdatedAt))
 	}
-	q.Clauses = append(q.Clauses, query.ClauseWithUpdatedBefore(utcUnix))
+	q.Clauses = append(q.Clauses, query.ClauseWithUpdatedBefore(now))
 
 	if tasksQuery.Limit > 0 {
 		q.Limit = tasksQuery.Limit
 	}
 
 	if tasksQuery.IsReconcileReady {
-		q.Clauses = append(q.Clauses, query.ClauseWithReadyToBeSent(time.Now().Unix()))
+		q.Clauses = append(q.Clauses, query.ClauseWithReadyToBeSent(now))
 	}
 
 	q.RetrievalMode = query.RetrievalModeDefault

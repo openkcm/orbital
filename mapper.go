@@ -3,10 +3,10 @@ package orbital
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/openkcm/orbital/internal/clock"
 	"github.com/openkcm/orbital/store/query"
 )
 
@@ -65,18 +65,18 @@ func TransformToEntity(entityName query.EntityName, objs map[string]any) (Entity
 // Init ensures that the metadata of the entity is properly initialized.
 // It sets default values for CreatedAt, UpdatedAt, and ID if they are not already set.
 func Init(e *Entity) {
-	unixTime := time.Now().UTC().Unix()
+	now := clock.NowUnixNano()
 
 	if e.Values == nil {
 		e.Values = make(map[string]any)
 	}
 	if e.CreatedAt == 0 {
-		e.CreatedAt = unixTime
-		e.Values["created_at"] = unixTime
+		e.CreatedAt = now
+		e.Values["created_at"] = now
 	}
 	if e.UpdatedAt == 0 {
-		e.UpdatedAt = unixTime
-		e.Values["updated_at"] = unixTime
+		e.UpdatedAt = now
+		e.Values["updated_at"] = now
 	}
 	if e.ID == uuid.Nil {
 		e.ID = uuid.New()

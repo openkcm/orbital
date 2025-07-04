@@ -597,7 +597,7 @@ func TestSendJobEvent(t *testing.T) {
 				)
 
 				// when
-				time.Sleep(1 * time.Second) // ensure the updateAt will changes
+				time.Sleep(1 * time.Microsecond) // ensure the updateAt will changes
 				err = orbital.SendJobTerminatedEvent(subj)(ctx)
 
 				// then
@@ -773,7 +773,7 @@ func TestSendJobEvent(t *testing.T) {
 				)
 
 				// when
-				time.Sleep(1 * time.Second) // ensure the updateAt will change
+				time.Sleep(1 * time.Microsecond) // ensure the updateAt will change
 				err = orbital.SendJobTerminatedEvent(subj)(ctx)
 
 				// then
