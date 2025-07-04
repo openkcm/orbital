@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/modules/rabbitmq"
@@ -181,6 +182,14 @@ func createAMQPClient(ctx context.Context, rabbitURL, target, source string) (*a
 	}
 
 	return client, nil
+}
+
+// closeClient closes the AMQP client connection.
+func closeClient(ctx context.Context, t *testing.T, client *amqp.AMQP) {
+	t.Helper()
+
+	err := client.Close(ctx)
+	assert.NoError(t, err, "failed to close AMQP client")
 }
 
 // createAndStartManager creates and starts a manager instance.

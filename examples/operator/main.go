@@ -28,6 +28,7 @@ func main() {
 	// Initialize an AMQP client as the responder for handling task requests
 	responder, err := amqp.NewClient(ctx, codec.JSON{}, connInfo)
 	handleErr("initializing responder", err)
+	defer responder.Close(ctx)
 
 	// Initialize an orbital operator that uses the responder
 	operator, err := orbital.NewOperator(responder)

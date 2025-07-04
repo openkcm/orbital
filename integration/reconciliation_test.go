@@ -94,9 +94,11 @@ func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, stor
 
 	managerClient, err := createAMQPClient(ctx, env.rabbitMQ.url, tasksQueue, responsesQueue)
 	assert.NoError(t, err)
+	defer closeClient(ctx, t, managerClient)
 
 	operatorClient, err := createAMQPClient(ctx, env.rabbitMQ.url, responsesQueue, tasksQueue)
 	assert.NoError(t, err)
+	defer closeClient(ctx, t, operatorClient)
 
 	operatorDone := make(chan struct{})
 	var operatorOnce sync.Once
@@ -254,13 +256,17 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 
 	managerClient1, err := createAMQPClient(ctx, env.rabbitMQ.url, queue1, response1)
 	assert.NoError(t, err)
+	defer closeClient(ctx, t, managerClient1)
 	operatorClient1, err := createAMQPClient(ctx, env.rabbitMQ.url, response1, queue1)
 	assert.NoError(t, err)
+	defer closeClient(ctx, t, operatorClient1)
 
 	managerClient2, err := createAMQPClient(ctx, env.rabbitMQ.url, queue2, response2)
 	assert.NoError(t, err)
+	defer closeClient(ctx, t, managerClient2)
 	operatorClient2, err := createAMQPClient(ctx, env.rabbitMQ.url, response2, queue2)
 	assert.NoError(t, err)
+	defer closeClient(ctx, t, operatorClient2)
 
 	var operator1Once, operator2Once sync.Once
 	operator1Done := make(chan struct{})
@@ -450,8 +456,10 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *testEnviron
 
 	managerClient, err := createAMQPClient(ctx, env.rabbitMQ.url, tasksQueue, responsesQueue)
 	assert.NoError(t, err)
+	defer closeClient(ctx, t, managerClient)
 	operatorClient, err := createAMQPClient(ctx, env.rabbitMQ.url, responsesQueue, tasksQueue)
 	assert.NoError(t, err)
+	defer closeClient(ctx, t, operatorClient)
 
 	operatorDone := make(chan struct{})
 	var operatorOnce sync.Once
@@ -600,8 +608,10 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 
 	managerClient, err := createAMQPClient(ctx, env.rabbitMQ.url, tasksQueue, responsesQueue)
 	assert.NoError(t, err)
+	defer closeClient(ctx, t, managerClient)
 	operatorClient, err := createAMQPClient(ctx, env.rabbitMQ.url, responsesQueue, tasksQueue)
 	assert.NoError(t, err)
+	defer closeClient(ctx, t, operatorClient)
 
 	managerConfig := managerConfig{
 		taskResolveFunc: func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {

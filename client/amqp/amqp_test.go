@@ -20,7 +20,6 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
@@ -298,7 +297,8 @@ func TestWithMessageBroker(t *testing.T) {
 			files.rootCACertPath,
 			"localhost",
 		))
-		require.NoError(t, err)
+		assert.NoError(t, err)
+		defer closeClient(ctx, t, cli)
 
 		exp := orbital.TaskRequest{TaskID: uuid.New()}
 		assert.NoError(t, cli.SendTaskRequest(ctx, exp))
@@ -467,9 +467,45 @@ func startSolace(ctx context.Context, t *testing.T) (string, func()) {
 	port, err := cont.MappedPort(ctx, "5672")
 	assert.NoError(t, err)
 
-	return fmt.Sprintf("amqp://%s/", net.JoinHostPort(host, port.Port())), func() {
+	url := fmt.Sprintf("amqp://%s/", net.JoinHostPort(host, port.Port()))
+
+	// Even tought the container listens on port 5672, it may take more time
+	// for Solace to be ready to accept connections.
+	err = waitForClientReady(ctx, t, url)
+	assert.NoError(t, err, "waiting for client to be ready should not fail")
+
+	return url, func() {
 		err := cont.Terminate(ctx)
 		assert.NoError(t, err, "terminating Solace container should not fail")
+	}
+}
+
+func waitForClientReady(ctx context.Context, t *testing.T, url string) error {
+	t.Helper()
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	var lastErr error
+	for {
+		select {
+		case <-timeoutCtx.Done():
+			return fmt.Errorf("waiting for client to be ready: %w", lastErr)
+		case <-ticker.C:
+			cli, err := amqp.NewClient(timeoutCtx, codec.JSON{}, amqp.ConnectionInfo{
+				URL:    url,
+				Target: "ready-check",
+				Source: "ready-check",
+			})
+			if err == nil {
+				// Successfully connected, client is ready.
+				return cli.Close(timeoutCtx)
+			}
+			lastErr = err
+		}
 	}
 }
 
@@ -482,6 +518,7 @@ func testSendReceiveTaskRequests(t *testing.T, url, queue string) {
 		URL: url, Target: queue, Source: queue,
 	})
 	assert.NoError(t, err)
+	defer closeClient(ctx, t, cli)
 
 	const n = 5
 	exp := make([]orbital.TaskRequest, n)
@@ -505,6 +542,7 @@ func testSendReceiveTaskResponses(t *testing.T, url, queue string) {
 		URL: url, Target: queue, Source: queue,
 	})
 	assert.NoError(t, err)
+	defer closeClient(ctx, t, cli)
 
 	const n = 5
 	exp := make([]orbital.TaskResponse, n)
@@ -517,4 +555,11 @@ func testSendReceiveTaskResponses(t *testing.T, url, queue string) {
 		assert.NoError(t, err)
 		assert.Equal(t, exp[i].TaskID, got.TaskID)
 	}
+}
+
+func closeClient(ctx context.Context, t *testing.T, client *amqp.AMQP) {
+	t.Helper()
+
+	err := client.Close(ctx)
+	assert.NoError(t, err)
 }
