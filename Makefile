@@ -1,4 +1,4 @@
-.PHONY: all test test-integration  clean docker-compose-up clean-docker-compose
+.PHONY: all test test-integration  clean docker-compose-up clean-docker-compose proto-generate go-format
 
 all: test
 
@@ -38,3 +38,20 @@ docker-compose-up:
 # clean up all containers and volumes
 clean-docker-compose:
 	($(config) docker compose down -v && $(config) docker compose rm -f -v)
+
+
+proto-generate:
+	protoc \
+	--proto_path=proto \
+	--go_out=proto \
+	--go_opt=paths=source_relative \
+	--go_opt=Morbital/task_request.proto=github.com/openkcm/orbital/proto/orbital \
+	--go_opt=Morbital/task_response.proto=github.com/openkcm/orbital/proto/orbital \
+	orbital/task_request.proto \
+	orbital/task_response.proto
+	$(MAKE) go-format
+
+go-format:
+	goimports -w .
+	gofmt -s -w .
+
