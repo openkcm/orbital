@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/openkcm/orbital/codec"
-	orbitalpb "github.com/openkcm/orbital/proto/orbital"
+	orbitalpb "github.com/openkcm/orbital/proto/orbital/v1"
 )
 
 func TestProto_TaskRequest(t *testing.T) {

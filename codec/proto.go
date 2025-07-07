@@ -5,7 +5,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/openkcm/orbital"
-	orbitalpb "github.com/openkcm/orbital/proto/orbital"
+	orbitalpb "github.com/openkcm/orbital/proto/orbital/v1"
 )
 
 // Proto is a codec that encodes and decodes TaskRequest and TaskResponse in Protobuf format.

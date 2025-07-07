@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package orbital;
+package orbital.v1;
 
 // TaskStatus defines the possible statuses of a task.
 enum TaskStatus {
