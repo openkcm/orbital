@@ -1,0 +1,24 @@
+#!/usr/bin/env -S buf generate --template
+---
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/openkcm/orbital/proto
+plugins:
+  - remote: buf.build/protocolbuffers/go
+    out: proto
+    opt:
+      - paths=source_relative
+  - remote: buf.build/grpc/go
+    out: proto
+    opt:
+      - paths=source_relative
+  - remote: buf.build/bufbuild/validate-go
+    out: proto
+    opt:
+      - paths=source_relative
+inputs:
+  - directory: proto
+

@@ -6,6 +6,14 @@ This project uses Protocol Buffers (.proto) to define messages sent during recon
 
 Make sure you have the following tools installed:
 
+- **Install `buf`:** If you haven't already, install `buf` by following the instructions on
+   the [Buf website](https://buf.build/docs/installation/).
+   You can install buf on macOS or Linux using Homebrew:
+
+```sh
+   brew install bufbuild/buf/buf
+```
+
 - protoc (Protocol Buffers compiler)
 - Go plugins:
 

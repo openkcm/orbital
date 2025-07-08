@@ -14,15 +14,15 @@ config = DB_HOST=$(db_host) DB_PORT=$(db_port) DB_USER=$(db_user) DB_PASS=$(db_p
 # Additional setup may be needed depending on your system, refer to https://golang.testcontainers.org/system_requirements/ for details.
 
 # run tests
-test:
+test: proto-generate
 	go test -p 1 -count=1 -race -shuffle=on -coverprofile=cover.out ./...
 
 # run tests with verbose output
-test-verbose:
+test-verbose: proto-generate
 	go test -v -p 1 -count=1 -race -shuffle=on -coverprofile=cover.out ./...	
 
 # run specific test function defined by TEST_FUNC variable
-test-single:
+test-single: proto-generate
 	go test -p 1 -count=1 -race -shuffle=on -coverprofile=cover.out -run $(TEST_FUNC) ./...
 
 # run integration tests
@@ -41,14 +41,8 @@ clean-docker-compose:
 
 
 proto-generate:
-	protoc \
-	--proto_path=proto \
-	--go_out=proto \
-	--go_opt=paths=source_relative \
-	--go_opt=Morbital/task_request.proto=github.com/openkcm/orbital/proto/orbital \
-	--go_opt=Morbital/task_response.proto=github.com/openkcm/orbital/proto/orbital \
-	orbital/task_request.proto \
-	orbital/task_response.proto
+	buf dep update
+	./buf.gen.yaml
 	$(MAKE) go-format
 
 go-format:

@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package orbital;
+package orbital.v1;
 
 // TaskRequest is the request object that will be sent to the operator.
 message TaskRequest {
