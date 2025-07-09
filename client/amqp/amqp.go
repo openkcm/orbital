@@ -167,7 +167,7 @@ func (a *AMQP) ReceiveTaskRequest(ctx context.Context) (orbital.TaskRequest, err
 	data := msg.GetData()
 	req, errDec := a.codec.DecodeTaskRequest(data)
 	if errDec != nil {
-		slog.Error("failed to decode TaskRequest", "data", string(data), "error", err)
+		slog.Error("failed to decode TaskRequest", "data", string(data), "error", errDec)
 	}
 
 	if errAck := a.receiver.AcceptMessage(ctx, msg); errAck != nil {
@@ -200,7 +200,7 @@ func (a *AMQP) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse, e
 	data := msg.GetData()
 	resp, errDec := a.codec.DecodeTaskResponse(data)
 	if errDec != nil {
-		slog.Error("failed to decode TaskResponse", "data", string(data), "error", err)
+		slog.Error("failed to decode TaskResponse", "data", string(data), "error", errDec)
 	}
 
 	if errAck := a.receiver.AcceptMessage(ctx, msg); errAck != nil {
