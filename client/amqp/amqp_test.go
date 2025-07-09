@@ -404,6 +404,7 @@ func TestReceiveTaskRequest(t *testing.T) {
 
 		// when
 		// here we check if all the message are received with an error message and acknowledged.
+		// If the message is not acknowledged, the client will hang in ReceiveTaskRequest.
 		for i := range noMsg {
 			got, err := cli.ReceiveTaskRequest(ctx)
 			// then
@@ -451,6 +452,7 @@ func TestReceiveTaskResponse(t *testing.T) {
 
 		// when
 		// here we check if all the message are received with an error message and acknowledged.
+		// If the message is not acknowledged, the client will hang in ReceiveTaskResponse.
 		for i := range noMsg {
 			got, err := cli.ReceiveTaskResponse(ctx)
 			// then
