@@ -367,7 +367,7 @@ func TestWithMessageBroker(t *testing.T) {
 	})
 }
 
-func Test_ReceiveTaskRequest(t *testing.T) {
+func TestReceiveTaskRequest(t *testing.T) {
 	t.Run("should accept/ack the queue message even if there is an error while decoding the task request", func(t *testing.T) {
 		// given
 		url, cleanUp := startRabbitMQ(t.Context(), t, false, tlsFiles{})
@@ -414,7 +414,7 @@ func Test_ReceiveTaskRequest(t *testing.T) {
 	})
 }
 
-func Test_ReceiveTaskResponse(t *testing.T) {
+func TestReceiveTaskResponse(t *testing.T) {
 	t.Run("should accept/ack the queue message even if there is an error while decoding the task response", func(t *testing.T) {
 		// given
 		url, cleanUp := startRabbitMQ(t.Context(), t, false, tlsFiles{})
