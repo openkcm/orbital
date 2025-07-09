@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"os"
 
@@ -163,8 +164,13 @@ func (a *AMQP) ReceiveTaskRequest(ctx context.Context) (orbital.TaskRequest, err
 		return orbital.TaskRequest{}, err
 	}
 
-	req, err := a.codec.DecodeTaskRequest(msg.GetData())
+	data := msg.GetData()
+	req, err := a.codec.DecodeTaskRequest(data)
 	if err != nil {
+		slog.Error("failed to decode TaskRequest", "data", string(data), "error", err)
+		if errAck := a.receiver.AcceptMessage(ctx, msg); errAck != nil {
+			return orbital.TaskRequest{}, fmt.Errorf("decode error: %w; ack error: %w", err, errAck)
+		}
 		return orbital.TaskRequest{}, err
 	}
 
@@ -191,8 +197,13 @@ func (a *AMQP) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse, e
 		return orbital.TaskResponse{}, err
 	}
 
-	resp, err := a.codec.DecodeTaskResponse(msg.GetData())
+	data := msg.GetData()
+	resp, err := a.codec.DecodeTaskResponse(data)
 	if err != nil {
+		slog.Error("failed to decode TaskResponse", "data", string(data), "error", err)
+		if errAck := a.receiver.AcceptMessage(ctx, msg); errAck != nil {
+			return orbital.TaskResponse{}, fmt.Errorf("decode error: %w; ack error: %w", err, errAck)
+		}
 		return orbital.TaskResponse{}, err
 	}
 
