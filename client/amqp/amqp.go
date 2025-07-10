@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"os"
 
@@ -163,13 +164,18 @@ func (a *AMQP) ReceiveTaskRequest(ctx context.Context) (orbital.TaskRequest, err
 		return orbital.TaskRequest{}, err
 	}
 
-	req, err := a.codec.DecodeTaskRequest(msg.GetData())
-	if err != nil {
-		return orbital.TaskRequest{}, err
+	data := msg.GetData()
+	req, errDec := a.codec.DecodeTaskRequest(data)
+	if errDec != nil {
+		slog.Error("failed to decode TaskRequest", "data", string(data), "error", errDec)
 	}
 
-	if err := a.receiver.AcceptMessage(ctx, msg); err != nil {
-		return orbital.TaskRequest{}, err
+	if errAck := a.receiver.AcceptMessage(ctx, msg); errAck != nil {
+		return orbital.TaskRequest{}, errAck
+	}
+
+	if errDec != nil {
+		return orbital.TaskRequest{}, errDec
 	}
 
 	return req, nil
@@ -191,13 +197,18 @@ func (a *AMQP) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse, e
 		return orbital.TaskResponse{}, err
 	}
 
-	resp, err := a.codec.DecodeTaskResponse(msg.GetData())
-	if err != nil {
-		return orbital.TaskResponse{}, err
+	data := msg.GetData()
+	resp, errDec := a.codec.DecodeTaskResponse(data)
+	if errDec != nil {
+		slog.Error("failed to decode TaskResponse", "data", string(data), "error", errDec)
 	}
 
-	if err := a.receiver.AcceptMessage(ctx, msg); err != nil {
-		return orbital.TaskResponse{}, err
+	if errAck := a.receiver.AcceptMessage(ctx, msg); errAck != nil {
+		return orbital.TaskResponse{}, errAck
+	}
+
+	if errDec != nil {
+		return orbital.TaskResponse{}, errDec
 	}
 
 	return resp, nil

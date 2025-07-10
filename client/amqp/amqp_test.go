@@ -52,6 +52,35 @@ type tlsFiles struct {
 	clientKeyPath  string
 }
 
+type mockCodec struct {
+	FnDecodeTaskRequest  func([]byte) (orbital.TaskRequest, error)
+	FnDecodeTaskResponse func([]byte) (orbital.TaskResponse, error)
+	FnEncodeTaskRequest  func(orbital.TaskRequest) ([]byte, error)
+	FnEncodeTaskResponse func(orbital.TaskResponse) ([]byte, error)
+}
+
+var _ orbital.Codec = &mockCodec{}
+
+// DecodeTaskRequest implements orbital.Codec.
+func (m *mockCodec) DecodeTaskRequest(bytes []byte) (orbital.TaskRequest, error) {
+	return m.FnDecodeTaskRequest(bytes)
+}
+
+// DecodeTaskResponse implements orbital.Codec.
+func (m *mockCodec) DecodeTaskResponse(bytes []byte) (orbital.TaskResponse, error) {
+	return m.FnDecodeTaskResponse(bytes)
+}
+
+// EncodeTaskRequest implements orbital.Codec.
+func (m *mockCodec) EncodeTaskRequest(request orbital.TaskRequest) ([]byte, error) {
+	return m.FnEncodeTaskRequest(request)
+}
+
+// EncodeTaskResponse implements orbital.Codec.
+func (m *mockCodec) EncodeTaskResponse(response orbital.TaskResponse) ([]byte, error) {
+	return m.FnEncodeTaskResponse(response)
+}
+
 func createTLSFiles(t *testing.T) tlsFiles {
 	t.Helper()
 	dir := t.TempDir()
@@ -334,6 +363,102 @@ func TestWithMessageBroker(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				tc.testFunc(t, solURL, tc.queue)
 			})
+		}
+	})
+}
+
+func TestReceiveTaskRequest(t *testing.T) {
+	t.Run("should accept/ack the queue message even if there is an error while decoding the task request", func(t *testing.T) {
+		// given
+		url, cleanUp := startRabbitMQ(t.Context(), t, false, tlsFiles{})
+		defer cleanUp()
+		queue := uuid.New().String()
+
+		mCodec := &mockCodec{}
+		mCodec.FnEncodeTaskRequest = func(req orbital.TaskRequest) ([]byte, error) {
+			// here we send the taskID in bytes to keep the track of the message.
+			return []byte(req.TaskID.String()), nil
+		}
+
+		mCodec.FnDecodeTaskRequest = func(bytes []byte) (orbital.TaskRequest, error) {
+			// here in the error we return a TaskID as an error message.
+			return orbital.TaskRequest{}, errors.New(string(bytes)) //nolint:err113
+		}
+
+		ctx := t.Context()
+		cli, err := amqp.NewClient(ctx, mCodec, amqp.ConnectionInfo{
+			URL: url, Target: queue, Source: queue,
+		})
+
+		assert.NoError(t, err)
+		defer closeClient(ctx, t, cli)
+
+		const noMsg = 5
+		expErrMsg := make([]string, noMsg)
+		// here we send noMsg messages with TaskID as message body.
+		for i := range noMsg {
+			req := orbital.TaskRequest{TaskID: uuid.New()}
+			expErrMsg[i] = req.TaskID.String()
+			assert.NoError(t, cli.SendTaskRequest(ctx, req))
+		}
+
+		// when
+		// here we check if all the message are received with an error message and acknowledged.
+		// If the message is not acknowledged, the client will hang in ReceiveTaskRequest.
+		for i := range noMsg {
+			got, err := cli.ReceiveTaskRequest(ctx)
+			// then
+			assert.Equal(t, orbital.TaskRequest{}, got)
+			assert.Error(t, err)
+			assert.ErrorContains(t, err, expErrMsg[i])
+		}
+	})
+}
+
+func TestReceiveTaskResponse(t *testing.T) {
+	t.Run("should accept/ack the queue message even if there is an error while decoding the task response", func(t *testing.T) {
+		// given
+		url, cleanUp := startRabbitMQ(t.Context(), t, false, tlsFiles{})
+		defer cleanUp()
+		queue := uuid.New().String()
+
+		mCodec := &mockCodec{}
+		mCodec.FnEncodeTaskResponse = func(req orbital.TaskResponse) ([]byte, error) {
+			// here we send the taskID in bytes to keep the track of the message.
+			return []byte(req.TaskID.String()), nil
+		}
+
+		mCodec.FnDecodeTaskResponse = func(bytes []byte) (orbital.TaskResponse, error) {
+			// here in the error we return a TaskID as an error message.
+			return orbital.TaskResponse{}, errors.New(string(bytes)) //nolint:err113
+		}
+
+		ctx := t.Context()
+		cli, err := amqp.NewClient(ctx, mCodec, amqp.ConnectionInfo{
+			URL: url, Target: queue, Source: queue,
+		})
+
+		assert.NoError(t, err)
+		defer closeClient(ctx, t, cli)
+
+		const noMsg = 5
+		expErrMsg := make([]string, noMsg)
+		// here we send noMsg messages with TaskID as message body.
+		for i := range noMsg {
+			req := orbital.TaskResponse{TaskID: uuid.New()}
+			expErrMsg[i] = req.TaskID.String()
+			assert.NoError(t, cli.SendTaskResponse(ctx, req))
+		}
+
+		// when
+		// here we check if all the message are received with an error message and acknowledged.
+		// If the message is not acknowledged, the client will hang in ReceiveTaskResponse.
+		for i := range noMsg {
+			got, err := cli.ReceiveTaskResponse(ctx)
+			// then
+			assert.Equal(t, orbital.TaskResponse{}, got)
+			assert.Error(t, err)
+			assert.ErrorContains(t, err, expErrMsg[i])
 		}
 	})
 }
