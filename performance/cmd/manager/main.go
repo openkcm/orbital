@@ -28,6 +28,7 @@ type termination struct {
 }
 
 func main() {
+	log.Println("Starting orbital manager performance test...")
 	cfg := newConfig()
 
 	go startPrometheusServer(cfg.prometheusPort)
@@ -70,10 +71,8 @@ func main() {
 	handleErr("Failed to create orbital manager", err)
 	manager.Config = cfg.manager
 
-	err = manager.Start(ctx)
-	handleErr("Failed to start orbital manager", err)
-
 	before := time.Now()
+	log.Printf("Preparing %d jobs with %d targets each...\n", cfg.jobsNum, cfg.targetsNum)
 	for i := range cfg.jobsNum {
 		job := orbital.NewJob("test-job", []byte{})
 
@@ -83,11 +82,16 @@ func main() {
 		}
 	}
 
+	err = manager.Start(ctx)
+	handleErr("Failed to start orbital manager", err)
+
 	ctxTimeout, cancel := context.WithTimeout(ctx, cfg.timeout)
 	defer cancel()
 	checkForTermination(ctxTimeout, termination, cfg.jobsNum)
 
 	log.Printf("All jobs terminated after %s\n", time.Since(before).Truncate(time.Millisecond))
+
+	select {}
 }
 
 func startPrometheusServer(port string) {
