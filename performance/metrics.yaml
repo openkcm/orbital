@@ -2,17 +2,6 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: postgres-secret
-  labels:
-    app: postgres
-data:
-  POSTGRES_DB: orbital
-  POSTGRES_USER: orbitaluser
-  POSTGRES_PASSWORD: password
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
   name: prometheus-datasources
 data: 
   prometheus.yaml: |
@@ -42,6 +31,17 @@ data:
         static_configs:
           - targets: ['manager-service:8080']
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-secret
+  labels:
+    app: postgres
+data:
+  POSTGRES_DB: orbital
+  POSTGRES_USER: orbitaluser
+  POSTGRES_PASSWORD: password
+---
 # PersistentVolume
 apiVersion: v1
 kind: PersistentVolume
@@ -63,17 +63,6 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: grafana-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
   name: postgres-pvc
   labels:
     app: postgres
@@ -85,74 +74,18 @@ spec:
     requests:
       storage: 1Gi
 ---
-# Deployment
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: v1
+kind: PersistentVolumeClaim
 metadata:
-  name: manager
-  namespace: default
-  labels:
-    app: manager
+  name: grafana-pvc
 spec:
-  selector:
-    matchLabels:
-      app: manager
-  replicas: 1
-  strategy:
-    rollingUpdate:
-      maxSurge: 25%
-      maxUnavailable: 25%
-    type: RollingUpdate
-  template:
-    metadata:
-      annotations:
-        kubectl.kubernetes.io/default-container:  manager
-      labels:
-        app: manager
-    spec:
-      containers:
-      - name: manager
-        image: localhost/manager:latest
-        imagePullPolicy: Never
-        resources:
-          requests:
-            cpu: 100m
-            memory: 100Mi
-          limits:
-            cpu: 100m
-            memory: 100Mi
-        livenessProbe:
-          tcpSocket:
-            port: 8080
-          initialDelaySeconds: 5
-          timeoutSeconds: 5
-          successThreshold: 1
-          failureThreshold: 3
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 5
-          timeoutSeconds: 2
-          successThreshold: 1
-          failureThreshold: 3
-          periodSeconds: 10
-        env:
-        - name: PORT
-          value: "8080"
-        ports:
-        - containerPort: 8080
-          name: manager
-        volumeMounts:
-        - name: localtime
-          mountPath: /etc/localtime
-      volumes:
-        - name: localtime
-          hostPath:
-            path: /usr/share/zoneinfo/Asia/Taipei
-      restartPolicy: Always
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
 ---
+# Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -181,6 +114,37 @@ spec:
           configMap:
             name: prometheus-server-conf
             defaultMode: 420
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: 'postgres:latest'
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - configMapRef:
+                name: postgres-secret
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: postgresdata
+      volumes:
+        - name: postgresdata
+          persistentVolumeClaim:
+            claimName: postgres-pvc
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -245,37 +209,6 @@ spec:
               defaultMode: 420
               name: prometheus-datasources
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: postgres
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: postgres
-  template:
-    metadata:
-      labels:
-        app: postgres
-    spec:
-      containers:
-        - name: postgres
-          image: 'postgres:latest'
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 5432
-          envFrom:
-            - configMapRef:
-                name: postgres-secret
-          volumeMounts:
-            - mountPath: /var/lib/postgresql/data
-              name: postgresdata
-      volumes:
-        - name: postgresdata
-          persistentVolumeClaim:
-            claimName: postgres-pvc
----
 # Service
 apiVersion: v1
 kind: Service
@@ -304,23 +237,7 @@ spec:
       port: 9090
       targetPort: 9090
   type: LoadBalancer
-
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: manager-service
-  namespace: default
-spec:
-  selector:
-    app: manager
-  ports:
-    - protocol: TCP
-      port: 8080
-      targetPort: 8080
-  type: LoadBalancer
----
-
 apiVersion: v1
 kind: Service
 metadata:

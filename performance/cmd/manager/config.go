@@ -21,7 +21,7 @@ const (
 const (
 	defConfirmJobDelay  = 1 * time.Second
 	defNoOfWorker       = 5
-	defWorkTimeout      = 1 * time.Second
+	defWorkTimeout      = 10 * time.Second
 	defTaskLimitNum     = 500
 	defWorkExecInterval = 1 * time.Microsecond
 )

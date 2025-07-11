@@ -11,7 +11,7 @@ minikube-delete:
 build: build-manager
 
 build-manager:
-	GOOS=linux GOARCH=amd64 go build -o cmd/manager/manager cmd/manager/main.go
+	GOOS=linux GOARCH=amd64 go build -o cmd/manager/manager cmd/manager/*.go
 	chmod +x cmd/manager/manager
 	(docker build -f cmd/manager/Dockerfile -t localhost/manager:latest .)
 	(minikube image rm localhost/manager:latest)
@@ -19,7 +19,13 @@ build-manager:
 	rm cmd/manager/manager
 
 deploy:
-	kubectl apply -f infrastructure.yaml
+	kubectl apply -f orbital-run.yaml
 
 undeploy:
-	kubectl delete -f infrastructure.yaml
+	kubectl delete -f orbital-run.yaml
+
+deploy-metrics:
+	kubectl apply -f metrics.yaml
+
+undeploy-metrics:
+	kubectl delete -f metrics.yaml
