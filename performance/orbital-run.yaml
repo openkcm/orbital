@@ -1,0 +1,126 @@
+# ConfigMaps
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+data:
+  TIMEOUT: ""
+  JOBS_NUM: "10"
+  TARGETS_NUM: "100"
+  TASK_LIMIT_NUM: ""
+  CONFIRM_JOB_INTERVAL: ""
+  CONFIRM_JOB_WORKER_NUM: ""
+  CONFIRM_JOB_WORK_TIMEOUT: ""
+  CONFIRM_JOB_WORK_EXEC_INTERVAL: ""
+  CREATE_TASKS_WORKER_NUM: ""
+  CREATE_TASKS_WORK_TIMEOUT: ""
+  CREATE_TASKS_WORK_EXEC_INTERVAL: ""
+  RECONCILE_WORKER_NUM: ""
+  RECONCILE_WORK_TIMEOUT: ""
+  RECONCILE_WORK_EXEC_INTERVAL: ""
+  NOTIFY_WORKER_NUM: ""
+  NOTIFY_WORK_TIMEOUT: ""
+  NOTIFY_WORK_EXEC_INTERVAL: ""
+  JOB_CONFIRM_FUNC_LATENCY_SEC: ""
+  JOB_CONFIRM_FUNC_ERROR_RATE: ""
+  JOB_CONFIRM_FUNC_CANCEL_RATE: ""
+  TASK_RESOLVE_FUNC_LATENCY_SEC: ""
+  TASK_RESOLVE_FUNC_ERROR_RATE: ""
+  TASK_RESOLVE_FUNC_UNFINISHED_RATE: ""
+  TASK_RESOLVE_FUNC_CANCEL_RATE: ""
+  OPERATOR_MOCK_LATENCY_SEC: ""
+  OPERATOR_MOCK_RECONCILE_AFTER_SEC: ""
+  OPERATOR_MOCK_UNFINISHED_RATE: ""
+  OPERATOR_MOCK_ERROR_RATE: ""
+  OPERATOR_MOCK_TASK_FAILURE_RATE: ""
+  POSTGRES_HOST: "postgres-service"
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: "orbitaluser"
+  POSTGRES_PASSWORD: "password"
+  POSTGRES_DB: "orbital"
+  POSTGRES_SSLMODE: "disable"
+  PROMETHEUS_PORT: "8080"
+---
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: manager
+  namespace: default
+  labels:
+    app: manager
+spec:
+  selector:
+    matchLabels:
+      app: manager
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container:  manager
+      labels:
+        app: manager
+    spec:
+      containers:
+      - name: manager
+        image: localhost/manager:latest
+        imagePullPolicy: Never
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+          limits:
+            cpu: 100m
+            memory: 100Mi
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          timeoutSeconds: 2
+          successThreshold: 1
+          failureThreshold: 3
+          periodSeconds: 10
+        envFrom:
+          - configMapRef:
+              name: test-config
+        ports:
+        - containerPort: 8080
+          name: manager
+        volumeMounts:
+        - name: localtime
+          mountPath: /etc/localtime
+      volumes:
+        - name: localtime
+          hostPath:
+            path: /usr/share/zoneinfo/Asia/Taipei
+      restartPolicy: Always
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: manager-service
+  namespace: default
+spec:
+  selector:
+    app: manager
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: LoadBalancer
+---
