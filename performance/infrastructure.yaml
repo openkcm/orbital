@@ -7,7 +7,7 @@ metadata:
     app: postgres
 data:
   POSTGRES_DB: orbital
-  POSTGRES_USER: grafanareader
+  POSTGRES_USER: orbitaluser
   POSTGRES_PASSWORD: password
 ---
 apiVersion: v1
