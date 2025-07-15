@@ -1,12 +1,20 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math/rand/v2"
 	"net/http"
+	"runtime"
+	"runtime/pprof"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -29,9 +37,14 @@ type termination struct {
 
 func main() {
 	log.Println("Starting orbital manager performance test...")
-	cfg := newConfig()
+	cfg := newEnvConfig()
 
-	go startPrometheusServer(cfg.prometheusPort)
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
 
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		cfg.postgres.host, cfg.postgres.port, cfg.postgres.user,
@@ -42,81 +55,145 @@ func main() {
 
 	ctx := context.Background()
 
+	var manager *orbital.Manager
 	store, err := sql.New(ctx, db)
 	handleErr("Failed to create store", err)
 	repo := orbital.NewRepository(store)
 
-	targetToClient := make(map[string]orbital.Initiator, cfg.targetsNum)
-	for i := range cfg.targetsNum {
-		target := targetName(i)
-		client, err := operatorMock(cfg.operatorMock)
-		handleErr("Failed to create client for target "+target, err)
+	var muxtex sync.Mutex
+	var managerCancelFunc context.CancelFunc
+	var managerCtx context.Context
 
-		targetToClient[target] = client
-	}
+	mux.HandleFunc("/orbital/run", func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		handleErr("Failed to read request body", err)
 
-	termination := &termination{}
-	manager, err := orbital.NewManager(
-		repo,
-		taskResolveFunc(cfg.targetsNum, cfg.taskResolveFunc),
+		testCfg := TestConfig{}
+		err = json.Unmarshal(body, &testCfg)
+		handleErr("Failed to unmarshal request body", err)
 
-		orbital.WithJobConfirmFunc(jobConfirmFunc(cfg.jobConfirmFunc)),
-
-		orbital.WithTargetClients(targetToClient),
-
-		orbital.WithJobDoneEventFunc(jobTerminateFunc(&termination.dones)),
-		orbital.WithJobFailedEventFunc(jobTerminateFunc(&termination.failures)),
-		orbital.WithJobCanceledEventFunc(jobTerminateFunc(&termination.cancellations)),
-	)
-	handleErr("Failed to create orbital manager", err)
-	manager.Config = cfg.manager
-
-	before := time.Now()
-	log.Printf("Preparing %d jobs with %d targets each...\n", cfg.jobsNum, cfg.targetsNum)
-	for i := range cfg.jobsNum {
-		job := orbital.NewJob("test-job", []byte{})
-
-		_, err = manager.PrepareJob(ctx, job)
-		if err != nil {
-			log.Printf("Failed to prepare job %d: %s\n", i, err)
+		muxtex.Lock()
+		if managerCancelFunc != nil {
+			managerCancelFunc()
 		}
-	}
+		_, err = db.ExecContext(ctx, "DELETE from jobs")
+		handleErr("Failed to delete jobs", err)
+		_, err = db.ExecContext(ctx, "DELETE from tasks")
+		handleErr("Failed to delete tasks", err)
+		_, err = db.ExecContext(ctx, "DELETE from job_cursor")
+		handleErr("Failed to delete job_cursor", err)
+		_, err = db.ExecContext(ctx, "DELETE from job_event")
+		handleErr("Failed to delete job_event", err)
+		time.Sleep(10 * time.Second) // Give some time for the previous manager to finish
+		managerCtx, managerCancelFunc = context.WithCancel(ctx)
 
-	err = manager.Start(ctx)
-	handleErr("Failed to start orbital manager", err)
+		targetToClient := make(map[string]orbital.Initiator, testCfg.TargetsNum)
+		for i := range testCfg.TargetsNum {
+			target := targetName(i)
+			client, err := operatorMock(testCfg.OperatorMock)
+			handleErr("Failed to create client for target "+target, err)
 
-	ctxTimeout, cancel := context.WithTimeout(ctx, cfg.timeout)
-	defer cancel()
-	checkForTermination(ctxTimeout, termination, cfg.jobsNum)
+			targetToClient[target] = client
+		}
 
-	log.Printf("All jobs terminated after %s\n", time.Since(before).Truncate(time.Millisecond))
+		termination := &termination{}
 
-	select {}
-}
+		manager, err = orbital.NewManager(
+			repo,
+			taskResolveFunc(testCfg.TargetsNum, testCfg.TaskResolveFunc),
 
-func startPrometheusServer(port string) {
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.Handler())
-	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+			orbital.WithJobConfirmFunc(jobConfirmFunc(testCfg.JobConfirmFunc)),
+
+			orbital.WithTargetClients(targetToClient),
+
+			orbital.WithJobDoneEventFunc(jobTerminateFunc(&termination.dones)),
+			orbital.WithJobFailedEventFunc(jobTerminateFunc(&termination.failures)),
+			orbital.WithJobCanceledEventFunc(jobTerminateFunc(&termination.cancellations)),
+		)
+
+		handleErr("Failed to create orbital manager", err)
+
+		log.Printf("%#v", testCfg.Manager)
+		manager.Config = testCfg.Manager
+
+		log.Printf("Preparing %d jobs with %d targets each...\n", testCfg.JobsNum, testCfg.TargetsNum)
+		for i := range testCfg.JobsNum {
+			job := orbital.NewJob("test-job", []byte{})
+
+			_, err = manager.PrepareJob(ctx, job)
+			if err != nil {
+				log.Printf("Failed to prepare job %d: %s\n", i, err)
+				w.Write([]byte("Failed to create jobs\n"))
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		}
+		err = manager.Start(managerCtx)
+		handleErr("Failed to start orbital manager", err)
+
+		fileName := time.Now().Format("2006-01-02T15:04:05 ") + testCfg.TestName
+		fileName = strings.ReplaceAll(fileName, " ", "_") + ".zip"
+
+		cpuBuff := new(bytes.Buffer)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+
+		if err := pprof.StartCPUProfile(cpuBuff); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+
+		timeTaken := checkForTermination(ctx, termination, testCfg)
+
+		testParams := struct {
+			DateTime  time.Time
+			TimeTaken time.Duration
+			Config    TestConfig
+		}{
+			DateTime:  time.Now(),
+			TimeTaken: timeTaken,
+			Config:    testCfg,
+		}
+
+		testParamByte, err := json.MarshalIndent(testParams, "", "    ")
+		handleErr("Failed to marshal test parameters", err)
+
+		memBuf := new(bytes.Buffer)
+		if err != nil {
+			log.Fatal("could not create memory profile: ", err)
+		}
+		runtime.GC()
+		if err := pprof.Lookup("allocs").WriteTo(memBuf, 0); err != nil {
+			log.Fatal("could not write memory profile: ", err)
+		}
+		pprof.StopCPUProfile()
+
+		downLoadByte, err := zipMultipleFiles(map[string][]byte{
+			"mem.prof":   memBuf.Bytes(),
+			"cpu.prof":   cpuBuff.Bytes(),
+			"testParams": testParamByte,
+		})
+		handleErr("Failed to zip files", err)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+fileName+"\"")
+		http.ServeContent(w, r, fileName, time.Now(), bytes.NewReader(downLoadByte))
 	})
-	err := http.ListenAndServe(":"+port, mux)
+	err = http.ListenAndServe(":"+cfg.prometheusPort, mux)
 	handleErr("Failed to start http server", err)
 }
 
-func jobConfirmFunc(cfg jobConfirmFuncConfig) orbital.JobConfirmFunc {
+func jobConfirmFunc(cfg JobConfirmFuncConfig) orbital.JobConfirmFunc {
 	return func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 		errRand := rand.Float64()
-		if errRand <= cfg.errorRate {
+		if errRand <= cfg.ErrorRate {
 			return orbital.JobConfirmResult{}, errors.New("job confirm error")
 		}
 
-		timeRand := randIntN(cfg.latencyAverageSec * 2)
+		timeRand := randIntN(cfg.LatencyAverageSec * 2)
 		time.Sleep(time.Duration(timeRand) * time.Second)
 
 		cancelRand := rand.Float64()
-		if cancelRand <= cfg.cancelRate {
+		if cancelRand <= cfg.CancelRate {
 			return orbital.JobConfirmResult{
 				Confirmed: false,
 			}, nil
@@ -128,25 +205,25 @@ func jobConfirmFunc(cfg jobConfirmFuncConfig) orbital.JobConfirmFunc {
 	}
 }
 
-func taskResolveFunc(targetsNum int, cfg taskResolveFuncConfig) orbital.TaskResolveFunc {
+func taskResolveFunc(targetsNum int, cfg TaskResolveFuncConfig) orbital.TaskResolveFunc {
 	return func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 		errRand := rand.Float64()
-		if errRand <= cfg.errorRate {
+		if errRand <= cfg.ErrorRate {
 			return orbital.TaskResolverResult{}, errors.New("task resolve error")
 		}
 
-		timeRand := randIntN(cfg.latencyAverageSec * 2)
+		timeRand := randIntN(cfg.LatencyAverageSec * 2)
 		time.Sleep(time.Duration(timeRand) * time.Second)
 
 		unfinishedRand := rand.Float64()
-		if unfinishedRand <= cfg.unfinishedRate {
+		if unfinishedRand <= cfg.UnfinishedRate {
 			return orbital.TaskResolverResult{
 				Done: false,
 			}, nil
 		}
 
 		cancelRand := rand.Float64()
-		if cancelRand <= cfg.cancelRate {
+		if cancelRand <= cfg.CancelRate {
 			return orbital.TaskResolverResult{
 				IsCanceled: true,
 			}, nil
@@ -179,15 +256,15 @@ func jobTerminateFunc(terminatedJobs *atomic.Int64) orbital.JobTerminatedEventFu
 	}
 }
 
-func operatorMock(cfg operatorMockConfig) (*interactortest.Initiator, error) {
+func operatorMock(cfg OperatorMockConfig) (*interactortest.Initiator, error) {
 	return interactortest.NewInitiator(
 		func(_ context.Context, request orbital.TaskRequest) (orbital.TaskResponse, error) {
 			errRand := rand.Float64()
-			if errRand <= cfg.errorRate {
+			if errRand <= cfg.ErrorRate {
 				return orbital.TaskResponse{}, errors.New("client error")
 			}
 
-			timeRand := randIntN(cfg.latencyAverageSec * 2)
+			timeRand := randIntN(cfg.LatencyAverageSec * 2)
 			time.Sleep(time.Duration(timeRand) * time.Second)
 
 			response := orbital.TaskResponse{
@@ -197,14 +274,14 @@ func operatorMock(cfg operatorMockConfig) (*interactortest.Initiator, error) {
 			}
 
 			retryRand := rand.Float64()
-			if retryRand <= cfg.unfinishedRate {
-				response.ReconcileAfterSec = int64(rand.IntN((cfg.latencyAverageSec + 1) * 2))
+			if retryRand <= cfg.UnfinishedRate {
+				response.ReconcileAfterSec = int64(rand.IntN((cfg.LatencyAverageSec + 1) * 2))
 				response.Status = string(orbital.TaskStatusProcessing)
 				return response, nil
 			}
 
 			taskFailRand := rand.Float64()
-			if taskFailRand <= cfg.taskFailureRate {
+			if taskFailRand <= cfg.TaskFailureRate {
 				response.Status = string(orbital.TaskStatusFailed)
 				return response, nil
 			}
@@ -215,13 +292,14 @@ func operatorMock(cfg operatorMockConfig) (*interactortest.Initiator, error) {
 	)
 }
 
-func checkForTermination(ctx context.Context, termination *termination, expTerminated int) {
+func checkForTermination(ctx context.Context, termination *termination, config TestConfig) time.Duration {
+	before := time.Now()
 	log.Println("Checking for job termination...")
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("Context cancelled, exiting...")
-			return
+			return 0 * time.Second
 		default:
 			dones := termination.dones.Load()
 			failures := termination.failures.Load()
@@ -229,13 +307,36 @@ func checkForTermination(ctx context.Context, termination *termination, expTermi
 
 			sum := dones + failures + cancellations
 			log.Printf("Jobs terminated: %d/%d; done: %d; failures: %d; cancellations: %d\n",
-				sum, expTerminated, dones, failures, cancellations)
-			if sum >= int64(expTerminated) {
-				return
+				sum, config.JobsNum, dones, failures, cancellations)
+			if sum >= int64(config.JobsNum) {
+				timeTaken := time.Since(before).Truncate(time.Millisecond)
+				return timeTaken
 			}
 			time.Sleep(1 * time.Second)
 		}
 	}
+}
+
+func zipMultipleFiles(files map[string][]byte) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	zw := zip.NewWriter(buf)
+	for name, data := range files {
+		f, err := zw.Create(name)
+		if err != nil {
+			zw.Close()
+			return nil, err
+		}
+		_, err = f.Write(data)
+		if err != nil {
+			zw.Close()
+			return nil, err
+		}
+	}
+	err := zw.Close()
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 func randIntN(n int) int {

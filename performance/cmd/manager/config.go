@@ -47,20 +47,23 @@ const (
 	defOperatorMockTaskFailureRate   = 0.0
 )
 
-type setupConfig struct {
+type EnvConfig struct {
 	postgres       postgresConfig
 	prometheusPort string
+}
 
-	timeout time.Duration
+type TestConfig struct {
+	TestName string
+	Timeout  time.Duration
 
-	jobsNum    int
-	targetsNum int
+	JobsNum    int
+	TargetsNum int
 
-	manager         orbital.Config
-	jobConfirmFunc  jobConfirmFuncConfig
-	taskResolveFunc taskResolveFuncConfig
+	Manager         orbital.Config
+	JobConfirmFunc  JobConfirmFuncConfig
+	TaskResolveFunc TaskResolveFuncConfig
 
-	operatorMock operatorMockConfig
+	OperatorMock OperatorMockConfig
 }
 
 type postgresConfig struct {
@@ -72,44 +75,31 @@ type postgresConfig struct {
 	sslmode  string
 }
 
-type jobConfirmFuncConfig struct {
-	latencyAverageSec int
-	errorRate         float64
-	cancelRate        float64
+type JobConfirmFuncConfig struct {
+	LatencyAverageSec int
+	ErrorRate         float64
+	CancelRate        float64
 }
 
-type taskResolveFuncConfig struct {
-	latencyAverageSec int
-	errorRate         float64
-	unfinishedRate    float64
-	cancelRate        float64
+type TaskResolveFuncConfig struct {
+	LatencyAverageSec int
+	ErrorRate         float64
+	UnfinishedRate    float64
+	CancelRate        float64
 }
 
-type operatorMockConfig struct {
-	latencyAverageSec        int
-	reconcileAfterAverageSec int
-	unfinishedRate           float64
-	errorRate                float64
-	taskFailureRate          float64
+type OperatorMockConfig struct {
+	LatencyAverageSec        int
+	ReconcileAfterAverageSec int
+	UnfinishedRate           float64
+	ErrorRate                float64
+	TaskFailureRate          float64
 }
 
-func newConfig() setupConfig {
-	config := setupConfig{}
-
+func newEnvConfig() EnvConfig {
+	config := EnvConfig{}
 	config.postgres = getPostgresConfig()
 	config.prometheusPort = getEnvOrDefault("PROMETHEUS_PORT", "8080")
-
-	config.timeout = getEnvOrDefaultDuration("TIMEOUT", 10*time.Minute)
-
-	config.jobsNum = getEnvOrDefaultInt("JOBS_NUM", 10)
-	config.targetsNum = getEnvOrDefaultInt("TARGETS_NUM", 3)
-
-	config.manager = getManagerConfig()
-	config.jobConfirmFunc = getJobConfirmFuncConfig()
-	config.taskResolveFunc = getTaskResolveFuncConfig()
-
-	config.operatorMock = getOperatorMockConfig()
-
 	return config
 }
 
@@ -151,30 +141,30 @@ func getManagerConfig() orbital.Config {
 	}
 }
 
-func getJobConfirmFuncConfig() jobConfirmFuncConfig {
-	return jobConfirmFuncConfig{
-		latencyAverageSec: getEnvOrDefaultInt("JOB_CONFIRM_FUNC_LATENCY_SEC", defJobConfirmFuncLatencySec),
-		errorRate:         getEnvOrDefaultFloat("JOB_CONFIRM_FUNC_ERROR_RATE", defJobConfirmFuncErrorRate),
-		cancelRate:        getEnvOrDefaultFloat("JOB_CONFIRM_FUNC_CANCEL_RATE", defJobConfirmFuncCancelRate),
+func getJobConfirmFuncConfig() JobConfirmFuncConfig {
+	return JobConfirmFuncConfig{
+		LatencyAverageSec: getEnvOrDefaultInt("JOB_CONFIRM_FUNC_LATENCY_SEC", defJobConfirmFuncLatencySec),
+		ErrorRate:         getEnvOrDefaultFloat("JOB_CONFIRM_FUNC_ERROR_RATE", defJobConfirmFuncErrorRate),
+		CancelRate:        getEnvOrDefaultFloat("JOB_CONFIRM_FUNC_CANCEL_RATE", defJobConfirmFuncCancelRate),
 	}
 }
 
-func getTaskResolveFuncConfig() taskResolveFuncConfig {
-	return taskResolveFuncConfig{
-		latencyAverageSec: getEnvOrDefaultInt("TASK_RESOLVE_FUNC_LATENCY_SEC", defTaskResolveFuncLatencySec),
-		errorRate:         getEnvOrDefaultFloat("TASK_RESOLVE_FUNC_ERROR_RATE", defTaskResolveFuncErrorRate),
-		unfinishedRate:    getEnvOrDefaultFloat("TASK_RESOLVE_FUNC_UNFINISHED_RATE", defTaskResolveFuncUnfinishedRate),
-		cancelRate:        getEnvOrDefaultFloat("TASK_RESOLVE_FUNC_CANCEL_RATE", defTaskResolveFuncCancelRate),
+func getTaskResolveFuncConfig() TaskResolveFuncConfig {
+	return TaskResolveFuncConfig{
+		LatencyAverageSec: getEnvOrDefaultInt("TASK_RESOLVE_FUNC_LATENCY_SEC", defTaskResolveFuncLatencySec),
+		ErrorRate:         getEnvOrDefaultFloat("TASK_RESOLVE_FUNC_ERROR_RATE", defTaskResolveFuncErrorRate),
+		UnfinishedRate:    getEnvOrDefaultFloat("TASK_RESOLVE_FUNC_UNFINISHED_RATE", defTaskResolveFuncUnfinishedRate),
+		CancelRate:        getEnvOrDefaultFloat("TASK_RESOLVE_FUNC_CANCEL_RATE", defTaskResolveFuncCancelRate),
 	}
 }
 
-func getOperatorMockConfig() operatorMockConfig {
-	return operatorMockConfig{
-		latencyAverageSec:        getEnvOrDefaultInt("OPERATOR_MOCK_LATENCY_SEC", defOperatorMockLatencySec),
-		reconcileAfterAverageSec: getEnvOrDefaultInt("OPERATOR_MOCK_RECONCILE_AFTER_SEC", defOperatorMockReconcileAfterSec),
-		unfinishedRate:           getEnvOrDefaultFloat("OPERATOR_MOCK_UNFINISHED_RATE", defOperatorMockUnfinishedRate),
-		errorRate:                getEnvOrDefaultFloat("OPERATOR_MOCK_ERROR_RATE", defOperatorMockErrorRate),
-		taskFailureRate:          getEnvOrDefaultFloat("OPERATOR_MOCK_TASK_FAILURE_RATE", defOperatorMockTaskFailureRate),
+func getOperatorMockConfig() OperatorMockConfig {
+	return OperatorMockConfig{
+		LatencyAverageSec:        getEnvOrDefaultInt("OPERATOR_MOCK_LATENCY_SEC", defOperatorMockLatencySec),
+		ReconcileAfterAverageSec: getEnvOrDefaultInt("OPERATOR_MOCK_RECONCILE_AFTER_SEC", defOperatorMockReconcileAfterSec),
+		UnfinishedRate:           getEnvOrDefaultFloat("OPERATOR_MOCK_UNFINISHED_RATE", defOperatorMockUnfinishedRate),
+		ErrorRate:                getEnvOrDefaultFloat("OPERATOR_MOCK_ERROR_RATE", defOperatorMockErrorRate),
+		TaskFailureRate:          getEnvOrDefaultFloat("OPERATOR_MOCK_TASK_FAILURE_RATE", defOperatorMockTaskFailureRate),
 	}
 }
 
