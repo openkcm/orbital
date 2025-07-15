@@ -131,7 +131,8 @@ spec:
     spec:
       containers:
         - name: postgres
-          image: 'postgres:latest'
+          image: 'postgres:17-alpine'
+          args: ["-c", "max_connections=200"]
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5432
