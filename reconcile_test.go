@@ -325,11 +325,13 @@ func TestReconcile(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
+		beforeETag := uuid.NewString()
 		ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
 			{
 				JobID:        job.ID,
 				Status:       orbital.TaskStatusCreated,
 				MaxSentCount: 0,
+				ETag:         beforeETag,
 			},
 		})
 		assert.NoError(t, err)
@@ -348,6 +350,7 @@ func TestReconcile(t *testing.T) {
 		actTask, ok, err := orbital.GetRepoTask(repo)(ctx, ids[0])
 		assert.NoError(t, err)
 		assert.True(t, ok)
+		assert.NotEqual(t, beforeETag, actTask.ETag)
 		assert.Equal(t, orbital.TaskStatusFailed, actTask.Status)
 	})
 }

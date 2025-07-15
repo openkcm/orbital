@@ -515,6 +515,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 	defer wg.Done()
 
 	if task.SentCount >= task.MaxSentCount {
+		task.ETag = uuid.NewString()
 		task.Status = TaskStatusFailed
 		repo.updateTask(ctx, task) //nolint:errcheck
 		return
