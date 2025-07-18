@@ -364,100 +364,79 @@ func TestReconcile(t *testing.T) {
 			defer clearTables(t, db)
 			repo := orbital.NewRepository(store)
 
-			job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
-				Status: orbital.JobStatusProcessing,
-			})
-			assert.NoError(t, err)
-
-			target := "target-1"
-			ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
+			tcs := []struct {
+				name                   string
+				initiatorReturn        func() (orbital.TaskResponse, error) // simulate the initiator's response
+				isSentCountIncremented bool
+			}{
 				{
-					JobID:        job.ID,
-					Type:         "task-type",
-					ETag:         "etag",
-					Status:       orbital.TaskStatusCreated,
-					Target:       target,
-					MaxSentCount: 5,
+					name: "should be incremented after each successful send",
+					initiatorReturn: func() (orbital.TaskResponse, error) {
+						return orbital.TaskResponse{}, nil
+					},
+					isSentCountIncremented: true,
 				},
-			})
-			assert.NoError(t, err)
-			assert.Len(t, ids, 1)
-
-			initiator, err := interactortest.NewInitiator(func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
-				return orbital.TaskResponse{}, nil
-			}, nil)
-			assert.NoError(t, err)
-
-			subj, err := orbital.NewManager(repo,
-				mockTaskResolveFunc(),
-				orbital.WithTargetClients(map[string]orbital.Initiator{
-					target: initiator,
-				}),
-			)
-			assert.NoError(t, err)
-			for i := range 4 {
-				// when
-				err = orbital.Reconcile(subj)(ctx)
-
-				// then
-				assert.NoError(t, err)
-				actTask, ok, err := orbital.GetRepoTask(repo)(ctx, ids[0])
-				assert.NoError(t, err)
-				assert.True(t, ok)
-				assert.Equal(t, int64(i+1), actTask.TotalSentCount)
+				{
+					name: "should not be incremented after a failed send",
+					initiatorReturn: func() (orbital.TaskResponse, error) {
+						return orbital.TaskResponse{}, assert.AnError
+					},
+					isSentCountIncremented: false,
+				},
 			}
-		})
-		t.Run("should not be incremented after a failed send", func(t *testing.T) {
-			// given
-			ctx := t.Context()
-			db, store := createSQLStore(t)
-			defer clearTables(t, db)
-			repo := orbital.NewRepository(store)
 
-			job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
-				Status: orbital.JobStatusProcessing,
-			})
-			assert.NoError(t, err)
+			for _, tc := range tcs {
+				t.Run(tc.name, func(t *testing.T) {
+					job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+						Status: orbital.JobStatusProcessing,
+					})
+					assert.NoError(t, err)
 
-			target := "target-1"
-			ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
-				{
-					JobID:        job.ID,
-					Type:         "task-type",
-					ETag:         "etag",
-					Status:       orbital.TaskStatusCreated,
-					Target:       target,
-					MaxSentCount: 5,
-				},
-			})
-			assert.NoError(t, err)
-			assert.Len(t, ids, 1)
+					target := "target-1"
+					ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
+						{
+							JobID:        job.ID,
+							Type:         "task-type",
+							ETag:         "etag",
+							Status:       orbital.TaskStatusCreated,
+							Target:       target,
+							MaxSentCount: 5,
+						},
+					})
+					assert.NoError(t, err)
+					assert.Len(t, ids, 1)
 
-			// simulating an error in the task request sending
-			initiator, err := interactortest.NewInitiator(func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
-				return orbital.TaskResponse{}, assert.AnError
-			}, nil)
-			assert.NoError(t, err)
+					initiator, err := interactortest.NewInitiator(
+						func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
+							return tc.initiatorReturn()
+						}, nil,
+					)
+					assert.NoError(t, err)
 
-			subj, err := orbital.NewManager(repo,
-				mockTaskResolveFunc(),
-				orbital.WithTargetClients(map[string]orbital.Initiator{
-					target: initiator,
-				}),
-			)
-			assert.NoError(t, err)
+					subj, err := orbital.NewManager(repo,
+						mockTaskResolveFunc(),
+						orbital.WithTargetClients(map[string]orbital.Initiator{
+							target: initiator,
+						}),
+					)
+					assert.NoError(t, err)
 
-			// trying to send the task request multiple times
-			for range 4 {
-				// when
-				err = orbital.Reconcile(subj)(ctx)
+					for i := range 4 {
+						// when
+						err = orbital.Reconcile(subj)(ctx)
 
-				// then
-				assert.NoError(t, err)
-				actTask, ok, err := orbital.GetRepoTask(repo)(ctx, ids[0])
-				assert.NoError(t, err)
-				assert.True(t, ok)
-				assert.Equal(t, int64(0), actTask.TotalSentCount)
+						// then
+						assert.NoError(t, err)
+						actTask, ok, err := orbital.GetRepoTask(repo)(ctx, ids[0])
+						assert.NoError(t, err)
+						assert.True(t, ok)
+						if tc.isSentCountIncremented {
+							assert.Equal(t, int64(i+1), actTask.TotalSentCount)
+						} else {
+							assert.Equal(t, int64(0), actTask.TotalSentCount)
+						}
+					}
+				})
 			}
 		})
 	})
