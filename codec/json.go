@@ -9,7 +9,7 @@ import (
 // JSON is a codec that encodes and decodes TaskRequest and TaskResponse in JSON format.
 type JSON struct{}
 
-var _ orbital.Codec = &JSON{}
+var _ orbital.Codec = JSON{}
 
 // EncodeTaskRequest encodes a TaskRequest into JSON format.
 func (j JSON) EncodeTaskRequest(req orbital.TaskRequest) ([]byte, error) {

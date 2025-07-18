@@ -5,7 +5,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/openkcm/orbital/codec"
 	orbitalpb "github.com/openkcm/orbital/proto/orbital/v1"
@@ -92,6 +94,79 @@ func TestProto_Changes(t *testing.T) {
 
 		protoFields := exportedProtoFields(t, orbitalpb.TaskResponse{})
 		assert.Len(t, mappedKeys, len(protoFields), "should have same number of fields")
+	})
+}
+
+func TestOptionalField(t *testing.T) {
+	t.Run("TaskResponse should not panic when", func(t *testing.T) {
+		// given
+		errMsg := "error message"
+		tt := []struct {
+			name  string
+			input *orbitalpb.TaskResponse
+		}{
+			{
+				name: "error message is nil",
+				input: &orbitalpb.TaskResponse{
+					TaskId:       uuid.New().String(),
+					ErrorMessage: nil,
+					WorkingState: []byte("some thing"),
+				},
+			},
+			{
+				name: "working state is nil",
+				input: &orbitalpb.TaskResponse{
+					TaskId:       uuid.New().String(),
+					ErrorMessage: &errMsg,
+					WorkingState: nil,
+				},
+			},
+		}
+		for _, tc := range tt {
+			t.Run(tc.name, func(t *testing.T) {
+				encoded, err := proto.Marshal(tc.input)
+				assert.NoError(t, err)
+				subj := codec.Proto{}
+
+				// then
+				assert.NotPanics(t, func() {
+					// when
+					result, err := subj.DecodeTaskResponse(encoded)
+					assert.NoError(t, err)
+					assert.Equal(t, tc.input.TaskId, result.TaskID.String())
+				})
+			})
+		}
+	})
+	t.Run("TaskRequest should not panic when", func(t *testing.T) {
+		// given
+		tt := []struct {
+			name  string
+			input *orbitalpb.TaskRequest
+		}{
+			{
+				name: "data is nil",
+				input: &orbitalpb.TaskRequest{
+					TaskId: uuid.New().String(),
+					Data:   nil,
+				},
+			},
+		}
+		for _, tc := range tt {
+			t.Run(tc.name, func(t *testing.T) {
+				encoded, err := proto.Marshal(tc.input)
+				assert.NoError(t, err)
+				subj := codec.Proto{}
+
+				// then
+				assert.NotPanics(t, func() {
+					// when
+					result, err := subj.DecodeTaskRequest(encoded)
+					assert.NoError(t, err)
+					assert.Equal(t, tc.input.TaskId, result.TaskID.String())
+				})
+			})
+		}
 	})
 }
 

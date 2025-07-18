@@ -11,10 +11,10 @@ import (
 // Proto is a codec that encodes and decodes TaskRequest and TaskResponse in Protobuf format.
 type Proto struct{}
 
-var _ orbital.Codec = &Proto{}
+var _ orbital.Codec = Proto{}
 
 // DecodeTaskRequest decodes Protobuf data into a TaskRequest.
-func (p *Proto) DecodeTaskRequest(bytes []byte) (orbital.TaskRequest, error) {
+func (p Proto) DecodeTaskRequest(bytes []byte) (orbital.TaskRequest, error) {
 	empty := orbital.TaskRequest{}
 	pReq := orbitalpb.TaskRequest{}
 	err := proto.Unmarshal(bytes, &pReq)
@@ -27,15 +27,15 @@ func (p *Proto) DecodeTaskRequest(bytes []byte) (orbital.TaskRequest, error) {
 	}
 	return orbital.TaskRequest{
 		TaskID:       id,
-		Type:         pReq.Type,
-		WorkingState: pReq.WorkingState,
-		ETag:         pReq.Etag,
-		Data:         pReq.Data,
+		Type:         pReq.GetType(),
+		WorkingState: pReq.GetWorkingState(),
+		ETag:         pReq.GetEtag(),
+		Data:         pReq.GetData(),
 	}, nil
 }
 
 // EncodeTaskRequest encodes a TaskRequest into Protobuf format.
-func (p *Proto) EncodeTaskRequest(request orbital.TaskRequest) ([]byte, error) {
+func (p Proto) EncodeTaskRequest(request orbital.TaskRequest) ([]byte, error) {
 	return proto.Marshal(&orbitalpb.TaskRequest{
 		TaskId:       request.TaskID.String(),
 		Type:         request.Type,
@@ -46,7 +46,7 @@ func (p *Proto) EncodeTaskRequest(request orbital.TaskRequest) ([]byte, error) {
 }
 
 // DecodeTaskResponse decodes Protobuf data into a TaskResponse.
-func (p *Proto) DecodeTaskResponse(bytes []byte) (orbital.TaskResponse, error) {
+func (p Proto) DecodeTaskResponse(bytes []byte) (orbital.TaskResponse, error) {
 	empty := orbital.TaskResponse{}
 	pRes := orbitalpb.TaskResponse{}
 	err := proto.Unmarshal(bytes, &pRes)
@@ -59,17 +59,17 @@ func (p *Proto) DecodeTaskResponse(bytes []byte) (orbital.TaskResponse, error) {
 	}
 	return orbital.TaskResponse{
 		TaskID:            id,
-		Type:              pRes.Type,
-		WorkingState:      pRes.WorkingState,
-		ETag:              pRes.Etag,
+		Type:              pRes.GetType(),
+		WorkingState:      pRes.GetWorkingState(),
+		ETag:              pRes.GetEtag(),
 		Status:            pRes.GetStatus().String(),
-		ErrorMessage:      *pRes.ErrorMessage,
-		ReconcileAfterSec: pRes.ReconcileAfterSec,
+		ErrorMessage:      pRes.GetErrorMessage(),
+		ReconcileAfterSec: pRes.GetReconcileAfterSec(),
 	}, nil
 }
 
 // EncodeTaskResponse encodes a TaskResponse into Protobuf format.
-func (p *Proto) EncodeTaskResponse(response orbital.TaskResponse) ([]byte, error) {
+func (p Proto) EncodeTaskResponse(response orbital.TaskResponse) ([]byte, error) {
 	return proto.Marshal(&orbitalpb.TaskResponse{
 		TaskId:            response.TaskID.String(),
 		Type:              response.Type,
