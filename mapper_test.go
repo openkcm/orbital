@@ -392,31 +392,16 @@ func TestDecodes(t *testing.T) {
 			assert.Equal(t, job1, result[0])
 			assert.Equal(t, job2, result[1])
 		})
-		t.Run("error for missing fields in values", func(t *testing.T) {
-			tts := []struct {
-				name        string
-				keyToDelete string
-			}{
-				{
-					name:        "missing data",
-					keyToDelete: "data",
-				},
-				{
-					name:        "missing type",
-					keyToDelete: "type",
-				},
-				{
-					name:        "missing status",
-					keyToDelete: "status",
-				},
-				{
-					name:        "missing error_message",
-					keyToDelete: "error_message",
-				},
+		t.Run("error for missing fields in values for the key", func(t *testing.T) {
+			keysToDelete := []string{
+				"data",
+				"type",
+				"status",
+				"error_message",
 			}
 
-			for _, tt := range tts {
-				t.Run(tt.name, func(t *testing.T) {
+			for _, key := range keysToDelete {
+				t.Run(key, func(t *testing.T) {
 					id := uuid.New()
 					entity := orbital.Entity{
 						Name:      query.EntityNameJobs,
@@ -433,7 +418,7 @@ func TestDecodes(t *testing.T) {
 							"created_at":    0,
 						},
 					}
-					delete(entity.Values, tt.keyToDelete)
+					delete(entity.Values, key)
 
 					_, err := orbital.Decodes[orbital.Job](entity)
 					assert.Error(t, err)
@@ -491,71 +476,26 @@ func TestDecodes(t *testing.T) {
 			assert.Equal(t, task1, result[0])
 			assert.Equal(t, task2, result[1])
 		})
-		t.Run("error for missing fields in values", func(t *testing.T) {
-			tts := []struct {
-				name        string
-				keyToDelete string
-			}{
-				{
-					name:        "missing job_id",
-					keyToDelete: "job_id",
-				},
-				{
-					name:        "missing etag",
-					keyToDelete: "etag",
-				},
-				{
-					name:        "missing target",
-					keyToDelete: "target",
-				},
-				{
-					name:        "missing status",
-					keyToDelete: "status",
-				},
-				{
-					name:        "missing working_state",
-					keyToDelete: "working_state",
-				},
-				{
-					name:        "missing type",
-					keyToDelete: "type",
-				},
-				{
-					name:        "missing data",
-					keyToDelete: "data",
-				},
-				{
-					name:        "missing last_sent_at",
-					keyToDelete: "last_sent_at",
-				},
-				{
-					name:        "missing sent_count",
-					keyToDelete: "sent_count",
-				},
-				{
-					name:        "missing max_sent_count",
-					keyToDelete: "max_sent_count",
-				},
-				{
-					name:        "missing total_sent_count",
-					keyToDelete: "total_sent_count",
-				},
-				{
-					name:        "missing total_received_count",
-					keyToDelete: "total_received_count",
-				},
-				{
-					name:        "missing reconcile_after_sec",
-					keyToDelete: "reconcile_after_sec",
-				},
-				{
-					name:        "missing error_message",
-					keyToDelete: "error_message",
-				},
+		t.Run("error for missing fields in values for the key", func(t *testing.T) {
+			keysToDelete := []string{
+				"job_id",
+				"etag",
+				"target",
+				"status",
+				"working_state",
+				"type",
+				"data",
+				"last_sent_at",
+				"sent_count",
+				"max_sent_count",
+				"total_sent_count",
+				"total_received_count",
+				"reconcile_after_sec",
+				"error_message",
 			}
 
-			for _, tt := range tts {
-				t.Run(tt.name, func(t *testing.T) {
+			for _, key := range keysToDelete {
+				t.Run(key, func(t *testing.T) {
 					id := uuid.New()
 					entity := orbital.Entity{
 						Name:      query.EntityNameTasks,
@@ -582,7 +522,7 @@ func TestDecodes(t *testing.T) {
 							"created_at":           0,
 						},
 					}
-					delete(entity.Values, tt.keyToDelete)
+					delete(entity.Values, key)
 
 					_, err := orbital.Decodes[orbital.Task](entity)
 					assert.Error(t, err)
@@ -617,19 +557,13 @@ func TestDecodes(t *testing.T) {
 			assert.Equal(t, cursor1, result[0])
 			assert.Equal(t, cursor2, result[1])
 		})
-		t.Run("error for missing fields in values", func(t *testing.T) {
-			tts := []struct {
-				name        string
-				keyToDelete string
-			}{
-				{
-					name:        "missing cursor",
-					keyToDelete: "cursor",
-				},
+		t.Run("error for missing fields in values for the key", func(t *testing.T) {
+			keysToDelete := []string{
+				"cursor",
 			}
 
-			for _, tt := range tts {
-				t.Run(tt.name, func(t *testing.T) {
+			for _, key := range keysToDelete {
+				t.Run(key, func(t *testing.T) {
 					id := uuid.New()
 					entity := orbital.Entity{
 						Name:      query.EntityNameJobCursor,
@@ -643,7 +577,7 @@ func TestDecodes(t *testing.T) {
 							"created_at": 0,
 						},
 					}
-					delete(entity.Values, tt.keyToDelete)
+					delete(entity.Values, key)
 
 					_, err := orbital.Decodes[orbital.JobCursor](entity)
 					assert.Error(t, err)
@@ -679,19 +613,13 @@ func TestDecodes(t *testing.T) {
 			assert.Equal(t, event1, result[0])
 			assert.Equal(t, event2, result[1])
 		})
-		t.Run("error for missing fields in values", func(t *testing.T) {
-			tts := []struct {
-				name        string
-				keyToDelete string
-			}{
-				{
-					name:        "missing is_notified",
-					keyToDelete: "is_notified",
-				},
+		t.Run("error for missing fields in values for the key", func(t *testing.T) {
+			keysToDelete := []string{
+				"is_notified",
 			}
 
-			for _, tt := range tts {
-				t.Run(tt.name, func(t *testing.T) {
+			for _, key := range keysToDelete {
+				t.Run(key, func(t *testing.T) {
 					id := uuid.New()
 					entity := orbital.Entity{
 						Name:      query.EntityNameJobEvent,
@@ -705,7 +633,7 @@ func TestDecodes(t *testing.T) {
 							"created_at":  0,
 						},
 					}
-					delete(entity.Values, tt.keyToDelete)
+					delete(entity.Values, key)
 
 					_, err := orbital.Decodes[orbital.JobEvent](entity)
 					assert.Error(t, err)
