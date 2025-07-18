@@ -148,7 +148,7 @@ func TestTransformToEntities(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// given
 			// making sure that all values are set in expected entities
-			if tt.expectErr != nil {
+			if tt.expectErr == nil {
 				for i := range tt.expected {
 					tt.expected[i].Values = tt.input[i]
 				}
