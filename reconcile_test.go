@@ -197,6 +197,7 @@ func TestReconcile(t *testing.T) {
 		assert.Equal(t, orbital.TaskStatusProcessing, actTask.Status)
 		assert.NotZero(t, actTask.LastSentAt)
 		assert.Equal(t, int64(1), actTask.SentCount)
+		assert.Equal(t, int64(1), actTask.TotalSentCount)
 	})
 
 	t.Run("should send the same ETag to the operator if the operator does not respond within ReconcileAfterSec", func(t *testing.T) {
@@ -259,6 +260,7 @@ func TestReconcile(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, ok)
 		assert.Equal(t, int64(2), actTask.SentCount)
+		assert.Equal(t, int64(2), actTask.TotalSentCount)
 		assert.Equal(t, expETag, actTask.ETag)
 	})
 
@@ -352,6 +354,112 @@ func TestReconcile(t *testing.T) {
 		assert.True(t, ok)
 		assert.NotEqual(t, beforeETag, actTask.ETag)
 		assert.Equal(t, orbital.TaskStatusFailed, actTask.Status)
+	})
+
+	t.Run("total_sent_count", func(t *testing.T) {
+		t.Run("should be incremented after each successful send", func(t *testing.T) {
+			// given
+			ctx := t.Context()
+			db, store := createSQLStore(t)
+			defer clearTables(t, db)
+			repo := orbital.NewRepository(store)
+
+			job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+				Status: orbital.JobStatusProcessing,
+			})
+			assert.NoError(t, err)
+
+			target := "target-1"
+			ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
+				{
+					JobID:        job.ID,
+					Type:         "task-type",
+					ETag:         "etag",
+					Status:       orbital.TaskStatusCreated,
+					Target:       target,
+					MaxSentCount: 5,
+				},
+			})
+			assert.NoError(t, err)
+			assert.Len(t, ids, 1)
+
+			initiator, err := interactortest.NewInitiator(func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
+				return orbital.TaskResponse{}, nil
+			}, nil)
+			assert.NoError(t, err)
+
+			subj, err := orbital.NewManager(repo,
+				mockTaskResolveFunc(),
+				orbital.WithTargetClients(map[string]orbital.Initiator{
+					target: initiator,
+				}),
+			)
+			assert.NoError(t, err)
+			for i := range 4 {
+				// when
+				err = orbital.Reconcile(subj)(ctx)
+
+				// then
+				assert.NoError(t, err)
+				actTask, ok, err := orbital.GetRepoTask(repo)(ctx, ids[0])
+				assert.NoError(t, err)
+				assert.True(t, ok)
+				assert.Equal(t, int64(i+1), actTask.TotalSentCount)
+			}
+		})
+		t.Run("should not be incremented after a failed send", func(t *testing.T) {
+			// given
+			ctx := t.Context()
+			db, store := createSQLStore(t)
+			defer clearTables(t, db)
+			repo := orbital.NewRepository(store)
+
+			job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+				Status: orbital.JobStatusProcessing,
+			})
+			assert.NoError(t, err)
+
+			target := "target-1"
+			ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
+				{
+					JobID:        job.ID,
+					Type:         "task-type",
+					ETag:         "etag",
+					Status:       orbital.TaskStatusCreated,
+					Target:       target,
+					MaxSentCount: 5,
+				},
+			})
+			assert.NoError(t, err)
+			assert.Len(t, ids, 1)
+
+			// simulating an error in the task request sending
+			initiator, err := interactortest.NewInitiator(func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
+				return orbital.TaskResponse{}, assert.AnError
+			}, nil)
+			assert.NoError(t, err)
+
+			subj, err := orbital.NewManager(repo,
+				mockTaskResolveFunc(),
+				orbital.WithTargetClients(map[string]orbital.Initiator{
+					target: initiator,
+				}),
+			)
+			assert.NoError(t, err)
+
+			// trying to send the task request multiple times
+			for range 4 {
+				// when
+				err = orbital.Reconcile(subj)(ctx)
+
+				// then
+				assert.NoError(t, err)
+				actTask, ok, err := orbital.GetRepoTask(repo)(ctx, ids[0])
+				assert.NoError(t, err)
+				assert.True(t, ok)
+				assert.Equal(t, int64(0), actTask.TotalSentCount)
+			}
+		})
 	})
 }
 
@@ -554,6 +662,7 @@ func TestProcessResponse(t *testing.T) {
 				if !tt.expectNoUpdate {
 					assert.Equal(t, tt.expectedTaskStatus, task.Status)
 					assert.Equal(t, tt.expectedWorkingState, task.WorkingState)
+					assert.Equal(t, int64(1), task.TotalReceivedCount)
 					if tt.expectedReconcileAfter > 0 {
 						assert.Equal(t, tt.expectedReconcileAfter, task.ReconcileAfterSec)
 					}
@@ -658,5 +767,80 @@ func TestProcessResponse(t *testing.T) {
 				}
 			})
 		}
+	})
+	t.Run("received_count", func(t *testing.T) {
+		t.Run("should be incremented for each successful receive (etag matches)", func(t *testing.T) {
+			ctx := t.Context()
+			db, store := createSQLStore(t)
+			defer clearTables(t, db)
+			repo := orbital.NewRepository(store)
+
+			etag := "etag"
+			task := orbital.Task{
+				JobID:  uuid.New(),
+				Type:   "task-type",
+				Status: orbital.TaskStatusProcessing,
+				ETag:   etag,
+			}
+			taskIDs, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{task})
+			assert.NoError(t, err)
+			assert.Len(t, taskIDs, 1)
+			taskID := taskIDs[0]
+
+			mgr, err := orbital.NewManager(repo, mockTaskResolveFunc())
+			assert.NoError(t, err)
+			for i := range 5 {
+				response := orbital.TaskResponse{
+					TaskID: taskID,
+					Type:   "task-type",
+					ETag:   etag,
+					Status: string(orbital.ResultDone),
+				}
+				processFunc := orbital.ProcessResponse(mgr)
+				err = processFunc(ctx, response)
+				assert.NoError(t, err)
+
+				task, found, err := orbital.GetRepoTask(repo)(ctx, taskID)
+				assert.NoError(t, err)
+				assert.True(t, found)
+				assert.Equal(t, int64(i+1), task.TotalReceivedCount)
+
+				etag = task.ETag
+			}
+		})
+		t.Run("should not be incremented for non-successful receive (etag doesn't match)", func(t *testing.T) {
+			ctx := t.Context()
+			db, store := createSQLStore(t)
+			defer clearTables(t, db)
+			repo := orbital.NewRepository(store)
+
+			task := orbital.Task{
+				JobID:  uuid.New(),
+				Type:   "task-type",
+				Status: orbital.TaskStatusProcessing,
+				ETag:   "etag",
+			}
+			taskIDs, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{task})
+			assert.NoError(t, err)
+			assert.Len(t, taskIDs, 1)
+			taskID := taskIDs[0]
+
+			mgr, err := orbital.NewManager(repo, mockTaskResolveFunc())
+			assert.NoError(t, err)
+			response := orbital.TaskResponse{
+				TaskID: taskID,
+				Type:   "task-type",
+				ETag:   "non-matching-etag",
+				Status: string(orbital.ResultDone),
+			}
+			processFunc := orbital.ProcessResponse(mgr)
+			err = processFunc(ctx, response)
+			assert.NoError(t, err)
+
+			task, found, err := orbital.GetRepoTask(repo)(ctx, taskID)
+			assert.NoError(t, err)
+			assert.True(t, found)
+			assert.Equal(t, int64(0), task.TotalReceivedCount)
+		})
 	})
 }

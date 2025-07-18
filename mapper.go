@@ -125,21 +125,23 @@ func Encode[T EntityTypes](entityType T) (Entity, error) {
 			UpdatedAt: obj.UpdatedAt,
 			CreatedAt: obj.CreatedAt,
 			Values: map[string]any{
-				"id":                  obj.ID,
-				"job_id":              obj.JobID,
-				"type":                obj.Type,
-				"data":                obj.Data,
-				"working_state":       obj.WorkingState,
-				"last_sent_at":        obj.LastSentAt,
-				"sent_count":          obj.SentCount,
-				"max_sent_count":      obj.MaxSentCount,
-				"reconcile_after_sec": obj.ReconcileAfterSec,
-				"etag":                obj.ETag,
-				"status":              obj.Status,
-				"target":              obj.Target,
-				"error_message":       obj.ErrorMessage,
-				"updated_at":          obj.UpdatedAt,
-				"created_at":          obj.CreatedAt,
+				"id":                   obj.ID,
+				"job_id":               obj.JobID,
+				"type":                 obj.Type,
+				"data":                 obj.Data,
+				"working_state":        obj.WorkingState,
+				"last_sent_at":         obj.LastSentAt,
+				"sent_count":           obj.SentCount,
+				"max_sent_count":       obj.MaxSentCount,
+				"total_sent_count":     obj.TotalSentCount,
+				"total_received_count": obj.TotalReceivedCount,
+				"reconcile_after_sec":  obj.ReconcileAfterSec,
+				"etag":                 obj.ETag,
+				"status":               obj.Status,
+				"target":               obj.Target,
+				"error_message":        obj.ErrorMessage,
+				"updated_at":           obj.UpdatedAt,
+				"created_at":           obj.CreatedAt,
 			},
 		}, nil
 	case JobCursor:
@@ -279,6 +281,12 @@ func decodeTask[T EntityTypes](e Entity) (T, error) {
 		return empty, err
 	}
 	if t.MaxSentCount, err = resolve[int64](vals, "max_sent_count"); err != nil {
+		return empty, err
+	}
+	if t.TotalSentCount, err = resolve[int64](vals, "total_sent_count"); err != nil {
+		return empty, err
+	}
+	if t.TotalReceivedCount, err = resolve[int64](vals, "total_received_count"); err != nil {
 		return empty, err
 	}
 	if t.ReconcileAfterSec, err = resolve[int64](vals, "reconcile_after_sec"); err != nil {
