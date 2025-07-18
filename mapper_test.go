@@ -14,70 +14,41 @@ import (
 )
 
 func TestTransformToEntities(t *testing.T) {
-	// given
-	uID := uuid.New()
-	now := clock.NowUnixNano()
-	tests := []struct {
-		name       string
-		entityName query.EntityName
-		input      []map[string]any
-		expected   []orbital.Entity
-		expectErr  error
-	}{
-		{
-			name:       "success case Job",
-			entityName: query.EntityNameJobs,
-			input: []map[string]any{
-				{
-					"id":         uID.String(),
-					"created_at": now, "updated_at": now, "state": "state",
-					"error_message": "error",
-				},
-			},
-			expected: []orbital.Entity{
-				{
-					Name:      query.EntityNameJobs,
-					ID:        uID,
-					CreatedAt: now,
-					UpdatedAt: now,
-					Values: map[string]any{
+	t.Run("success", func(t *testing.T) {
+		// given
+		uID := uuid.New()
+		now := clock.NowUnixNano()
+		tests := []struct {
+			name       string
+			entityName query.EntityName
+			input      []map[string]any
+			expected   []orbital.Entity
+			expectErr  error
+		}{
+			{
+				name:       "case Job",
+				entityName: query.EntityNameJobs,
+				input: []map[string]any{
+					{
 						"id":         uID.String(),
 						"created_at": now, "updated_at": now, "state": "state",
 						"error_message": "error",
 					},
 				},
-			},
-		},
-		{
-			name:       "success case Task",
-			entityName: query.EntityNameTasks,
-			input: []map[string]any{
-				{
-					"id":         uID.String(),
-					"created_at": now, "updated_at": now,
-					"job_id":               "job_id",
-					"type":                 "type",
-					"data":                 []byte("data"),
-					"working_state":        []byte("working_state"),
-					"last_sent_at":         "last_sent_at",
-					"sent_count":           "sent_count",
-					"max_sent_count":       "max_sent_count",
-					"total_sent_count":     "total_sent_count",
-					"total_received_count": 1,
-					"reconcile_after_sec":  2,
-					"etag":                 "etag",
-					"status":               "status",
-					"target":               "target",
-					"error_message":        "error_message",
+				expected: []orbital.Entity{
+					{
+						Name:      query.EntityNameJobs,
+						ID:        uID,
+						CreatedAt: now,
+						UpdatedAt: now,
+					},
 				},
 			},
-			expected: []orbital.Entity{
-				{
-					Name:      query.EntityNameTasks,
-					ID:        uID,
-					CreatedAt: now,
-					UpdatedAt: now,
-					Values: map[string]any{
+			{
+				name:       "case Task",
+				entityName: query.EntityNameTasks,
+				input: []map[string]any{
+					{
 						"id":         uID.String(),
 						"created_at": now, "updated_at": now,
 						"job_id":               "job_id",
@@ -96,95 +67,125 @@ func TestTransformToEntities(t *testing.T) {
 						"error_message":        "error_message",
 					},
 				},
-			},
-		},
-		{
-			name:       "success case JobCursor",
-			entityName: query.EntityNameJobCursor,
-			input: []map[string]any{
-				{
-					"id":         uID.String(),
-					"created_at": now, "updated_at": now, "job_id": "job_id",
+				expected: []orbital.Entity{
+					{
+						Name:      query.EntityNameTasks,
+						ID:        uID,
+						CreatedAt: now,
+						UpdatedAt: now,
+					},
 				},
 			},
-			expected: []orbital.Entity{
-				{
-					Name:      query.EntityNameJobCursor,
-					ID:        uID,
-					CreatedAt: now,
-					UpdatedAt: now,
-					Values: map[string]any{
+			{
+				name:       "case JobCursor",
+				entityName: query.EntityNameJobCursor,
+				input: []map[string]any{
+					{
 						"id":         uID.String(),
 						"created_at": now, "updated_at": now, "job_id": "job_id",
 					},
 				},
-			},
-		},
-		{
-			name:       "success case JobEvent",
-			entityName: query.EntityNameJobEvent,
-			input: []map[string]any{
-				{
-					"id":         uID.String(),
-					"created_at": now, "updated_at": now, "is_notified": true,
+				expected: []orbital.Entity{
+					{
+						Name:      query.EntityNameJobCursor,
+						ID:        uID,
+						CreatedAt: now,
+						UpdatedAt: now,
+					},
 				},
 			},
-			expected: []orbital.Entity{
-				{
-					Name:      query.EntityNameJobEvent,
-					ID:        uID,
-					CreatedAt: now,
-					UpdatedAt: now,
-					Values: map[string]any{
+			{
+				name:       "case JobEvent",
+				entityName: query.EntityNameJobEvent,
+				input: []map[string]any{
+					{
 						"id":         uID.String(),
 						"created_at": now, "updated_at": now, "is_notified": true,
 					},
 				},
-			},
-		},
-		{
-			name:       "error case JobCursor for a mandatory field filed missing",
-			entityName: query.EntityNameJobCursor,
-			input: []map[string]any{
-				{
-					"id":         uID.String(),
-					"updated_at": now, "job_id": "job_id",
+				expected: []orbital.Entity{
+					{
+						Name:      query.EntityNameJobEvent,
+						ID:        uID,
+						CreatedAt: now,
+						UpdatedAt: now,
+					},
 				},
 			},
-			expected:  nil,
-			expectErr: orbital.ErrMandatoryFields,
-		},
-		{
-			name:       "error case if entityName is unknown",
-			entityName: "unknown_entity",
-			input: []map[string]any{
-				{"error": true},
-			},
-			expected:  nil,
-			expectErr: orbital.ErrInvalidEntityType,
-		},
-		{
-			name:       "error case if input uuid is not valid",
-			entityName: query.EntityNameJobCursor,
-			input: []map[string]any{
-				{
-					"id": "wrong-uuid",
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// given
+				// making sure that all values are set in expected entities
+				for i := range tt.expected {
+					tt.expected[i].Values = tt.input[i]
+				}
+
+				// when
+				result, err := orbital.TransformToEntities(tt.entityName, tt.input...)
+
+				// then
+				assert.ErrorIs(t, err, tt.expectErr)
+				assert.Equal(t, tt.expected, result)
+			})
+		}
+	})
+	t.Run("error case", func(t *testing.T) {
+		// given
+		uID := uuid.New()
+		now := clock.NowUnixNano()
+		tests := []struct {
+			name       string
+			entityName query.EntityName
+			input      []map[string]any
+			expected   []orbital.Entity
+			expectErr  error
+		}{
+			{
+				name:       "JobCursor for a mandatory field filed missing",
+				entityName: query.EntityNameJobCursor,
+				input: []map[string]any{
+					{
+						"id":         uID.String(),
+						"updated_at": now, "job_id": "job_id",
+					},
 				},
+				expected:  nil,
+				expectErr: orbital.ErrMandatoryFields,
 			},
-			expectErr: orbital.ErrMandatoryFields,
-		},
-	}
+			{
+				name:       "if entityName is unknown",
+				entityName: "unknown_entity",
+				input: []map[string]any{
+					{"error": true},
+				},
+				expected:  nil,
+				expectErr: orbital.ErrInvalidEntityType,
+			},
+			{
+				name:       "if input uuid is not valid",
+				entityName: query.EntityNameJobCursor,
+				input: []map[string]any{
+					{
+						"id": "wrong-uuid",
+					},
+				},
+				expectErr: orbital.ErrMandatoryFields,
+			},
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// when
-			result, err := orbital.TransformToEntities(tt.entityName, tt.input...)
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// when
+				result, err := orbital.TransformToEntities(tt.entityName, tt.input...)
 
-			// then
-			assert.ErrorIs(t, err, tt.expectErr)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
+				// then
+				assert.ErrorIs(t, err, tt.expectErr)
+				assert.Equal(t, tt.expected, result)
+			})
+		}
+	})
 }
 
 func TestInit(t *testing.T) {
