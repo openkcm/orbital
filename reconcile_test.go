@@ -383,7 +383,7 @@ func TestReconcile(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Len(t, ids, 1)
 
-			initiator, err := interactortest.NewInitiator(func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
+			initiator, err := interactortest.NewInitiator(func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
 				return orbital.TaskResponse{}, nil
 			}, nil)
 			assert.NoError(t, err)
@@ -434,7 +434,7 @@ func TestReconcile(t *testing.T) {
 			assert.Len(t, ids, 1)
 
 			// simulating an error in the task request sending
-			initiator, err := interactortest.NewInitiator(func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
+			initiator, err := interactortest.NewInitiator(func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
 				return orbital.TaskResponse{}, assert.AnError
 			}, nil)
 			assert.NoError(t, err)
