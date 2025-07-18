@@ -20,21 +20,23 @@ type TaskStatus string
 
 // Task is a trackable unit derived from the Job.
 type Task struct {
-	ID                uuid.UUID
-	JobID             uuid.UUID
-	Type              string
-	Data              []byte
-	WorkingState      []byte
-	LastSentAt        int64
-	SentCount         int64
-	MaxSentCount      int64
-	ReconcileAfterSec int64
-	ETag              string
-	Status            TaskStatus
-	Target            string
-	ErrorMessage      string
-	UpdatedAt         int64
-	CreatedAt         int64
+	ID                 uuid.UUID
+	JobID              uuid.UUID
+	Type               string
+	Data               []byte
+	WorkingState       []byte
+	LastSentAt         int64
+	SentCount          int64
+	MaxSentCount       int64
+	TotalSentCount     int64
+	TotalReceivedCount int64
+	ReconcileAfterSec  int64
+	ETag               string
+	Status             TaskStatus
+	Target             string
+	ErrorMessage       string
+	UpdatedAt          int64
+	CreatedAt          int64
 }
 
 // TaskInfo represents the result of resolving a task.

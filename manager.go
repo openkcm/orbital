@@ -529,6 +529,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 
 	task.LastSentAt = clock.NowUnixNano()
 	task.SentCount++
+	task.TotalSentCount++
 	task.Status = TaskStatusProcessing
 
 	req := TaskRequest{
@@ -602,6 +603,7 @@ func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error 
 		task.ETag = uuid.NewString() // Generate a new ETag for the updated task
 		task.Status = TaskStatus(resp.Status)
 		task.ReconcileAfterSec = resp.ReconcileAfterSec
+		task.TotalReceivedCount++
 		if task.Status == TaskStatusFailed {
 			task.ErrorMessage = resp.ErrorMessage
 		}

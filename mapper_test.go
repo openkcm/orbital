@@ -14,9 +14,9 @@ import (
 )
 
 func TestTransformToEntities(t *testing.T) {
-	// given
 	uID := uuid.New()
 	now := clock.NowUnixNano()
+	// given
 	tests := []struct {
 		name       string
 		entityName query.EntityName
@@ -40,11 +40,6 @@ func TestTransformToEntities(t *testing.T) {
 					ID:        uID,
 					CreatedAt: now,
 					UpdatedAt: now,
-					Values: map[string]any{
-						"id":         uID.String(),
-						"created_at": now, "updated_at": now, "state": "state",
-						"error_message": "error",
-					},
 				},
 			},
 		},
@@ -54,7 +49,21 @@ func TestTransformToEntities(t *testing.T) {
 			input: []map[string]any{
 				{
 					"id":         uID.String(),
-					"created_at": now, "updated_at": now, "job_id": "job_id",
+					"created_at": now, "updated_at": now,
+					"job_id":               "job_id",
+					"type":                 "type",
+					"data":                 []byte("data"),
+					"working_state":        []byte("working_state"),
+					"last_sent_at":         "last_sent_at",
+					"sent_count":           "sent_count",
+					"max_sent_count":       "max_sent_count",
+					"total_sent_count":     "total_sent_count",
+					"total_received_count": 1,
+					"reconcile_after_sec":  2,
+					"etag":                 "etag",
+					"status":               "status",
+					"target":               "target",
+					"error_message":        "error_message",
 				},
 			},
 			expected: []orbital.Entity{
@@ -63,10 +72,6 @@ func TestTransformToEntities(t *testing.T) {
 					ID:        uID,
 					CreatedAt: now,
 					UpdatedAt: now,
-					Values: map[string]any{
-						"id":         uID.String(),
-						"created_at": now, "updated_at": now, "job_id": "job_id",
-					},
 				},
 			},
 		},
@@ -85,10 +90,6 @@ func TestTransformToEntities(t *testing.T) {
 					ID:        uID,
 					CreatedAt: now,
 					UpdatedAt: now,
-					Values: map[string]any{
-						"id":         uID.String(),
-						"created_at": now, "updated_at": now, "job_id": "job_id",
-					},
 				},
 			},
 		},
@@ -107,10 +108,6 @@ func TestTransformToEntities(t *testing.T) {
 					ID:        uID,
 					CreatedAt: now,
 					UpdatedAt: now,
-					Values: map[string]any{
-						"id":         uID.String(),
-						"created_at": now, "updated_at": now, "is_notified": true,
-					},
 				},
 			},
 		},
@@ -149,6 +146,14 @@ func TestTransformToEntities(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// given
+			// making sure that all values are set in expected entities
+			if tt.expectErr == nil {
+				for i := range tt.expected {
+					tt.expected[i].Values = tt.input[i]
+				}
+			}
+
 			// when
 			result, err := orbital.TransformToEntities(tt.entityName, tt.input...)
 
@@ -262,21 +267,23 @@ func TestEncodes(t *testing.T) {
 				CreatedAt: unixTime,
 				UpdatedAt: unixTime,
 				Values: map[string]any{
-					"id":                  uID,
-					"created_at":          unixTime,
-					"updated_at":          unixTime,
-					"working_state":       []byte(nil),
-					"data":                []byte(nil),
-					"type":                "",
-					"etag":                "",
-					"job_id":              uuid.Nil,
-					"last_sent_at":        int64(0),
-					"reconcile_after_sec": int64(0),
-					"sent_count":          int64(0),
-					"max_sent_count":      int64(0),
-					"status":              orbital.TaskStatus(""),
-					"target":              "",
-					"error_message":       "foo-error",
+					"id":                   uID,
+					"created_at":           unixTime,
+					"updated_at":           unixTime,
+					"working_state":        []byte(nil),
+					"data":                 []byte(nil),
+					"type":                 "",
+					"etag":                 "",
+					"job_id":               uuid.Nil,
+					"last_sent_at":         int64(0),
+					"reconcile_after_sec":  int64(0),
+					"sent_count":           int64(0),
+					"total_sent_count":     int64(0),
+					"total_received_count": int64(0),
+					"max_sent_count":       int64(0),
+					"status":               orbital.TaskStatus(""),
+					"target":               "",
+					"error_message":        "foo-error",
 				},
 			},
 		}
@@ -385,31 +392,16 @@ func TestDecodes(t *testing.T) {
 			assert.Equal(t, job1, result[0])
 			assert.Equal(t, job2, result[1])
 		})
-		t.Run("error for missing fields in values", func(t *testing.T) {
-			tts := []struct {
-				name        string
-				keyToDelete string
-			}{
-				{
-					name:        "missing data",
-					keyToDelete: "data",
-				},
-				{
-					name:        "missing type",
-					keyToDelete: "type",
-				},
-				{
-					name:        "missing status",
-					keyToDelete: "status",
-				},
-				{
-					name:        "missing error_message",
-					keyToDelete: "error_message",
-				},
+		t.Run("error for missing fields in values for the key", func(t *testing.T) {
+			keysToDelete := []string{
+				"data",
+				"type",
+				"status",
+				"error_message",
 			}
 
-			for _, tt := range tts {
-				t.Run(tt.name, func(t *testing.T) {
+			for _, key := range keysToDelete {
+				t.Run(key, func(t *testing.T) {
 					id := uuid.New()
 					entity := orbital.Entity{
 						Name:      query.EntityNameJobs,
@@ -426,7 +418,7 @@ func TestDecodes(t *testing.T) {
 							"created_at":    0,
 						},
 					}
-					delete(entity.Values, tt.keyToDelete)
+					delete(entity.Values, key)
 
 					_, err := orbital.Decodes[orbital.Job](entity)
 					assert.Error(t, err)
@@ -438,35 +430,39 @@ func TestDecodes(t *testing.T) {
 		t.Run("success", func(t *testing.T) {
 			// given
 			task1 := orbital.Task{
-				ID:                uuid.New(),
-				JobID:             uuid.New(),
-				Type:              "type-1",
-				WorkingState:      []byte("working-state-1"),
-				LastSentAt:        clock.NowUnixNano(),
-				SentCount:         2,
-				MaxSentCount:      5,
-				ReconcileAfterSec: clock.NowUnixNano(),
-				ETag:              "etag-1",
-				Status:            orbital.TaskStatusCreated,
-				Target:            "target-1",
-				ErrorMessage:      "error-message-1",
-				UpdatedAt:         clock.NowUnixNano(),
-				CreatedAt:         clock.NowUnixNano(),
+				ID:                 uuid.New(),
+				JobID:              uuid.New(),
+				Type:               "type-1",
+				WorkingState:       []byte("working-state-1"),
+				LastSentAt:         clock.NowUnixNano(),
+				SentCount:          2,
+				MaxSentCount:       5,
+				TotalSentCount:     4,
+				TotalReceivedCount: 6,
+				ReconcileAfterSec:  clock.NowUnixNano(),
+				ETag:               "etag-1",
+				Status:             orbital.TaskStatusCreated,
+				Target:             "target-1",
+				ErrorMessage:       "error-message-1",
+				UpdatedAt:          clock.NowUnixNano(),
+				CreatedAt:          clock.NowUnixNano(),
 			}
 			task2 := orbital.Task{
-				ID:                uuid.New(),
-				JobID:             uuid.New(),
-				Type:              "type-2",
-				LastSentAt:        clock.NowUnixNano(),
-				SentCount:         2,
-				MaxSentCount:      5,
-				ReconcileAfterSec: clock.NowUnixNano(),
-				ETag:              "etag-2",
-				Status:            orbital.TaskStatusCreated,
-				Target:            "target-2",
-				ErrorMessage:      "error-message-2",
-				UpdatedAt:         clock.NowUnixNano(),
-				CreatedAt:         clock.NowUnixNano(),
+				ID:                 uuid.New(),
+				JobID:              uuid.New(),
+				Type:               "type-2",
+				LastSentAt:         clock.NowUnixNano(),
+				SentCount:          2,
+				MaxSentCount:       5,
+				TotalSentCount:     1,
+				TotalReceivedCount: 2,
+				ReconcileAfterSec:  clock.NowUnixNano(),
+				ETag:               "etag-2",
+				Status:             orbital.TaskStatusCreated,
+				Target:             "target-2",
+				ErrorMessage:       "error-message-2",
+				UpdatedAt:          clock.NowUnixNano(),
+				CreatedAt:          clock.NowUnixNano(),
 			}
 
 			in, _ := orbital.Encodes(task1, task2)
@@ -480,63 +476,26 @@ func TestDecodes(t *testing.T) {
 			assert.Equal(t, task1, result[0])
 			assert.Equal(t, task2, result[1])
 		})
-		t.Run("error for missing fields in values", func(t *testing.T) {
-			tts := []struct {
-				name        string
-				keyToDelete string
-			}{
-				{
-					name:        "missing job_id",
-					keyToDelete: "job_id",
-				},
-				{
-					name:        "missing etag",
-					keyToDelete: "etag",
-				},
-				{
-					name:        "missing target",
-					keyToDelete: "target",
-				},
-				{
-					name:        "missing status",
-					keyToDelete: "status",
-				},
-				{
-					name:        "missing working_state",
-					keyToDelete: "working_state",
-				},
-				{
-					name:        "missing type",
-					keyToDelete: "type",
-				},
-				{
-					name:        "missing data",
-					keyToDelete: "data",
-				},
-				{
-					name:        "missing last_sent_at",
-					keyToDelete: "last_sent_at",
-				},
-				{
-					name:        "missing sent_count",
-					keyToDelete: "sent_count",
-				},
-				{
-					name:        "missing max_sent_count",
-					keyToDelete: "max_sent_count",
-				},
-				{
-					name:        "missing reconcile_after_sec",
-					keyToDelete: "reconcile_after_sec",
-				},
-				{
-					name:        "missing error_message",
-					keyToDelete: "error_message",
-				},
+		t.Run("error for missing fields in values for the key", func(t *testing.T) {
+			keysToDelete := []string{
+				"job_id",
+				"etag",
+				"target",
+				"status",
+				"working_state",
+				"type",
+				"data",
+				"last_sent_at",
+				"sent_count",
+				"max_sent_count",
+				"total_sent_count",
+				"total_received_count",
+				"reconcile_after_sec",
+				"error_message",
 			}
 
-			for _, tt := range tts {
-				t.Run(tt.name, func(t *testing.T) {
+			for _, key := range keysToDelete {
+				t.Run(key, func(t *testing.T) {
 					id := uuid.New()
 					entity := orbital.Entity{
 						Name:      query.EntityNameTasks,
@@ -544,24 +503,26 @@ func TestDecodes(t *testing.T) {
 						CreatedAt: 0,
 						UpdatedAt: 0,
 						Values: map[string]any{
-							"id":                  id,
-							"job_id":              id,
-							"type":                "type",
-							"data":                []byte("data"),
-							"working_state":       []byte("workingState"),
-							"last_sent_at":        int64(0),
-							"sent_count":          int64(0),
-							"max_sent_count":      int64(0),
-							"reconcile_after_sec": int64(0),
-							"etag":                "etag",
-							"status":              "status",
-							"target":              "target",
-							"error_message":       "error",
-							"updated_at":          0,
-							"created_at":          0,
+							"id":                   id,
+							"job_id":               id,
+							"type":                 "type",
+							"data":                 []byte("data"),
+							"working_state":        []byte("workingState"),
+							"last_sent_at":         int64(0),
+							"sent_count":           int64(0),
+							"max_sent_count":       int64(0),
+							"total_received_count": int64(0),
+							"total_sent_count":     int64(0),
+							"reconcile_after_sec":  int64(0),
+							"etag":                 "etag",
+							"status":               "status",
+							"target":               "target",
+							"error_message":        "error",
+							"updated_at":           0,
+							"created_at":           0,
 						},
 					}
-					delete(entity.Values, tt.keyToDelete)
+					delete(entity.Values, key)
 
 					_, err := orbital.Decodes[orbital.Task](entity)
 					assert.Error(t, err)
@@ -596,19 +557,13 @@ func TestDecodes(t *testing.T) {
 			assert.Equal(t, cursor1, result[0])
 			assert.Equal(t, cursor2, result[1])
 		})
-		t.Run("error for missing fields in values", func(t *testing.T) {
-			tts := []struct {
-				name        string
-				keyToDelete string
-			}{
-				{
-					name:        "missing cursor",
-					keyToDelete: "cursor",
-				},
+		t.Run("error for missing fields in values for the key", func(t *testing.T) {
+			keysToDelete := []string{
+				"cursor",
 			}
 
-			for _, tt := range tts {
-				t.Run(tt.name, func(t *testing.T) {
+			for _, key := range keysToDelete {
+				t.Run(key, func(t *testing.T) {
 					id := uuid.New()
 					entity := orbital.Entity{
 						Name:      query.EntityNameJobCursor,
@@ -622,7 +577,7 @@ func TestDecodes(t *testing.T) {
 							"created_at": 0,
 						},
 					}
-					delete(entity.Values, tt.keyToDelete)
+					delete(entity.Values, key)
 
 					_, err := orbital.Decodes[orbital.JobCursor](entity)
 					assert.Error(t, err)
@@ -658,19 +613,13 @@ func TestDecodes(t *testing.T) {
 			assert.Equal(t, event1, result[0])
 			assert.Equal(t, event2, result[1])
 		})
-		t.Run("error for missing fields in values", func(t *testing.T) {
-			tts := []struct {
-				name        string
-				keyToDelete string
-			}{
-				{
-					name:        "missing is_notified",
-					keyToDelete: "is_notified",
-				},
+		t.Run("error for missing fields in values for the key", func(t *testing.T) {
+			keysToDelete := []string{
+				"is_notified",
 			}
 
-			for _, tt := range tts {
-				t.Run(tt.name, func(t *testing.T) {
+			for _, key := range keysToDelete {
+				t.Run(key, func(t *testing.T) {
 					id := uuid.New()
 					entity := orbital.Entity{
 						Name:      query.EntityNameJobEvent,
@@ -684,7 +633,7 @@ func TestDecodes(t *testing.T) {
 							"created_at":  0,
 						},
 					}
-					delete(entity.Values, tt.keyToDelete)
+					delete(entity.Values, key)
 
 					_, err := orbital.Decodes[orbital.JobEvent](entity)
 					assert.Error(t, err)

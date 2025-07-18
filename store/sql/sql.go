@@ -47,6 +47,8 @@ func New(ctx context.Context, db *sql.DB) (*SQL, error) {
    			last_sent_at BIGINT,
    			sent_count BIGINT,
 			max_sent_count BIGINT,
+			total_sent_count BIGINT,
+			total_received_count BIGINT,
    			reconcile_after_sec BIGINT,
    			etag VARCHAR(100),
    			status VARCHAR(100) NOT NULL,
