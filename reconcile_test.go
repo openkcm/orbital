@@ -239,9 +239,11 @@ func TestReconcile(t *testing.T) {
 
 		subj, err := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
-			orbital.WithTargetClients(map[string]orbital.Initiator{
-				expTarget: initiator,
-			}),
+			orbital.WithTargetClients(
+				map[string]orbital.Initiator{
+					expTarget: initiator,
+				},
+			),
 		)
 		assert.NoError(t, err)
 
