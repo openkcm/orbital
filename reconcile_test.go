@@ -155,15 +155,14 @@ func TestReconcile(t *testing.T) {
 		expETag := "etag"
 		ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
 			{
-				JobID:        job.ID,
-				Type:         expType,
-				Data:         expData,
-				WorkingState: expWorkingState,
-				ETag:         expETag,
-				Status:       orbital.TaskStatusCreated,
-				Target:       expTarget,
-				LastSentAt:   0,
-				MaxSentCount: 1,
+				JobID:            job.ID,
+				Type:             expType,
+				Data:             expData,
+				WorkingState:     expWorkingState,
+				ETag:             expETag,
+				Status:           orbital.TaskStatusCreated,
+				Target:           expTarget,
+				LastReconciledAt: 0,
 			},
 		})
 		assert.NoError(t, err)
@@ -196,8 +195,8 @@ func TestReconcile(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, ok)
 		assert.Equal(t, orbital.TaskStatusProcessing, actTask.Status)
-		assert.NotZero(t, actTask.LastSentAt)
-		assert.Equal(t, int64(1), actTask.SentCount)
+		assert.NotZero(t, actTask.LastReconciledAt)
+		assert.Equal(t, int64(1), actTask.ReconcileCount)
 		assert.Equal(t, int64(1), actTask.TotalSentCount)
 		assert.Equal(t, int64(20), actTask.ReconcileAfterSec)
 	})
@@ -237,15 +236,14 @@ func TestReconcile(t *testing.T) {
 				taskSentCount := int64(8) // simulate that the task was sent 8 times before
 				ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
 					{
-						JobID:        job.ID,
-						Type:         "type",
-						Data:         []byte(""),
-						ETag:         "etag",
-						Status:       orbital.TaskStatusCreated,
-						Target:       expTarget,
-						SentCount:    taskSentCount,
-						LastSentAt:   0,
-						MaxSentCount: 10,
+						JobID:            job.ID,
+						Type:             "type",
+						Data:             []byte(""),
+						ETag:             "etag",
+						Status:           orbital.TaskStatusCreated,
+						Target:           expTarget,
+						ReconcileCount:   taskSentCount,
+						LastReconciledAt: 0,
 					},
 				})
 				assert.NoError(t, err)
@@ -301,15 +299,14 @@ func TestReconcile(t *testing.T) {
 		expTarget := "target-1"
 		ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
 			{
-				JobID:        job.ID,
-				Type:         "type",
-				Data:         []byte("task-data"),
-				WorkingState: []byte("state"),
-				Status:       orbital.TaskStatusCreated,
-				Target:       "target-1",
-				ETag:         expETag,
-				LastSentAt:   0,
-				MaxSentCount: 2,
+				JobID:            job.ID,
+				Type:             "type",
+				Data:             []byte("task-data"),
+				WorkingState:     []byte("state"),
+				Status:           orbital.TaskStatusCreated,
+				Target:           "target-1",
+				ETag:             expETag,
+				LastReconciledAt: 0,
 			},
 		})
 		assert.NoError(t, err)
@@ -344,7 +341,7 @@ func TestReconcile(t *testing.T) {
 		actTask, ok, err := orbital.GetRepoTask(repo)(ctx, ids[0])
 		assert.NoError(t, err)
 		assert.True(t, ok)
-		assert.Equal(t, int64(2), actTask.SentCount)
+		assert.Equal(t, int64(2), actTask.ReconcileCount)
 		assert.Equal(t, int64(2), actTask.TotalSentCount)
 		assert.Equal(t, expETag, actTask.ETag)
 	})
@@ -364,10 +361,9 @@ func TestReconcile(t *testing.T) {
 		target := "target"
 		ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
 			{
-				JobID:        job.ID,
-				Status:       orbital.TaskStatusCreated,
-				Target:       target,
-				MaxSentCount: 1,
+				JobID:  job.ID,
+				Status: orbital.TaskStatusCreated,
+				Target: target,
 			},
 		})
 		assert.NoError(t, err)
@@ -397,8 +393,8 @@ func TestReconcile(t *testing.T) {
 		actTask, ok, err := orbital.GetRepoTask(repo)(ctx, ids[0])
 		assert.NoError(t, err)
 		assert.True(t, ok)
-		assert.Greater(t, actTask.LastSentAt, int64(1))
-		assert.Equal(t, int64(1), actTask.SentCount)
+		assert.Greater(t, actTask.LastReconciledAt, int64(1))
+		assert.Equal(t, int64(1), actTask.ReconcileCount)
 		assert.Equal(t, orbital.TaskStatusProcessing, actTask.Status)
 		expReconcileAfterSec := retry.ExponentialBackoffInterval(subj.Config.BackoffBaseIntervalSec,
 			subj.Config.BackoffMaxIntervalSec, 1)
@@ -421,10 +417,9 @@ func TestReconcile(t *testing.T) {
 		beforeETag := uuid.NewString()
 		ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
 			{
-				JobID:        job.ID,
-				Status:       orbital.TaskStatusCreated,
-				MaxSentCount: 0,
-				ETag:         beforeETag,
+				JobID:  job.ID,
+				Status: orbital.TaskStatusCreated,
+				ETag:   beforeETag,
 			},
 		})
 		assert.NoError(t, err)
@@ -434,6 +429,8 @@ func TestReconcile(t *testing.T) {
 			mockTaskResolveFunc(),
 		)
 		assert.NoError(t, err)
+
+		subj.Config.MaxReconcileCount = 0 // set max sent count to 1 to simulate the case
 
 		// when
 		err = orbital.Reconcile(subj)(ctx)
@@ -485,12 +482,11 @@ func TestReconcile(t *testing.T) {
 				target := "target-1"
 				ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
 					{
-						JobID:        job.ID,
-						Type:         "task-type",
-						ETag:         "etag",
-						Status:       orbital.TaskStatusCreated,
-						Target:       target,
-						MaxSentCount: 5,
+						JobID:  job.ID,
+						Type:   "task-type",
+						ETag:   "etag",
+						Status: orbital.TaskStatusCreated,
+						Target: target,
 					},
 				})
 				assert.NoError(t, err)

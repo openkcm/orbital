@@ -84,6 +84,8 @@ type (
 		BackoffBaseIntervalSec int64
 		// BackoffMaxIntervalSec is the maximum interval for exponential backoff in seconds.
 		BackoffMaxIntervalSec int64
+		// MaxReconcileCount is the maximum number of times a task can be reconciled.
+		MaxReconcileCount int64
 	}
 )
 
@@ -97,6 +99,7 @@ const (
 	defReconcileInterval   = 5 * time.Second
 	defBackoffBaseInterval = 10
 	defBackoffMaxInterval  = 10240
+	defMaxReconcileCount   = 10
 )
 
 var (
@@ -139,6 +142,7 @@ func NewManager(repo *Repository, taskResolver TaskResolveFunc, optFuncs ...Mana
 			TaskLimitNum:           defTaskLimitNum,
 			BackoffBaseIntervalSec: defBackoffBaseInterval,
 			BackoffMaxIntervalSec:  defBackoffMaxInterval,
+			MaxReconcileCount:      defMaxReconcileCount,
 		},
 		jobConfirmFunc: func(_ context.Context, _ Job) (JobConfirmResult, error) {
 			return JobConfirmResult{
@@ -521,7 +525,7 @@ func (m *Manager) handleTasks(ctx context.Context, repo Repository, tasks []Task
 func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repository, task Task) {
 	defer wg.Done()
 
-	if task.SentCount >= task.MaxSentCount {
+	if task.ReconcileCount >= m.Config.MaxReconcileCount {
 		task.ETag = uuid.NewString()
 		task.Status = TaskStatusFailed
 		repo.updateTask(ctx, task) //nolint:errcheck
@@ -534,13 +538,13 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 		return
 	}
 
-	task.LastSentAt = clock.NowUnixNano()
-	task.SentCount++
+	task.LastReconciledAt = clock.NowUnixNano()
+	task.ReconcileCount++
 	task.Status = TaskStatusProcessing
 	task.ReconcileAfterSec = retry.ExponentialBackoffInterval(
 		m.Config.BackoffBaseIntervalSec,
 		m.Config.BackoffMaxIntervalSec,
-		task.SentCount,
+		task.ReconcileCount,
 	)
 
 	req := TaskRequest{

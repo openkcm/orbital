@@ -362,19 +362,17 @@ func TestCreateTasks(t *testing.T) {
 			{
 				name: "with empty fields",
 				info: orbital.TaskInfo{
-					Target:       "",
-					Data:         []byte{},
-					Type:         "",
-					MaxSentCount: 0,
+					Target: "",
+					Data:   []byte{},
+					Type:   "",
 				},
 			},
 			{
 				name: "with all fields set",
 				info: orbital.TaskInfo{
-					Target:       "target",
-					Data:         []byte("data"),
-					Type:         "type",
-					MaxSentCount: 1,
+					Target: "target",
+					Data:   []byte("data"),
+					Type:   "type",
 				},
 			},
 		}
@@ -417,11 +415,6 @@ func TestCreateTasks(t *testing.T) {
 				assert.Equal(t, job.ID, actTasks[0].JobID)
 				assert.Equal(t, tc.info.Target, actTasks[0].Target)
 				assert.Equal(t, tc.info.Data, actTasks[0].Data)
-				if tc.info.MaxSentCount == 0 {
-					assert.Equal(t, orbital.DefTaskMaxSentCount, actTasks[0].MaxSentCount)
-				} else {
-					assert.Equal(t, tc.info.MaxSentCount, actTasks[0].MaxSentCount)
-				}
 			})
 		}
 	})
@@ -798,8 +791,8 @@ func TestListTasks(t *testing.T) {
 			Type:              "type",
 			Data:              []byte("data"),
 			WorkingState:      []byte("state"),
-			LastSentAt:        1,
-			SentCount:         2,
+			LastReconciledAt:  1,
+			ReconcileCount:    2,
 			ReconcileAfterSec: 3,
 			ETag:              "etag",
 			Status:            orbital.TaskStatusCreated,
@@ -829,8 +822,8 @@ func TestListTasks(t *testing.T) {
 		assert.Equal(t, taskToCreate.Type, actTasks[0].Type)
 		assert.Equal(t, taskToCreate.Status, actTasks[0].Status)
 		assert.Equal(t, taskToCreate.WorkingState, actTasks[0].WorkingState)
-		assert.Equal(t, taskToCreate.LastSentAt, actTasks[0].LastSentAt)
-		assert.Equal(t, taskToCreate.SentCount, actTasks[0].SentCount)
+		assert.Equal(t, taskToCreate.LastReconciledAt, actTasks[0].LastReconciledAt)
+		assert.Equal(t, taskToCreate.ReconcileCount, actTasks[0].ReconcileCount)
 		assert.Equal(t, taskToCreate.ReconcileAfterSec, actTasks[0].ReconcileAfterSec)
 		assert.Equal(t, taskToCreate.ETag, actTasks[0].ETag)
 	})

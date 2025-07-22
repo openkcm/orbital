@@ -282,14 +282,14 @@ func TestRepoCreateTasks(t *testing.T) {
 	tasks := make([]orbital.Task, 0, 3)
 	for index := range 3 {
 		tasks = append(tasks, orbital.Task{
-			JobID:        jobID,
-			Type:         taskType,
-			WorkingState: fmt.Append([]byte("working-state-"), index),
-			SentCount:    int64(index),
-			ETag:         fmt.Sprintf("etag-%v", index),
-			Status:       orbital.TaskStatusCreated,
-			Target:       fmt.Sprintf("target-%v", index),
-			ErrorMessage: fmt.Sprintf("error-message-%v", index),
+			JobID:          jobID,
+			Type:           taskType,
+			WorkingState:   fmt.Append([]byte("working-state-"), index),
+			ReconcileCount: int64(index),
+			ETag:           fmt.Sprintf("etag-%v", index),
+			Status:         orbital.TaskStatusCreated,
+			Target:         fmt.Sprintf("target-%v", index),
+			ErrorMessage:   fmt.Sprintf("error-message-%v", index),
 		})
 	}
 
@@ -304,7 +304,7 @@ func TestRepoCreateTasks(t *testing.T) {
 		assert.Equal(t, jobID, fetchedTask.JobID)
 		assert.Equal(t, taskType, fetchedTask.Type)
 		assert.Equal(t, fmt.Sprintf("working-state-%v", index), string(fetchedTask.WorkingState))
-		assert.Equal(t, int64(index), fetchedTask.SentCount)
+		assert.Equal(t, int64(index), fetchedTask.ReconcileCount)
 		assert.Equal(t, fmt.Sprintf("etag-%v", index), fetchedTask.ETag)
 		assert.Equal(t, fmt.Sprintf("error-message-%v", index), fetchedTask.ErrorMessage)
 		assert.Equal(t, orbital.TaskStatusCreated, fetchedTask.Status)
@@ -322,31 +322,31 @@ func TestRepoListTasks(t *testing.T) {
 	jobID3 := uuid.New()
 	tasks := []orbital.Task{
 		{
-			JobID:        jobID1,
-			CreatedAt:    1,
-			WorkingState: []byte("working-state-1"),
-			SentCount:    2,
-			ETag:         "etag-1",
-			Status:       "created",
-			Target:       "target-1",
+			JobID:          jobID1,
+			CreatedAt:      1,
+			WorkingState:   []byte("working-state-1"),
+			ReconcileCount: 2,
+			ETag:           "etag-1",
+			Status:         "created",
+			Target:         "target-1",
 		},
 		{
-			JobID:        jobID2,
-			CreatedAt:    2,
-			WorkingState: []byte("working-state-2"),
-			SentCount:    3,
-			ETag:         "etag-2",
-			Status:       "created",
-			Target:       "target-2",
+			JobID:          jobID2,
+			CreatedAt:      2,
+			WorkingState:   []byte("working-state-2"),
+			ReconcileCount: 3,
+			ETag:           "etag-2",
+			Status:         "created",
+			Target:         "target-2",
 		},
 		{
-			JobID:        jobID3,
-			CreatedAt:    3,
-			WorkingState: []byte("working-state-3"),
-			SentCount:    3,
-			ETag:         "etag-3",
-			Status:       "resolving",
-			Target:       "target-3",
+			JobID:          jobID3,
+			CreatedAt:      3,
+			WorkingState:   []byte("working-state-3"),
+			ReconcileCount: 3,
+			ETag:           "etag-3",
+			Status:         "resolving",
+			Target:         "target-3",
 		},
 	}
 

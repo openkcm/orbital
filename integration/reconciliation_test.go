@@ -229,8 +229,8 @@ func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, stor
 	assert.Equal(t, []byte("task-data"), task.Data)
 	assert.Equal(t, []byte("task completed"), task.WorkingState)
 
-	assert.Equal(t, int64(1), task.SentCount, "task should be sent exactly once")
-	assert.Positive(t, task.LastSentAt, "last_sent_at should be set")
+	assert.Equal(t, int64(1), task.ReconcileCount, "task should be sent exactly once")
+	assert.Positive(t, task.LastReconciledAt, "last_reconciled_at should be set")
 	assert.Equal(t, int64(0), task.ReconcileAfterSec, "reconcile_after_sec should be 0 for completed task")
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&jobDoneCalls), "job done event function should be called exactly once")
@@ -428,14 +428,14 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 	assert.Equal(t, orbital.TaskStatusDone, task1.Status)
 	assert.Equal(t, []byte("data-1"), task1.Data)
 	assert.Equal(t, []byte("task 1 done"), task1.WorkingState)
-	assert.Equal(t, int64(1), task1.SentCount)
+	assert.Equal(t, int64(1), task1.ReconcileCount)
 
 	task2, ok := tasksByType[taskType2]
 	assert.True(t, ok)
 	assert.Equal(t, orbital.TaskStatusDone, task2.Status)
 	assert.Equal(t, []byte("data-2"), task2.Data)
 	assert.Equal(t, []byte("task 2 done"), task2.WorkingState)
-	assert.Equal(t, int64(1), task2.SentCount)
+	assert.Equal(t, int64(1), task2.ReconcileCount)
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&jobDoneCalls), "job done event function should be called exactly once")
 	assert.Equal(t, int32(0), atomic.LoadInt32(&jobCanceledCalls), "job canceled event function should not be called")
@@ -580,7 +580,7 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *testEnviron
 	task := tasks[0]
 	assert.Equal(t, orbital.TaskStatusFailed, task.Status)
 	assert.Equal(t, []byte("task failed"), task.WorkingState)
-	assert.Equal(t, int64(1), task.SentCount)
+	assert.Equal(t, int64(1), task.ReconcileCount)
 
 	assert.Equal(t, int32(0), atomic.LoadInt32(&jobDoneCalls), "job done event function should not be called")
 	assert.Equal(t, int32(0), atomic.LoadInt32(&jobCanceledCalls), "job canceled event function should not be called")
@@ -747,8 +747,8 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 	task := tasks[0]
 	assert.Equal(t, orbital.TaskStatusDone, task.Status)
 	assert.Equal(t, []byte("all cycles completed"), task.WorkingState)
-	assert.Equal(t, expectedCycles, task.SentCount, "task should be sent %d times", expectedCycles)
-	assert.Positive(t, task.LastSentAt, "last_sent_at should be set")
+	assert.Equal(t, expectedCycles, task.ReconcileCount, "task should be sent %d times", expectedCycles)
+	assert.Positive(t, task.LastReconciledAt, "last_reconciled_at should be set")
 	assert.Equal(t, int64(0), task.ReconcileAfterSec, "reconcile_after_sec should be 0 for completed task")
 
 	assert.Len(t, workingStates, int(expectedCycles), "should have tracked all working states")
