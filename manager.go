@@ -81,10 +81,13 @@ type (
 		// NotifyWorkerConfig holds the configuration for the notification worker.
 		NotifyWorkerConfig WorkerConfig
 		// BackoffBaseIntervalSec is the base interval for exponential backoff in seconds.
+		// Default is 10 seconds.
 		BackoffBaseIntervalSec int64
 		// BackoffMaxIntervalSec is the maximum interval for exponential backoff in seconds.
+		// Default is 10240 seconds (2 hours and 50 minutes).
 		BackoffMaxIntervalSec int64
 		// MaxReconcileCount is the maximum number of times a task can be reconciled.
+		// Default is 10.
 		MaxReconcileCount int64
 	}
 )
