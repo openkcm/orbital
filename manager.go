@@ -82,7 +82,7 @@ type (
 		NotifyWorkerConfig WorkerConfig
 		// BackoffBaseIntervalSec is the base interval for exponential backoff in seconds.
 		BackoffBaseIntervalSec int64
-		// backoffMaxIntervalSec is the maximum interval for exponential backoff in seconds.
+		// BackoffMaxIntervalSec is the maximum interval for exponential backoff in seconds.
 		BackoffMaxIntervalSec int64
 	}
 )
