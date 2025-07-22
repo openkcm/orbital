@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/openkcm/orbital/internal/clock"
+	"github.com/openkcm/orbital/internal/retry"
 	"github.com/openkcm/orbital/internal/worker"
 )
 
@@ -69,8 +70,6 @@ type (
 	Config struct {
 		// TaskLimitNum is the maximum number of tasks to process at once.
 		TaskLimitNum int
-		// ConfirmJobInterval is the interval between jobs scheduler attempts.
-		ConfirmJobInterval time.Duration
 		// ConfirmJobDelay is the delay before confirming a job.
 		ConfirmJobDelay time.Duration
 		// ConfirmJobWorkerConfig holds the configuration for the job confirmation worker.
@@ -81,17 +80,23 @@ type (
 		ReconcileWorkerConfig WorkerConfig
 		// NotifyWorkerConfig holds the configuration for the notification worker.
 		NotifyWorkerConfig WorkerConfig
+		// BackoffBaseIntervalSec is the base interval for exponential backoff in seconds.
+		BackoffBaseIntervalSec int64
+		// BackoffMaxIntervalSec is the maximum interval for exponential backoff in seconds.
+		BackoffMaxIntervalSec int64
 	}
 )
 
 // Default values for configs.
 const (
-	defConfirmJobDelay   = 5 * time.Second
-	defNoOfWorker        = 5
-	defWorkTimeout       = 5 * time.Second
-	defTaskLimitNum      = 500
-	defWorkExecInterval  = 10 * time.Second
-	defReconcileInterval = 5 * time.Second
+	defConfirmJobDelay     = 5 * time.Second
+	defNoOfWorker          = 5
+	defWorkTimeout         = 5 * time.Second
+	defTaskLimitNum        = 500
+	defWorkExecInterval    = 10 * time.Second
+	defReconcileInterval   = 5 * time.Second
+	defBackoffBaseInterval = 10
+	defBackoffMaxInterval  = 10240
 )
 
 var (
@@ -130,8 +135,10 @@ func NewManager(repo *Repository, taskResolver TaskResolveFunc, optFuncs ...Mana
 				ExecInterval: defWorkExecInterval,
 				Timeout:      defWorkTimeout,
 			},
-			ConfirmJobDelay: defConfirmJobDelay,
-			TaskLimitNum:    defTaskLimitNum,
+			ConfirmJobDelay:        defConfirmJobDelay,
+			TaskLimitNum:           defTaskLimitNum,
+			BackoffBaseIntervalSec: defBackoffBaseInterval,
+			BackoffMaxIntervalSec:  defBackoffMaxInterval,
 		},
 		jobConfirmFunc: func(_ context.Context, _ Job) (JobConfirmResult, error) {
 			return JobConfirmResult{
@@ -529,8 +536,12 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 
 	task.LastSentAt = clock.NowUnixNano()
 	task.SentCount++
-	task.TotalSentCount++
 	task.Status = TaskStatusProcessing
+	task.ReconcileAfterSec = retry.ExponentialBackoffInterval(
+		m.Config.BackoffBaseIntervalSec,
+		m.Config.BackoffMaxIntervalSec,
+		task.SentCount,
+	)
 
 	req := TaskRequest{
 		TaskID:       task.ID,
@@ -542,8 +553,10 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 
 	if err := client.SendTaskRequest(ctx, req); err != nil {
 		slog.Error("sendRequestAndUpdateTask", "error", err, "taskID", task.ID)
+		repo.updateTask(ctx, task) //nolint:errcheck
 		return
 	}
+	task.TotalSentCount++
 
 	repo.updateTask(ctx, task) //nolint:errcheck
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/interactortest"
+	"github.com/openkcm/orbital/internal/retry"
 )
 
 var errSendFailed = errors.New("send failed")
@@ -198,6 +199,90 @@ func TestReconcile(t *testing.T) {
 		assert.NotZero(t, actTask.LastSentAt)
 		assert.Equal(t, int64(1), actTask.SentCount)
 		assert.Equal(t, int64(1), actTask.TotalSentCount)
+		assert.Equal(t, int64(20), actTask.ReconcileAfterSec)
+	})
+
+	t.Run("reconcile_after_sec", func(t *testing.T) {
+		tts := []struct {
+			name            string
+			initiatorReturn func() (orbital.TaskResponse, error)
+		}{
+			{
+				name: "should be incremented exponentially for each successful sent",
+				initiatorReturn: func() (orbital.TaskResponse, error) {
+					return orbital.TaskResponse{}, nil
+				},
+			},
+			{
+				name: "should be incremented exponentially for unsuccessful sent",
+				initiatorReturn: func() (orbital.TaskResponse, error) {
+					return orbital.TaskResponse{}, assert.AnError
+				},
+			},
+		}
+		for _, tc := range tts {
+			t.Run(tc.name, func(t *testing.T) {
+				// given
+				ctx := t.Context()
+				db, store := createSQLStore(t)
+				defer clearTables(t, db)
+				repo := orbital.NewRepository(store)
+
+				job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+					Status: orbital.JobStatusProcessing,
+				})
+				assert.NoError(t, err)
+
+				expTarget := "target-1"
+				taskSentCount := int64(8) // simulate that the task was sent 8 times before
+				ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
+					{
+						JobID:        job.ID,
+						Type:         "type",
+						Data:         []byte(""),
+						ETag:         "etag",
+						Status:       orbital.TaskStatusCreated,
+						Target:       expTarget,
+						SentCount:    taskSentCount,
+						LastSentAt:   0,
+						MaxSentCount: 10,
+					},
+				})
+				assert.NoError(t, err)
+				assert.Len(t, ids, 1)
+
+				initiator, err := interactortest.NewInitiator(func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
+					assert.Equal(t, ids[0], req.TaskID)
+					return tc.initiatorReturn()
+				}, nil)
+				assert.NoError(t, err)
+
+				subj, err := orbital.NewManager(repo,
+					mockTaskResolveFunc(),
+					orbital.WithTargetClients(
+						map[string]orbital.Initiator{
+							expTarget: initiator,
+						},
+					),
+				)
+				assert.NoError(t, err)
+
+				// when
+				err = orbital.Reconcile(subj)(ctx)
+
+				// then
+				assert.NoError(t, err)
+				actTask, ok, err := orbital.GetRepoTask(repo)(ctx, ids[0])
+				assert.NoError(t, err)
+				assert.True(t, ok)
+				expReconcileAfterSec := retry.ExponentialBackoffInterval(
+					subj.Config.BackoffBaseIntervalSec,
+					subj.Config.BackoffMaxIntervalSec,
+					taskSentCount+1,
+				)
+				assert.Equal(t, expReconcileAfterSec, actTask.ReconcileAfterSec)
+			})
+		}
 	})
 
 	t.Run("should send the same ETag to the operator if the operator does not respond within ReconcileAfterSec", func(t *testing.T) {
@@ -264,7 +349,7 @@ func TestReconcile(t *testing.T) {
 		assert.Equal(t, expETag, actTask.ETag)
 	})
 
-	t.Run("should not update task if task request fails", func(t *testing.T) {
+	t.Run("should update task if task request fails", func(t *testing.T) {
 		// given
 		ctx := t.Context()
 		db, store := createSQLStore(t)
@@ -312,7 +397,13 @@ func TestReconcile(t *testing.T) {
 		actTask, ok, err := orbital.GetRepoTask(repo)(ctx, ids[0])
 		assert.NoError(t, err)
 		assert.True(t, ok)
-		assert.Equal(t, orbital.TaskStatusCreated, actTask.Status)
+		assert.Greater(t, actTask.LastSentAt, int64(1))
+		assert.Equal(t, int64(1), actTask.SentCount)
+		assert.Equal(t, orbital.TaskStatusProcessing, actTask.Status)
+		expReconcileAfterSec := retry.ExponentialBackoffInterval(subj.Config.BackoffBaseIntervalSec,
+			subj.Config.BackoffMaxIntervalSec, 1)
+		assert.Equal(t, expReconcileAfterSec, actTask.ReconcileAfterSec)
+		assert.Equal(t, int64(0), actTask.TotalSentCount, "should not update total_sent_count on failed send")
 	})
 
 	t.Run("should not send task request if max sent count is reached", func(t *testing.T) {
