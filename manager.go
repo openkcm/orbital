@@ -536,7 +536,6 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 
 	task.LastSentAt = clock.NowUnixNano()
 	task.SentCount++
-	task.TotalSentCount++
 	task.Status = TaskStatusProcessing
 	task.ReconcileAfterSec = retry.ExponentialBackoffInterval(
 		m.Config.BackoffBaseIntervalSec,
@@ -554,8 +553,10 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 
 	if err := client.SendTaskRequest(ctx, req); err != nil {
 		slog.Error("sendRequestAndUpdateTask", "error", err, "taskID", task.ID)
+		repo.updateTask(ctx, task) //nolint:errcheck
 		return
 	}
+	task.TotalSentCount++
 
 	repo.updateTask(ctx, task) //nolint:errcheck
 }
