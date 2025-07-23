@@ -623,6 +623,8 @@ func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error 
 		task.ETag = uuid.NewString() // Generate a new ETag for the updated task
 		task.Status = TaskStatus(resp.Status)
 		task.ReconcileAfterSec = resp.ReconcileAfterSec
+		task.LastReconciledAt = clock.NowUnixNano() // Update the last reconciled time to now unix to reset it.
+		task.ReconcileCount = 0                     // Reset the reconcile count since the task has been processed successfully.
 		task.TotalReceivedCount++
 		if task.Status == TaskStatusFailed {
 			task.ErrorMessage = resp.ErrorMessage

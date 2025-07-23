@@ -22,11 +22,11 @@ type Task struct {
 	Type               string
 	Data               []byte
 	WorkingState       []byte
-	LastReconciledAt   int64
-	ReconcileCount     int64
+	LastReconciledAt   int64 // The last time the task was reconciled.
+	ReconcileCount     int64 // The number of times the task has been reconciled.
+	ReconcileAfterSec  int64 // The number of seconds after which the task should be reconciled.
 	TotalSentCount     int64
 	TotalReceivedCount int64
-	ReconcileAfterSec  int64
 	ETag               string
 	Status             TaskStatus
 	Target             string
