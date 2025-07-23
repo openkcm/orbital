@@ -73,7 +73,7 @@ func (h *Handler) StartTest(w http.ResponseWriter, r *http.Request) {
 		h.mutex.Lock()
 		h.cancelTest = nil
 		h.mutex.Unlock()
-		_ = h.cleanupDB(r.Context())
+		_ = h.cleanupDB()
 		cancel()
 	}()
 
@@ -138,7 +138,7 @@ func (h *Handler) StopTest(w http.ResponseWriter, r *http.Request) {
 	h.cancelTest()
 	h.cancelTest = nil
 
-	err := h.cleanupDB(context.Background())
+	err := h.cleanupDB()
 	if err != nil {
 		http.Error(w, "Failed to clean up database: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -252,10 +252,12 @@ func zipMultipleFiles(files map[string][]byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (h *Handler) cleanupDB(ctx context.Context) error {
+func (h *Handler) cleanupDB() error {
+	ctx := context.Background()
 	tables := []string{"jobs", "tasks", "job_cursor", "job_event"}
 	for _, table := range tables {
 		if _, err := h.db.ExecContext(ctx, "DELETE FROM "+table); err != nil {
+			log.Printf("Failed to clean up table %s: %v", table, err)
 			return err
 		}
 	}

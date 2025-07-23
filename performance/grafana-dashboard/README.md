@@ -32,8 +32,17 @@
 * In the left sidebar, open the Grafana **Menu** and click **Dashboards**.
 * Upload your dashboard JSON file (`./performance/grafana-dashboard/orbital-status.json`)
   or paste its contents.
-* Select the appropriate data source (e.g., `Prometheus`).
-* Click **Import** to finish.
 
 > [!NOTE]
 > Please make sure to replace the datasource `uid` value.
+>
+> ```json
+>      "datasource": {
+>       "type": "grafana-postgresql-datasource",
+>      "uid": "changeme"
+>     },
+>```
+>
+> This `uid` should match the one you set up in the PostgreSQL connection.
+
+* Click **Import** to finish.
