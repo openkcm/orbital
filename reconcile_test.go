@@ -529,37 +529,35 @@ func TestReconcile(t *testing.T) {
 
 //nolint:gocognit
 func TestProcessResponse(t *testing.T) {
+	prevLastReconciledAt := int64(1000) // Simulate a previous last reconciled time
 	t.Run("process response", func(t *testing.T) {
 		tests := []struct {
 			name                   string
-			setupData              func(t *testing.T, repo *orbital.Repository) uuid.UUID
-			response               func(taskID uuid.UUID) orbital.TaskResponse
-			expectedTaskStatus     orbital.TaskStatus
-			expectedWorkingState   []byte
-			expectedReconcileAfter int64
+			initialStoredTask      *orbital.Task
+			taskResponse           func(taskID uuid.UUID) orbital.TaskResponse
+			expTaskStatus          orbital.TaskStatus
+			expWorkingState        []byte
+			expTotalReceivedCount  int64
+			expReconcileAfter      int64
+			expReconcileCount      int64
+			isLastReconcileAtEqual bool
 			expErrorMessage        string
-			expectError            bool
-			expectNoUpdate         bool
 		}{
 			{
 				name: "successful response update",
-				setupData: func(t *testing.T, repo *orbital.Repository) uuid.UUID {
-					t.Helper()
-					ctx := t.Context()
-					task := orbital.Task{
-						JobID:        uuid.New(),
-						Type:         "task-type",
-						Data:         []byte("task-data"),
-						WorkingState: []byte("initial-state"),
-						Status:       orbital.TaskStatusProcessing,
-						Target:       "target-1",
-						ETag:         "etag-123",
-					}
-					taskIDs, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{task})
-					assert.NoError(t, err)
-					return taskIDs[0]
+				initialStoredTask: &orbital.Task{
+					JobID:              uuid.New(),
+					Type:               "task-type",
+					Data:               []byte("task-data"),
+					WorkingState:       []byte("initial-state"),
+					Status:             orbital.TaskStatusProcessing,
+					Target:             "target-1",
+					ETag:               "etag-123",
+					LastReconciledAt:   prevLastReconciledAt,
+					TotalReceivedCount: 2,
+					ReconcileCount:     4,
 				},
-				response: func(taskID uuid.UUID) orbital.TaskResponse {
+				taskResponse: func(taskID uuid.UUID) orbital.TaskResponse {
 					return orbital.TaskResponse{
 						TaskID:            taskID,
 						Type:              "task-type",
@@ -569,30 +567,27 @@ func TestProcessResponse(t *testing.T) {
 						ReconcileAfterSec: 300,
 					}
 				},
-				expectedTaskStatus:     orbital.TaskStatusDone,
-				expectedWorkingState:   []byte("updated-state"),
-				expectedReconcileAfter: 300,
-				expectError:            false,
+				expTaskStatus:          orbital.TaskStatusDone,
+				expWorkingState:        []byte("updated-state"),
+				expReconcileAfter:      300,
+				expTotalReceivedCount:  3,
+				expReconcileCount:      0,
+				isLastReconcileAtEqual: false,
 			},
 			{
 				name: "should not update task with error message if the task response is not failed",
-				setupData: func(t *testing.T, repo *orbital.Repository) uuid.UUID {
-					t.Helper()
-					ctx := t.Context()
-					task := orbital.Task{
-						JobID:        uuid.New(),
-						Type:         "task-type",
-						Data:         []byte("task-data"),
-						WorkingState: []byte("initial-state"),
-						Status:       orbital.TaskStatusProcessing,
-						Target:       "target-1",
-						ETag:         "etag-123",
-					}
-					taskIDs, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{task})
-					assert.NoError(t, err)
-					return taskIDs[0]
+				initialStoredTask: &orbital.Task{
+					JobID:            uuid.New(),
+					Type:             "task-type",
+					Data:             []byte("task-data"),
+					WorkingState:     []byte("initial-state"),
+					Status:           orbital.TaskStatusProcessing,
+					Target:           "target-1",
+					ETag:             "etag-123",
+					LastReconciledAt: prevLastReconciledAt,
+					ReconcileCount:   2,
 				},
-				response: func(taskID uuid.UUID) orbital.TaskResponse {
+				taskResponse: func(taskID uuid.UUID) orbital.TaskResponse {
 					return orbital.TaskResponse{
 						TaskID:            taskID,
 						Type:              "task-type",
@@ -603,31 +598,28 @@ func TestProcessResponse(t *testing.T) {
 						ErrorMessage:      "some-error-message",
 					}
 				},
-				expectedTaskStatus:     orbital.TaskStatusDone,
-				expectedWorkingState:   []byte("updated-state"),
+				expTaskStatus:          orbital.TaskStatusDone,
+				expWorkingState:        []byte("updated-state"),
 				expErrorMessage:        "",
-				expectedReconcileAfter: 300,
-				expectError:            false,
+				expReconcileAfter:      300,
+				expTotalReceivedCount:  1,
+				expReconcileCount:      0,
+				isLastReconcileAtEqual: false,
 			},
 			{
 				name: "stale etag - response discarded",
-				setupData: func(t *testing.T, repo *orbital.Repository) uuid.UUID {
-					t.Helper()
-					ctx := t.Context()
-					task := orbital.Task{
-						JobID:        uuid.New(),
-						Type:         "task-type",
-						Data:         []byte("task-data"),
-						WorkingState: []byte("initial-state"),
-						Status:       orbital.TaskStatusProcessing,
-						Target:       "target-1",
-						ETag:         "current-etag",
-					}
-					taskIDs, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{task})
-					assert.NoError(t, err)
-					return taskIDs[0]
+				initialStoredTask: &orbital.Task{
+					JobID:            uuid.New(),
+					Type:             "task-type",
+					Data:             []byte("task-data"),
+					WorkingState:     []byte("initial-state"),
+					Status:           orbital.TaskStatusProcessing,
+					Target:           "target-1",
+					ETag:             "current-etag",
+					ReconcileCount:   2,
+					LastReconciledAt: prevLastReconciledAt,
 				},
-				response: func(taskID uuid.UUID) orbital.TaskResponse {
+				taskResponse: func(taskID uuid.UUID) orbital.TaskResponse {
 					return orbital.TaskResponse{
 						TaskID:       taskID,
 						Type:         "task-type",
@@ -636,17 +628,16 @@ func TestProcessResponse(t *testing.T) {
 						Status:       string(orbital.ResultDone),
 					}
 				},
-				expectedTaskStatus:   orbital.TaskStatusProcessing,
-				expectedWorkingState: []byte("initial-state"),
-				expectError:          false,
-				expectNoUpdate:       true,
+				expTaskStatus:          orbital.TaskStatusProcessing,
+				expWorkingState:        []byte("initial-state"),
+				expTotalReceivedCount:  0,
+				expReconcileCount:      2,
+				isLastReconcileAtEqual: true,
 			},
 			{
-				name: "task not found",
-				setupData: func(_ *testing.T, _ *orbital.Repository) uuid.UUID {
-					return uuid.New()
-				},
-				response: func(taskID uuid.UUID) orbital.TaskResponse {
+				name:              "task not found",
+				initialStoredTask: nil,
+				taskResponse: func(taskID uuid.UUID) orbital.TaskResponse {
 					return orbital.TaskResponse{
 						TaskID: taskID,
 						Type:   "task-type",
@@ -654,27 +645,22 @@ func TestProcessResponse(t *testing.T) {
 						Status: string(orbital.ResultDone),
 					}
 				},
-				expectError: false,
 			},
 			{
 				name: "error status response",
-				setupData: func(t *testing.T, repo *orbital.Repository) uuid.UUID {
-					t.Helper()
-					ctx := t.Context()
-					task := orbital.Task{
-						JobID:        uuid.New(),
-						Type:         "task-type",
-						Data:         []byte("task-data"),
-						WorkingState: []byte("initial-state"),
-						Status:       orbital.TaskStatusProcessing,
-						Target:       "target-1",
-						ETag:         "etag-123",
-					}
-					taskIDs, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{task})
-					assert.NoError(t, err)
-					return taskIDs[0]
+				initialStoredTask: &orbital.Task{
+					JobID:              uuid.New(),
+					Type:               "task-type",
+					Data:               []byte("task-data"),
+					WorkingState:       []byte("initial-state"),
+					Status:             orbital.TaskStatusProcessing,
+					Target:             "target-1",
+					ETag:               "etag-123",
+					ReconcileCount:     4,
+					TotalReceivedCount: 4,
+					LastReconciledAt:   prevLastReconciledAt,
 				},
-				response: func(taskID uuid.UUID) orbital.TaskResponse {
+				taskResponse: func(taskID uuid.UUID) orbital.TaskResponse {
 					return orbital.TaskResponse{
 						TaskID:       taskID,
 						Type:         "task-type",
@@ -684,10 +670,12 @@ func TestProcessResponse(t *testing.T) {
 						ErrorMessage: "Processing failed",
 					}
 				},
-				expectedTaskStatus:   orbital.TaskStatusFailed,
-				expErrorMessage:      "Processing failed",
-				expectedWorkingState: []byte("error-state"),
-				expectError:          false,
+				expTaskStatus:          orbital.TaskStatusFailed,
+				expErrorMessage:        "Processing failed",
+				expWorkingState:        []byte("error-state"),
+				expTotalReceivedCount:  5,
+				expReconcileCount:      0,
+				isLastReconcileAtEqual: false,
 			},
 		}
 
@@ -698,20 +686,20 @@ func TestProcessResponse(t *testing.T) {
 				defer clearTables(t, db)
 				repo := orbital.NewRepository(store)
 
-				taskID := tt.setupData(t, repo)
+				var taskID uuid.UUID
+
+				if tt.initialStoredTask != nil {
+					taskIDs, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{*tt.initialStoredTask})
+					assert.NoError(t, err)
+					taskID = taskIDs[0]
+				}
 
 				mgr, err := orbital.NewManager(repo, mockTaskResolveFunc())
 				assert.NoError(t, err)
 
-				response := tt.response(taskID)
-				processFunc := orbital.ProcessResponse(mgr)
-				err = processFunc(ctx, response)
-
-				if tt.expectError {
-					assert.Error(t, err)
-				} else {
-					assert.NoError(t, err)
-				}
+				response := tt.taskResponse(taskID)
+				err = orbital.ProcessResponse(mgr)(ctx, response)
+				assert.NoError(t, err)
 
 				if response.TaskID != taskID {
 					return
@@ -723,20 +711,21 @@ func TestProcessResponse(t *testing.T) {
 				}
 				assert.NoError(t, err)
 
-				if !tt.expectNoUpdate {
-					assert.Equal(t, tt.expectedTaskStatus, task.Status)
-					assert.Equal(t, tt.expectedWorkingState, task.WorkingState)
-					assert.Equal(t, int64(1), task.TotalReceivedCount)
-					if tt.expectedReconcileAfter > 0 {
-						assert.Equal(t, tt.expectedReconcileAfter, task.ReconcileAfterSec)
-					}
-					// Make sure the ETag is updated if the response was processed successfully
-					assert.NotEqual(t, response.ETag, task.ETag)
-					assert.Equal(t, tt.expErrorMessage, task.ErrorMessage)
+				assert.Equal(t, tt.expTaskStatus, task.Status)
+				assert.Equal(t, tt.expWorkingState, task.WorkingState)
+				assert.Equal(t, tt.expTotalReceivedCount, task.TotalReceivedCount)
+				assert.Equal(t, tt.expReconcileCount, task.ReconcileCount)
+				if tt.isLastReconcileAtEqual {
+					assert.Equal(t, prevLastReconciledAt, task.LastReconciledAt)
 				} else {
-					assert.Equal(t, orbital.TaskStatusProcessing, task.Status)
-					assert.Equal(t, []byte("initial-state"), task.WorkingState)
+					assert.Greater(t, task.LastReconciledAt, prevLastReconciledAt)
 				}
+				if tt.expReconcileAfter > 0 {
+					assert.Equal(t, tt.expReconcileAfter, task.ReconcileAfterSec)
+				}
+				// Make sure the ETag is updated if the response was processed successfully
+				assert.NotEqual(t, response.ETag, task.ETag)
+				assert.Equal(t, tt.expErrorMessage, task.ErrorMessage)
 			})
 		}
 	})
