@@ -11,7 +11,7 @@ minikube-delete:
 build: build-manager
 
 build-manager:
-	GOOS=linux GOARCH=amd64 go build -o cmd/manager/manager cmd/manager/*.go
+	GOOS=linux GOARCH=arm64 go build -o cmd/manager/manager cmd/manager/*.go
 	chmod +x cmd/manager/manager
 	(docker build -f cmd/manager/Dockerfile -t localhost/manager:latest .)
 	(minikube image rm localhost/manager:latest)
