@@ -130,9 +130,8 @@ func Encode[T EntityTypes](entityType T) (Entity, error) {
 				"type":                 obj.Type,
 				"data":                 obj.Data,
 				"working_state":        obj.WorkingState,
-				"last_sent_at":         obj.LastSentAt,
-				"sent_count":           obj.SentCount,
-				"max_sent_count":       obj.MaxSentCount,
+				"last_reconciled_at":   obj.LastReconciledAt,
+				"reconcile_count":      obj.ReconcileCount,
 				"total_sent_count":     obj.TotalSentCount,
 				"total_received_count": obj.TotalReceivedCount,
 				"reconcile_after_sec":  obj.ReconcileAfterSec,
@@ -274,13 +273,10 @@ func decodeTask[T EntityTypes](e Entity) (T, error) {
 	if t.Data, err = resolve[[]byte](vals, "data"); err != nil {
 		return empty, err
 	}
-	if t.LastSentAt, err = resolve[int64](vals, "last_sent_at"); err != nil {
+	if t.LastReconciledAt, err = resolve[int64](vals, "last_reconciled_at"); err != nil {
 		return empty, err
 	}
-	if t.SentCount, err = resolve[int64](vals, "sent_count"); err != nil {
-		return empty, err
-	}
-	if t.MaxSentCount, err = resolve[int64](vals, "max_sent_count"); err != nil {
+	if t.ReconcileCount, err = resolve[int64](vals, "reconcile_count"); err != nil {
 		return empty, err
 	}
 	if t.TotalSentCount, err = resolve[int64](vals, "total_sent_count"); err != nil {

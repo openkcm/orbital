@@ -8,19 +8,19 @@ const (
 	// operatorEqual is the operator for equality.
 	operatorEqual Operator = "="
 	// OperatorLessThanEqual is the operator for less than or equal to.
-	operatorLessThanEqual             Operator   = "<="
-	operatorIn                        Operator   = "IN"
-	fieldID                           Field      = "id"
-	fieldJobID                        Field      = "job_id"
-	fieldStatus                       Field      = "status"
-	fieldCreatedAt                    Field      = "created_at"
-	fieldUpdatedAt                    Field      = "updated_at"
-	fieldSumLastSentAndReconcileAfter Field      = "(reconcile_after_sec + last_sent_at)"
-	fieldIsNotified                   Field      = "is_notified"
-	EntityNameJobs                    EntityName = "jobs"
-	EntityNameTasks                   EntityName = "tasks"
-	EntityNameJobCursor               EntityName = "job_cursor"
-	EntityNameJobEvent                EntityName = "job_event"
+	operatorLessThanEqual                     Operator   = "<="
+	operatorIn                                Operator   = "IN"
+	fieldID                                   Field      = "id"
+	fieldJobID                                Field      = "job_id"
+	fieldStatus                               Field      = "status"
+	fieldCreatedAt                            Field      = "created_at"
+	fieldUpdatedAt                            Field      = "updated_at"
+	fieldSumLastReconciledAtAndReconcileAfter Field      = "(reconcile_after_sec + last_reconciled_at)"
+	fieldIsNotified                           Field      = "is_notified"
+	EntityNameJobs                            EntityName = "jobs"
+	EntityNameTasks                           EntityName = "tasks"
+	EntityNameJobCursor                       EntityName = "job_cursor"
+	EntityNameJobEvent                        EntityName = "job_event"
 )
 
 type RetrievalMode int
@@ -116,9 +116,9 @@ func ClauseWithCreatedAt(createdAt int64) Clause {
 	return Clause{Field: fieldCreatedAt, Operator: operatorEqual, Value: createdAt}
 }
 
-// ClauseWithReadyToBeSent creates a Clause that filters for entities where the sum of reconcile_after_sec and last_sent_at is less than or equal to the current time.
+// ClauseWithReadyToBeSent creates a Clause that filters for entities where the sum of reconcile_after_sec and last_reconciled_at is less than or equal to the current time.
 func ClauseWithReadyToBeSent(val int64) Clause {
-	return Clause{Field: fieldSumLastSentAndReconcileAfter, Operator: operatorLessThanEqual, Value: val}
+	return Clause{Field: fieldSumLastReconciledAtAndReconcileAfter, Operator: operatorLessThanEqual, Value: val}
 }
 
 // OrderByUpdatedAtAscending creates an OrderBy clause that orders results by the updated_at field in ascending order.
