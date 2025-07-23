@@ -1,0 +1,14 @@
+name: New Release (Manual Trigger)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  release:
+    uses: openkcm/build/.github/workflows/release.manual.yaml@main
+    secrets: inherit
+
