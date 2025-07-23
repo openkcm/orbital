@@ -1,12 +1,12 @@
-name: Git
-permissions:
-  contents: read
+name: Release New Version
 
 on:
   pull_request:
-    types: [ closed ]
-    branches:
-      - main
+    types:
+      - closed
+
+permissions:
+  contents: write
 
 jobs:
   release:

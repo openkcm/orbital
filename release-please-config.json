@@ -1,0 +1,56 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "draft": false,
+  "prerelease": false,
+  "release-type": "go",
+  "include-v-in-tag": true,
+  "always-update": true,
+  "changelog-type": "github",
+  "changelog-host": "github.com",
+  "group-pull-request-title-pattern": "chore${scope}: releases ${version}",
+  "pull-request-header": ":rocket: A new release is on the way! This PR includes all changes since the last version.",
+  "pull-request-footer": "This PR was generated using [release-please](https://github.com/googleapis/release-please).",
+  "changelog-sections": [
+    {
+      "type": "feat",
+      "section": "🚀 Features",
+      "hidden": false
+    },
+    {
+      "type": "fix",
+      "section": "🐛 Bug Fixes",
+      "hidden": false
+    },
+    {
+      "type": "docs",
+      "section": "📝 Documentation",
+      "hidden": false
+    },
+    {
+      "type": "chore",
+      "section": "🧰 Maintenance",
+      "hidden": false
+    },
+    {
+      "type": "ci",
+      "section": "🔧 CI/CD",
+      "hidden": false
+    },
+    {
+      "type": "build",
+      "section": "🧱 Build / Dependencies",
+      "hidden": false
+    }
+  ],
+  "commit-search-depth": 500,
+  "release-search-depth": 400,
+  "packages": {
+    ".": {
+      "release-type": "go"
+    }
+  },
+  "changelog": {
+    "template": "## Changelog\n\n{{#each commits}}\n- {{this.message}} (#{{this.pullRequestNumber}})\n{{/each}}",
+    "include-vcs-changes": true
+  }
+}
