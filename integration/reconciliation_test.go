@@ -130,31 +130,19 @@ func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, stor
 		jobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobDoneCalls, 1)
 			t.Logf("JobDoneEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
-
-			select {
-			case terminationDone <- job:
-			default:
-			}
+			terminationDone <- job
 			return nil
 		},
 		jobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobCanceledCalls, 1)
 			t.Logf("JobCanceledEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
-
-			select {
-			case terminationDone <- job:
-			default:
-			}
+			terminationDone <- job
 			return nil
 		},
 		jobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobFailedCalls, 1)
 			t.Logf("JobFailedEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
-
-			select {
-			case terminationDone <- job:
-			default:
-			}
+			terminationDone <- job
 			return nil
 		},
 	}
@@ -306,31 +294,19 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 		jobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobDoneCalls, 1)
 			t.Logf("JobDoneEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
-
-			select {
-			case terminationDone <- job:
-			default:
-			}
+			terminationDone <- job
 			return nil
 		},
 		jobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobCanceledCalls, 1)
 			t.Logf("JobCanceledEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
-
-			select {
-			case terminationDone <- job:
-			default:
-			}
+			terminationDone <- job
 			return nil
 		},
 		jobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobFailedCalls, 1)
 			t.Logf("JobFailedEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
-
-			select {
-			case terminationDone <- job:
-			default:
-			}
+			terminationDone <- job
 			return nil
 		},
 	}
@@ -495,31 +471,19 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *testEnviron
 		jobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobDoneCalls, 1)
 			t.Logf("JobDoneEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
-
-			select {
-			case terminationDone <- job:
-			default:
-			}
+			terminationDone <- job
 			return nil
 		},
 		jobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobCanceledCalls, 1)
 			t.Logf("JobCanceledEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
-
-			select {
-			case terminationDone <- job:
-			default:
-			}
+			terminationDone <- job
 			return nil
 		},
 		jobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobFailedCalls, 1)
 			t.Logf("JobFailedEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
-
-			select {
-			case terminationDone <- job:
-			default:
-			}
+			terminationDone <- job
 			return nil
 		},
 	}
@@ -643,31 +607,19 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 		jobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobDoneCalls, 1)
 			t.Logf("JobDoneEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
-
-			select {
-			case terminationDone <- job:
-			default:
-			}
+			terminationDone <- job
 			return nil
 		},
 		jobCanceledEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobCanceledCalls, 1)
 			t.Logf("JobCanceledEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
-
-			select {
-			case terminationDone <- job:
-			default:
-			}
+			terminationDone <- job
 			return nil
 		},
 		jobFailedEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobFailedCalls, 1)
 			t.Logf("JobFailedEventFunc called for job %s (call #%d), status: %s", job.ID, calls, job.Status)
-
-			select {
-			case terminationDone <- job:
-			default:
-			}
+			terminationDone <- job
 			return nil
 		},
 	}
