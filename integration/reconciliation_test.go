@@ -122,7 +122,7 @@ func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, stor
 		},
 		jobConfirmFunc: func(_ context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
 			t.Logf("JobConfirmFunc called for job %s", job.ID)
-			return orbital.JobConfirmResult{Confirmed: true}, nil
+			return orbital.JobConfirmResult{Done: true}, nil
 		},
 		targetClients: map[string]orbital.Initiator{
 			taskTarget: managerClient,
@@ -297,7 +297,7 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 			}, nil
 		},
 		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
-			return orbital.JobConfirmResult{Confirmed: true}, nil
+			return orbital.JobConfirmResult{Done: true}, nil
 		},
 		targetClients: map[string]orbital.Initiator{
 			taskTarget1: managerClient1,
@@ -487,7 +487,7 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *testEnviron
 			}, nil
 		},
 		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
-			return orbital.JobConfirmResult{Confirmed: true}, nil
+			return orbital.JobConfirmResult{Done: true}, nil
 		},
 		targetClients: map[string]orbital.Initiator{
 			taskTarget: managerClient,
@@ -635,7 +635,7 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 			}, nil
 		},
 		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
-			return orbital.JobConfirmResult{Confirmed: true}, nil
+			return orbital.JobConfirmResult{Done: true}, nil
 		},
 		targetClients: map[string]orbital.Initiator{
 			taskTarget: managerClient,
