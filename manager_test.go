@@ -77,23 +77,30 @@ func TestConfirmJob(t *testing.T) {
 			expStatus           orbital.JobStatus
 		}{
 			{
-				name: "for failing confirmation",
+				name: "for confirmation error",
 				confirmFuncResponse: func() (orbital.JobConfirmResult, error) {
 					return orbital.JobConfirmResult{}, errResourceNotFound
 				},
 				expStatus: orbital.JobStatusCreated,
 			},
 			{
-				name: "for non confirmation",
+				name: "for canceled confirmation",
 				confirmFuncResponse: func() (orbital.JobConfirmResult, error) {
-					return orbital.JobConfirmResult{Confirmed: false}, nil
+					return orbital.JobConfirmResult{IsCanceled: true}, nil
 				},
 				expStatus: orbital.JobStatusConfirmCanceled,
 			},
 			{
-				name: "successfully",
+				name: "for unfinished confirmation",
 				confirmFuncResponse: func() (orbital.JobConfirmResult, error) {
-					return orbital.JobConfirmResult{Confirmed: true}, nil
+					return orbital.JobConfirmResult{Done: false}, nil
+				},
+				expStatus: orbital.JobStatusConfirming,
+			},
+			{
+				name: "for successful confirmation",
+				confirmFuncResponse: func() (orbital.JobConfirmResult, error) {
+					return orbital.JobConfirmResult{Done: true}, nil
 				},
 				expStatus: orbital.JobStatusConfirmed,
 			},
@@ -132,7 +139,7 @@ func TestConfirmJob(t *testing.T) {
 			})
 		}
 	})
-	t.Run("should set the job error message from confirm func when job is not confirmed", func(t *testing.T) {
+	t.Run("should set the job error message from confirm func when job is canceled", func(t *testing.T) {
 		ctx := t.Context()
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
@@ -142,7 +149,7 @@ func TestConfirmJob(t *testing.T) {
 		confirmFunc := func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 			return orbital.JobConfirmResult{
 				CanceledErrorMessage: expErrMsg,
-				Confirmed:            false,
+				IsCanceled:           true,
 			}, nil
 		}
 		subj, _ := orbital.NewManager(repo,
@@ -167,7 +174,7 @@ func TestConfirmJob(t *testing.T) {
 		assert.Equal(t, orbital.JobStatusConfirmCanceled, job.Status)
 		assert.Equal(t, expErrMsg, job.ErrorMessage)
 	})
-	t.Run("should create job event from confirm func when job is not confirmed", func(t *testing.T) {
+	t.Run("should create job event from confirm func when job is canceled", func(t *testing.T) {
 		ctx := t.Context()
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
@@ -175,7 +182,7 @@ func TestConfirmJob(t *testing.T) {
 
 		confirmFunc := func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 			return orbital.JobConfirmResult{
-				Confirmed: false,
+				IsCanceled: true,
 			}, nil
 		}
 		subj, _ := orbital.NewManager(repo,
@@ -213,7 +220,7 @@ func TestConfirmJob(t *testing.T) {
 		confirmFunc := func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 			return orbital.JobConfirmResult{
 				CanceledErrorMessage: "cancelled error message",
-				Confirmed:            true,
+				Done:                 true,
 			}, nil
 		}
 		subj, _ := orbital.NewManager(repo,
@@ -267,7 +274,7 @@ func TestConfirmJob(t *testing.T) {
 				callerChan <- "start second retrieval mode list"
 				assert.Equal(t, "finish confirm func", <-callerChan)
 			}
-			return orbital.JobConfirmResult{Confirmed: true}, nil
+			return orbital.JobConfirmResult{Done: true}, nil
 		}
 		subj, _ := orbital.NewManager(repo,
 			mockTaskResolveFunc(),

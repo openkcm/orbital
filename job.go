@@ -7,6 +7,7 @@ import (
 // Possible job states.
 const (
 	JobStatusCreated         JobStatus = "CREATED"
+	JobStatusConfirming      JobStatus = "CONFIRMING"
 	JobStatusConfirmed       JobStatus = "CONFIRMED"
 	JobStatusResolving       JobStatus = "RESOLVING"
 	JobStatusReady           JobStatus = "READY"

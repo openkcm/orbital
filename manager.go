@@ -37,13 +37,15 @@ type (
 	// JobConfirmFunc defines a function that determines whether a job can be confirmed.
 	// It returns a ConfirmResult struct with the confirmation result and an error if the process fails.
 	JobConfirmFunc func(ctx context.Context, job Job) (JobConfirmResult, error)
+
 	// JobConfirmResult represents the result of a job confirmation operation.
-	// CanceledErrorMessage contains the error message if the confirmation was canceled.
-	// Confirmed indicates whether the job was confirmed by the user.
-	// If Confirmed is false, then job status is updated to JobStatusConfirmCanceled.
 	JobConfirmResult struct {
+		// Done indicates whether the confirming process is complete.
+		Done bool
+		// IsCanceled indicates whether the job needs to be canceled.
+		IsCanceled bool
+		// CanceledErrorMessage provides an error message if the job is canceled.
 		CanceledErrorMessage string
-		Confirmed            bool
 	}
 
 	// TaskResolverCursor is the type for the next cursor.
@@ -149,7 +151,7 @@ func NewManager(repo *Repository, taskResolver TaskResolveFunc, optFuncs ...Mana
 		},
 		jobConfirmFunc: func(_ context.Context, _ Job) (JobConfirmResult, error) {
 			return JobConfirmResult{
-				Confirmed: true,
+				Done: true,
 			}, nil
 		},
 	}
@@ -309,11 +311,14 @@ func (m *Manager) handleConfirmJob(ctx context.Context, repo Repository, job Job
 		// NOTE: here we update the job to change the updated_at timestamp in order to spread the fetching of jobs.
 		return repo.updateJob(ctx, job)
 	}
-	job.Status = JobStatusConfirmed
-	if !res.Confirmed {
-		job.ErrorMessage = res.CanceledErrorMessage
+	if res.IsCanceled {
 		job.Status = JobStatusConfirmCanceled
+		job.ErrorMessage = res.CanceledErrorMessage
 		return m.updateJobAndCreateJobEvent(ctx, repo, job)
+	}
+	job.Status = JobStatusConfirming
+	if res.Done {
+		job.Status = JobStatusConfirmed
 	}
 	return repo.updateJob(ctx, job)
 }
