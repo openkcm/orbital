@@ -9,11 +9,34 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/openkcm/orbital"
-	"github.com/openkcm/orbital/interactortest"
+	"github.com/openkcm/orbital/client/embedded"
 	"github.com/openkcm/orbital/internal/retry"
 )
 
 var errSendFailed = errors.New("send failed")
+
+type (
+	// failedClient simulates a failed send operation.
+	failedClient struct{}
+	// successfulClient simulates a successful send operation.
+	successfulClient struct{}
+)
+
+func (f *failedClient) SendTaskRequest(_ context.Context, _ orbital.TaskRequest) error {
+	return errSendFailed
+}
+
+func (f *failedClient) ReceiveTaskResponse(_ context.Context) (orbital.TaskResponse, error) {
+	return orbital.TaskResponse{}, nil
+}
+
+func (s *successfulClient) SendTaskRequest(_ context.Context, _ orbital.TaskRequest) error {
+	return nil
+}
+
+func (s *successfulClient) ReceiveTaskResponse(_ context.Context) (orbital.TaskResponse, error) {
+	return orbital.TaskResponse{}, nil
+}
 
 func TestReconcile(t *testing.T) {
 	t.Run("should just return if there is no job ready for reconciliation", func(t *testing.T) {
@@ -168,29 +191,31 @@ func TestReconcile(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, ids, 1)
 
-		initiator, err := interactortest.NewInitiator(func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
+		client, err := embedded.NewClient(func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
 			assert.Equal(t, ids[0], req.TaskID)
 			assert.Equal(t, expType, req.Type)
 			assert.Equal(t, expData, req.Data)
 			assert.Equal(t, expWorkingState, req.WorkingState)
 			assert.Equal(t, expETag, req.ETag)
 			return orbital.TaskResponse{}, nil
-		}, nil)
+		})
 		assert.NoError(t, err)
 
 		subj, err := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
 			orbital.WithTargetClients(map[string]orbital.Initiator{
-				expTarget: initiator,
+				expTarget: client,
 			}),
 		)
 		assert.NoError(t, err)
 
 		// when
 		err = orbital.Reconcile(subj)(ctx)
+		assert.NoError(t, err)
+		_, err = client.ReceiveTaskResponse(ctx)
+		assert.NoError(t, err)
 
 		// then
-		assert.NoError(t, err)
 		actTask, ok, err := orbital.GetRepoTask(repo)(ctx, ids[0])
 		assert.NoError(t, err)
 		assert.True(t, ok)
@@ -203,20 +228,16 @@ func TestReconcile(t *testing.T) {
 
 	t.Run("reconcile_after_sec", func(t *testing.T) {
 		tts := []struct {
-			name            string
-			initiatorReturn func() (orbital.TaskResponse, error)
+			name   string
+			client orbital.Initiator
 		}{
 			{
-				name: "should be incremented exponentially for each successful sent",
-				initiatorReturn: func() (orbital.TaskResponse, error) {
-					return orbital.TaskResponse{}, nil
-				},
+				name:   "should be incremented exponentially for each successful sent",
+				client: &successfulClient{},
 			},
 			{
-				name: "should be incremented exponentially for unsuccessful sent",
-				initiatorReturn: func() (orbital.TaskResponse, error) {
-					return orbital.TaskResponse{}, assert.AnError
-				},
+				name:   "should be incremented exponentially for unsuccessful sent",
+				client: &failedClient{},
 			},
 		}
 		for _, tc := range tts {
@@ -249,17 +270,11 @@ func TestReconcile(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Len(t, ids, 1)
 
-				initiator, err := interactortest.NewInitiator(func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
-					assert.Equal(t, ids[0], req.TaskID)
-					return tc.initiatorReturn()
-				}, nil)
-				assert.NoError(t, err)
-
 				subj, err := orbital.NewManager(repo,
 					mockTaskResolveFunc(),
 					orbital.WithTargetClients(
 						map[string]orbital.Initiator{
-							expTarget: initiator,
+							expTarget: tc.client,
 						},
 					),
 				)
@@ -313,17 +328,17 @@ func TestReconcile(t *testing.T) {
 		assert.Len(t, ids, 1)
 
 		operatorCalled := 0
-		initiator, err := interactortest.NewInitiator(func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
+		client, err := embedded.NewClient(func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
 			operatorCalled++
 			assert.Equal(t, expETag, req.ETag)
 			return orbital.TaskResponse{}, nil
-		}, nil)
+		})
 		assert.NoError(t, err)
 
 		subj, err := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
 			orbital.WithTargetClients(map[string]orbital.Initiator{
-				expTarget: initiator,
+				expTarget: client,
 			}),
 		)
 		assert.NoError(t, err)
@@ -332,6 +347,8 @@ func TestReconcile(t *testing.T) {
 		// calling Reconcile twice to simulate sending of the taskrequest
 		for range 2 {
 			err = orbital.Reconcile(subj)(ctx)
+			assert.NoError(t, err)
+			_, err = client.ReceiveTaskResponse(ctx)
 			assert.NoError(t, err)
 		}
 
@@ -369,17 +386,12 @@ func TestReconcile(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, ids, 1)
 
-		sent := false
-		initiator, err := interactortest.NewInitiator(func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
-			sent = true
-			return orbital.TaskResponse{}, errSendFailed
-		}, nil)
 		assert.NoError(t, err)
 
 		subj, err := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
 			orbital.WithTargetClients(map[string]orbital.Initiator{
-				target: initiator,
+				target: &failedClient{},
 			}),
 		)
 		assert.NoError(t, err)
@@ -389,7 +401,6 @@ func TestReconcile(t *testing.T) {
 
 		// then
 		assert.NoError(t, err)
-		assert.True(t, sent)
 		actTask, ok, err := orbital.GetRepoTask(repo)(ctx, ids[0])
 		assert.NoError(t, err)
 		assert.True(t, ok)
@@ -453,21 +464,17 @@ func TestReconcile(t *testing.T) {
 
 		tcs := []struct {
 			name                   string
-			initiatorReturn        func() (orbital.TaskResponse, error) // simulate the initiator's response
+			client                 orbital.Initiator
 			isSentCountIncremented bool
 		}{
 			{
-				name: "should be incremented after each successful send",
-				initiatorReturn: func() (orbital.TaskResponse, error) {
-					return orbital.TaskResponse{}, nil
-				},
+				name:                   "should be incremented after each successful send",
+				client:                 &successfulClient{},
 				isSentCountIncremented: true,
 			},
 			{
-				name: "should not be incremented after a failed send",
-				initiatorReturn: func() (orbital.TaskResponse, error) {
-					return orbital.TaskResponse{}, assert.AnError
-				},
+				name:                   "should not be incremented after a failed send",
+				client:                 &failedClient{},
 				isSentCountIncremented: false,
 			},
 		}
@@ -492,17 +499,12 @@ func TestReconcile(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Len(t, ids, 1)
 
-				initiator, err := interactortest.NewInitiator(
-					func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
-						return tc.initiatorReturn()
-					}, nil,
-				)
 				assert.NoError(t, err)
 
 				subj, err := orbital.NewManager(repo,
 					mockTaskResolveFunc(),
 					orbital.WithTargetClients(map[string]orbital.Initiator{
-						target: initiator,
+						target: tc.client,
 					}),
 				)
 				assert.NoError(t, err)
