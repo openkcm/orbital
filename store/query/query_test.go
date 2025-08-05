@@ -82,7 +82,7 @@ func TestQueryClause(t *testing.T) {
 				return query.ClauseWithReadyToBeSent(100)
 			},
 			expClause: query.Clause{
-				Field:    "(reconcile_after_sec + last_reconciled_at)",
+				Field:    "(reconcile_after_sec * 1000000000 + last_reconciled_at)",
 				Operator: query.Operator("<="),
 				Value:    int64(100),
 			},

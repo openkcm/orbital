@@ -15,7 +15,7 @@ const (
 	fieldStatus                               Field      = "status"
 	fieldCreatedAt                            Field      = "created_at"
 	fieldUpdatedAt                            Field      = "updated_at"
-	fieldSumLastReconciledAtAndReconcileAfter Field      = "(reconcile_after_sec + last_reconciled_at)"
+	fieldSumLastReconciledAtAndReconcileAfter Field      = "(reconcile_after_sec * 1000000000 + last_reconciled_at)"
 	fieldIsNotified                           Field      = "is_notified"
 	EntityNameJobs                            EntityName = "jobs"
 	EntityNameTasks                           EntityName = "tasks"

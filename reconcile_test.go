@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -38,6 +39,7 @@ func (s *successfulClient) ReceiveTaskResponse(_ context.Context) (orbital.TaskR
 	return orbital.TaskResponse{}, nil
 }
 
+//nolint:gocognit
 func TestReconcile(t *testing.T) {
 	t.Run("should just return if there is no job ready for reconciliation", func(t *testing.T) {
 		// given
@@ -319,7 +321,7 @@ func TestReconcile(t *testing.T) {
 				Data:             []byte("task-data"),
 				WorkingState:     []byte("state"),
 				Status:           orbital.TaskStatusCreated,
-				Target:           "target-1",
+				Target:           expTarget,
 				ETag:             expETag,
 				LastReconciledAt: 0,
 			},
@@ -342,6 +344,8 @@ func TestReconcile(t *testing.T) {
 			}),
 		)
 		assert.NoError(t, err)
+		// making sure there is no delay in sending the task request
+		subj.Config.BackoffMaxIntervalSec = 0
 
 		// when
 		// calling Reconcile twice to simulate sending of the taskrequest
@@ -361,6 +365,77 @@ func TestReconcile(t *testing.T) {
 		assert.Equal(t, int64(2), actTask.ReconcileCount)
 		assert.Equal(t, int64(2), actTask.TotalSentCount)
 		assert.Equal(t, expETag, actTask.ETag)
+	})
+
+	t.Run("should send a task request only after the defined reconcile_after_sec", func(t *testing.T) {
+		// given
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+			Status: orbital.JobStatusProcessing,
+		})
+		assert.NoError(t, err)
+
+		expTarget := "target-1"
+		ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
+			{
+				JobID:            job.ID,
+				Type:             "type",
+				Data:             []byte("-data"),
+				WorkingState:     []byte(""),
+				Status:           orbital.TaskStatusCreated,
+				Target:           expTarget,
+				ETag:             "etag",
+				LastReconciledAt: 0,
+			},
+		})
+		assert.NoError(t, err)
+		assert.Len(t, ids, 1)
+		taskID := ids[0]
+
+		initiator, err := embedded.NewClient(func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
+			return orbital.TaskResponse{}, nil
+		})
+		assert.NoError(t, err)
+
+		subj, err := orbital.NewManager(repo,
+			mockTaskResolveFunc(),
+			orbital.WithTargetClients(map[string]orbital.Initiator{
+				expTarget: initiator,
+			}),
+		)
+		assert.NoError(t, err)
+		// setting the backoff max interval to 5 seconds
+		subj.Config.BackoffMaxIntervalSec = 5
+
+		var startTime, execTime time.Time
+		startTime = time.Now()
+
+		// calling Reconcile 11 times with an interval of 500 Millisecond (5.5 seconds in total)
+		for count := range 11 {
+			// when
+			err = orbital.Reconcile(subj)(ctx)
+			assert.NoError(t, err)
+
+			execTime = time.Now()
+			time.Sleep(500 * time.Millisecond)
+
+			actTask, ok, err := orbital.GetRepoTask(repo)(ctx, taskID)
+			assert.NoError(t, err)
+			assert.True(t, ok)
+
+			// then
+			if count >= 10 {
+				assert.Equal(t, int64(2), actTask.TotalSentCount, "should not update reconcile count if reconcile_after_sec is not reached")
+				assert.GreaterOrEqual(t, execTime.Sub(startTime), 5*time.Second)
+			} else {
+				assert.Equal(t, int64(1), actTask.TotalSentCount, "should update reconcile count if reconcile_after_sec is reached")
+				assert.Less(t, execTime.Sub(startTime), 5*time.Second)
+			}
+		}
 	})
 
 	t.Run("should update task if task request fails", func(t *testing.T) {
@@ -508,6 +583,8 @@ func TestReconcile(t *testing.T) {
 					}),
 				)
 				assert.NoError(t, err)
+				// making sure there is no delay in sending the task request
+				subj.Config.BackoffMaxIntervalSec = 0
 
 				for i := range 4 {
 					// when
