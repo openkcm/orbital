@@ -39,6 +39,7 @@ func (s *successfulClient) ReceiveTaskResponse(_ context.Context) (orbital.TaskR
 	return orbital.TaskResponse{}, nil
 }
 
+//nolint:gocognit
 func TestReconcile(t *testing.T) {
 	t.Run("should just return if there is no job ready for reconciliation", func(t *testing.T) {
 		// given
