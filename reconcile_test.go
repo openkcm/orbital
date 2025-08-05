@@ -394,21 +394,11 @@ func TestReconcile(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.Len(t, ids, 1)
+		taskID := ids[0]
 
-		var firstCallTime, secondCallTime time.Time
-		operatorCalled := 0
-		initiator, err := interactortest.NewInitiator(func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
-			operatorCalled++
-			switch operatorCalled {
-			case 1:
-				firstCallTime = time.Now()
-			case 2:
-				secondCallTime = time.Now()
-			default:
-				assert.Fail(t, "should not be called more than twice")
-			}
+		initiator, err := embedded.NewClient(func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
 			return orbital.TaskResponse{}, nil
-		}, nil)
+		})
 		assert.NoError(t, err)
 
 		subj, err := orbital.NewManager(repo,
@@ -418,20 +408,34 @@ func TestReconcile(t *testing.T) {
 			}),
 		)
 		assert.NoError(t, err)
-		subj.Config.BackoffMaxIntervalSec = 10
+		// setting the backoff max interval to 5 seconds
+		subj.Config.BackoffMaxIntervalSec = 5
 
-		// when
-		// calling Reconcile 12 times with an interval of 1 second
-		for range 12 {
+		var startTime, execTime time.Time
+		startTime = time.Now()
+
+		// calling Reconcile 11 times with an interval of 500 Millisecond (5.5 seconds in total)
+		for count := range 11 {
+			// when
 			err = orbital.Reconcile(subj)(ctx)
 			assert.NoError(t, err)
-			time.Sleep(1 * time.Second)
-		}
 
-		// then
-		// check that the operator was called only twice, once for each Reconcile call
-		assert.Equal(t, 2, operatorCalled)
-		assert.GreaterOrEqual(t, secondCallTime.Sub(firstCallTime).Seconds(), 10.0, "should wait for at least 10 seconds before sending the second request")
+			execTime = time.Now()
+			time.Sleep(500 * time.Millisecond)
+
+			actTask, ok, err := orbital.GetRepoTask(repo)(ctx, taskID)
+			assert.NoError(t, err)
+			assert.True(t, ok)
+
+			// then
+			if count >= 10 {
+				assert.Equal(t, int64(2), actTask.TotalSentCount, "should not update reconcile count if reconcile_after_sec is not reached")
+				assert.GreaterOrEqual(t, execTime.Sub(startTime), 5*time.Second)
+			} else {
+				assert.Equal(t, int64(1), actTask.TotalSentCount, "should update reconcile count if reconcile_after_sec is reached")
+				assert.Less(t, execTime.Sub(startTime), 5*time.Second)
+			}
+		}
 	})
 
 	t.Run("should update task if task request fails", func(t *testing.T) {
