@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -319,7 +320,7 @@ func TestReconcile(t *testing.T) {
 				Data:             []byte("task-data"),
 				WorkingState:     []byte("state"),
 				Status:           orbital.TaskStatusCreated,
-				Target:           "target-1",
+				Target:           expTarget,
 				ETag:             expETag,
 				LastReconciledAt: 0,
 			},
@@ -342,6 +343,8 @@ func TestReconcile(t *testing.T) {
 			}),
 		)
 		assert.NoError(t, err)
+		// making sure there is no delay in sending the task request
+		subj.Config.BackoffMaxIntervalSec = 0
 
 		// when
 		// calling Reconcile twice to simulate sending of the taskrequest
@@ -361,6 +364,73 @@ func TestReconcile(t *testing.T) {
 		assert.Equal(t, int64(2), actTask.ReconcileCount)
 		assert.Equal(t, int64(2), actTask.TotalSentCount)
 		assert.Equal(t, expETag, actTask.ETag)
+	})
+
+	t.Run("should send a task request only after the defined reconcile_after_sec", func(t *testing.T) {
+		// given
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+			Status: orbital.JobStatusProcessing,
+		})
+		assert.NoError(t, err)
+
+		expTarget := "target-1"
+		ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
+			{
+				JobID:            job.ID,
+				Type:             "type",
+				Data:             []byte("-data"),
+				WorkingState:     []byte(""),
+				Status:           orbital.TaskStatusCreated,
+				Target:           expTarget,
+				ETag:             "etag",
+				LastReconciledAt: 0,
+			},
+		})
+		assert.NoError(t, err)
+		assert.Len(t, ids, 1)
+
+		var firstCallTime, secondCallTime time.Time
+		operatorCalled := 0
+		initiator, err := interactortest.NewInitiator(func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
+			operatorCalled++
+			switch operatorCalled {
+			case 1:
+				firstCallTime = time.Now()
+			case 2:
+				secondCallTime = time.Now()
+			default:
+				assert.Fail(t, "should not be called more than twice")
+			}
+			return orbital.TaskResponse{}, nil
+		}, nil)
+		assert.NoError(t, err)
+
+		subj, err := orbital.NewManager(repo,
+			mockTaskResolveFunc(),
+			orbital.WithTargetClients(map[string]orbital.Initiator{
+				expTarget: initiator,
+			}),
+		)
+		assert.NoError(t, err)
+		subj.Config.BackoffMaxIntervalSec = 10
+
+		// when
+		// calling Reconcile 12 times with an interval of 1 second
+		for range 12 {
+			err = orbital.Reconcile(subj)(ctx)
+			assert.NoError(t, err)
+			time.Sleep(1 * time.Second)
+		}
+
+		// then
+		// check that the operator was called only twice, once for each Reconcile call
+		assert.Equal(t, 2, operatorCalled)
+		assert.GreaterOrEqual(t, secondCallTime.Sub(firstCallTime).Seconds(), 10.0, "should wait for at least 10 seconds before sending the second request")
 	})
 
 	t.Run("should update task if task request fails", func(t *testing.T) {
@@ -508,6 +578,8 @@ func TestReconcile(t *testing.T) {
 					}),
 				)
 				assert.NoError(t, err)
+				// making sure there is no delay in sending the task request
+				subj.Config.BackoffMaxIntervalSec = 0
 
 				for i := range 4 {
 					// when
