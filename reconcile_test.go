@@ -952,6 +952,122 @@ func TestProcessResponse(t *testing.T) {
 	})
 }
 
+func TestReconciliationRaceCondition(t *testing.T) {
+	db, store := createSQLStore(t)
+	repo := orbital.NewRepository(store)
+
+	target := "target-1"
+
+	createInitJobAndTask := func(ctx context.Context) (uuid.UUID, uuid.UUID) {
+		job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+			Status: orbital.JobStatusProcessing,
+		})
+		assert.NoError(t, err)
+
+		task := orbital.Task{
+			JobID:  job.ID,
+			Type:   "task-type",
+			Status: orbital.TaskStatusProcessing,
+			Target: target,
+			ETag:   "etag",
+		}
+		taskIDs, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{task})
+		assert.NoError(t, err)
+		assert.Len(t, taskIDs, 1)
+		return job.ID, taskIDs[0]
+	}
+
+	t.Run("should wait for task reconcile transaction to complete before processing response", func(t *testing.T) {
+		// given
+		defer clearTables(t, db)
+
+		ctx := t.Context()
+		_, taskID := createInitJobAndTask(ctx)
+
+		taskBefore, found, err := orbital.GetRepoTask(repo)(ctx, taskID)
+		assert.NoError(t, err)
+		assert.True(t, found)
+
+		response := orbital.TaskResponse{
+			TaskID: taskID,
+			Type:   "task-type",
+			ETag:   "etag",
+			Status: string(orbital.ResultDone),
+		}
+
+		responseStartChan := make(chan string)
+
+		mgr, err := orbital.NewManager(repo, mockTaskResolveFunc(),
+			orbital.WithTargetClients(map[string]orbital.Initiator{
+				target: &mockInitiatorClient{
+					FnSendTaskRequest: func(_ context.Context, _ orbital.TaskRequest) error {
+						// start the response processing
+						responseStartChan <- "start response processing"
+						// giving some time to ensure that the response processing waits for this send to finish
+						time.Sleep(5 * time.Second)
+						return nil
+					},
+				},
+			}),
+		)
+		assert.NoError(t, err)
+
+		// when
+		go func() {
+			err := orbital.Reconcile(mgr)(ctx)
+			assert.NoError(t, err)
+		}()
+
+		assert.Equal(t, "start response processing", <-responseStartChan)
+		err = orbital.ProcessResponse(mgr)(ctx, response)
+		assert.NoError(t, err)
+
+		// then
+		taskAfter, found, err := orbital.GetRepoTask(repo)(ctx, taskID)
+		assert.NoError(t, err)
+		assert.True(t, found)
+		// Since total_sent_count as increased by 1 it means ProcessResponse waited for the Reconcile to finish.
+		assert.Equal(t, taskBefore.TotalSentCount+1, taskAfter.TotalSentCount)
+		// Since total_received_count has increased by 1 it means ProcessResponse was successfully processed.
+		assert.Equal(t, taskBefore.TotalReceivedCount+1, taskAfter.TotalReceivedCount)
+	})
+
+	t.Run("should not send task request for tasks locked for update", func(t *testing.T) {
+		defer clearTables(t, db)
+
+		ctx := t.Context()
+		jobID, taskID := createInitJobAndTask(ctx)
+
+		mgr, err := orbital.NewManager(repo, mockTaskResolveFunc(),
+			orbital.WithTargetClients(map[string]orbital.Initiator{
+				target: &mockInitiatorClient{
+					FnSendTaskRequest: func(_ context.Context, _ orbital.TaskRequest) error {
+						assert.Fail(t, "should not send task request while the task is locked for update")
+						return nil
+					},
+				},
+			}),
+		)
+		assert.NoError(t, err)
+
+		ctxTimeout, cancelFn := context.WithTimeout(ctx, 5*time.Second)
+		defer cancelFn()
+
+		err = repo.Store.Transaction(ctxTimeout, func(ctx context.Context, r orbital.Repository) error {
+			task, ok, err := orbital.GetRepoTaskForUpdate(&r)(ctx, taskID)
+			assert.NoError(t, err)
+			assert.True(t, ok)
+			assert.Equal(t, jobID, task.JobID)
+
+			err = orbital.Reconcile(mgr)(ctx)
+			assert.NoError(t, err)
+
+			return nil
+		})
+		assert.NoError(t, err)
+	})
+}
+
 var errSendFailed = errors.New("send failed")
 
 type mockInitiatorClient struct {

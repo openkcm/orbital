@@ -455,11 +455,12 @@ func (m *Manager) reconcile(ctx context.Context) error {
 		}
 
 		tasks, err = repo.listTasks(ctx, ListTasksQuery{
-			JobID:            job.ID,
-			IsReconcileReady: true,
-			StatusIn:         []TaskStatus{TaskStatusCreated, TaskStatusProcessing},
-			OrderByUpdatedAt: true,
-			Limit:            m.Config.TaskLimitNum,
+			JobID:              job.ID,
+			IsReconcileReady:   true,
+			StatusIn:           []TaskStatus{TaskStatusCreated, TaskStatusProcessing},
+			OrderByUpdatedAt:   true,
+			RetrievalModeQueue: true,
+			Limit:              m.Config.TaskLimitNum,
 		})
 		if err != nil {
 			return err
@@ -614,7 +615,7 @@ func (m *Manager) handleResponses(ctx context.Context, client Initiator, target 
 // processResponse applies a TaskResponse to the corresponding Task in the repository.
 func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error {
 	return m.repo.transaction(ctx, func(txCtx context.Context, repo Repository) error {
-		task, found, err := repo.getTask(txCtx, resp.TaskID)
+		task, found, err := repo.getTaskForUpdate(txCtx, resp.TaskID)
 		if err != nil || !found {
 			return err
 		}
