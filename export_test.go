@@ -38,6 +38,14 @@ func GetRepoTask(r *Repository) func(ctx context.Context, id uuid.UUID) (Task, b
 	return r.getTask
 }
 
+func UpdateRepoTask(r *Repository) func(ctx context.Context, task Task) error {
+	return r.updateTask
+}
+
+func GetRepoTaskForUpdate(r *Repository) func(ctx context.Context, id uuid.UUID) (Task, bool, error) {
+	return r.getTaskForUpdate
+}
+
 func ListRepoTasks(r *Repository) func(ctx context.Context, q ListTasksQuery) ([]Task, error) {
 	return r.listTasks
 }

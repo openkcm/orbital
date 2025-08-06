@@ -847,6 +847,7 @@ func TestRepoGetJobForUpdate(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			assert.Equal(t, "1st transaction starts", <-transactor1)
+
 			err := orbital.Transaction(repo)(t.Context(), func(ctx context.Context, repo orbital.Repository) error {
 				fetchJob, ok, err := orbital.GetRepoJobForUpdate(&repo)(ctx, createdJob.ID)
 				assert.NoError(t, err)
@@ -855,20 +856,24 @@ func TestRepoGetJobForUpdate(t *testing.T) {
 
 				createdJob.Data = []byte("updated-data")
 
+				transactor1 <- "1st transaction waits"
+				assert.Equal(t, "1st transaction continue", <-transactor1)
+
 				err = orbital.UpdateRepoJob(&repo)(ctx, createdJob)
 				assert.NoError(t, err)
 
-				transactor1 <- "1st transaction waits"
 				return nil
 			})
 			assert.NoError(t, err)
 		}()
 
 		go func() {
-			assert.Equal(t, "2nd transaction starts", <-transactor2)
 			defer wg.Done()
+			assert.Equal(t, "2nd transaction starts", <-transactor2)
 
 			err := orbital.Transaction(repo)(ctx, func(ctx context.Context, repo orbital.Repository) error {
+				transactor2 <- "1st transaction continue"
+
 				fetchJob, ok, err := orbital.GetRepoJobForUpdate(&repo)(ctx, createdJob.ID)
 				assert.NoError(t, err)
 				assert.True(t, ok)
@@ -881,10 +886,121 @@ func TestRepoGetJobForUpdate(t *testing.T) {
 		}()
 
 		transactor1 <- "1st transaction starts"
-		time.Sleep(100 * time.Millisecond)
-		transactor2 <- "2nd transaction starts"
-
 		assert.Equal(t, "1st transaction waits", <-transactor1)
+		transactor2 <- "2nd transaction starts"
+		assert.Equal(t, "1st transaction continue", <-transactor2)
+		time.Sleep(200 * time.Millisecond)
+		transactor1 <- "1st transaction continue"
+
+		wg.Wait()
+	})
+}
+
+func TestRepoGetTaskForUpdate(t *testing.T) {
+	t.Run("should return the task if it exists", func(t *testing.T) {
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		expJobID := uuid.New()
+		ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
+			{
+				JobID: expJobID,
+				Type:  "type",
+			},
+		})
+		assert.NoError(t, err)
+		assert.Len(t, ids, 1)
+
+		fetchedTask, ok, err := orbital.GetRepoTaskForUpdate(repo)(ctx, ids[0])
+		assert.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, expJobID, fetchedTask.JobID)
+		assert.Equal(t, "type", fetchedTask.Type)
+	})
+
+	t.Run("should return false if the task ID is not there", func(t *testing.T) {
+		ctx := t.Context()
+		_, store := createSQLStore(t)
+		repo := orbital.NewRepository(store)
+
+		fetchedTask, ok, err := orbital.GetRepoTaskForUpdate(repo)(ctx, uuid.New())
+		assert.NoError(t, err)
+		assert.False(t, ok)
+		assert.Equal(t, uuid.Nil, fetchedTask.ID)
+	})
+
+	t.Run("transaction should get updated task after waiting for other transaction to finish", func(t *testing.T) {
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		transactor1 := make(chan string)
+		defer close(transactor1)
+
+		transactor2 := make(chan string)
+		defer close(transactor2)
+
+		wg := sync.WaitGroup{}
+		wg.Add(2)
+
+		ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
+			{JobID: uuid.New()},
+		})
+		assert.NoError(t, err)
+		assert.Len(t, ids, 1)
+		taskID := ids[0]
+
+		go func() {
+			defer wg.Done()
+			assert.Equal(t, "1st transaction starts", <-transactor1)
+			err := orbital.Transaction(repo)(t.Context(), func(ctx context.Context, repo orbital.Repository) error {
+				fetchTask, ok, err := orbital.GetRepoTaskForUpdate(&repo)(ctx, taskID)
+				assert.NoError(t, err)
+				assert.True(t, ok)
+				assert.Equal(t, taskID, fetchTask.ID)
+
+				task := orbital.Task{
+					ID:   taskID,
+					Data: []byte("updated-data-from-1st-transaction"),
+				}
+
+				transactor1 <- "1st transaction waits"
+				assert.Equal(t, "1st transaction continue", <-transactor1)
+
+				err = orbital.UpdateRepoTask(&repo)(ctx, task)
+				assert.NoError(t, err)
+
+				return nil
+			})
+			assert.NoError(t, err)
+		}()
+
+		go func() {
+			defer wg.Done()
+			assert.Equal(t, "2nd transaction starts", <-transactor2)
+			err := orbital.Transaction(repo)(ctx, func(ctx context.Context, repo orbital.Repository) error {
+				transactor2 <- "1st transaction continue"
+				fetchTask, ok, err := orbital.GetRepoTaskForUpdate(&repo)(ctx, taskID)
+				assert.NoError(t, err)
+				assert.True(t, ok)
+				assert.Equal(t, taskID, fetchTask.ID)
+				assert.Equal(t, []byte("updated-data-from-1st-transaction"), fetchTask.Data)
+
+				return nil
+			})
+			assert.NoError(t, err)
+		}()
+
+		transactor1 <- "1st transaction starts"
+		assert.Equal(t, "1st transaction waits", <-transactor1)
+		transactor2 <- "2nd transaction starts"
+		assert.Equal(t, "1st transaction continue", <-transactor2)
+		time.Sleep(200 * time.Millisecond)
+		transactor1 <- "1st transaction continue"
+
 		wg.Wait()
 	})
 }

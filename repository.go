@@ -169,6 +169,16 @@ func (r *Repository) getTask(ctx context.Context, id uuid.UUID) (Task, bool, err
 	})
 }
 
+// getTaskForUpdate retrieves a Task entity by its ID with a lock for update.
+// Returns the Task, a boolean indicating if it was found, and an error if any occurred.
+func (r *Repository) getTaskForUpdate(ctx context.Context, id uuid.UUID) (Task, bool, error) {
+	return getEntity[Task](ctx, r, query.Query{
+		EntityName:    query.EntityNameTasks,
+		Clauses:       []query.Clause{query.ClauseWithID(id)},
+		RetrievalMode: query.RetrievalModeForUpdate,
+	})
+}
+
 // updateTask updates an existing task entity in the repository.
 // It takes a context and a Task object as input and returns an error if the update operation fails.
 func (r *Repository) updateTask(ctx context.Context, task Task) error {
