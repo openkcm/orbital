@@ -14,31 +14,6 @@ import (
 	"github.com/openkcm/orbital/internal/retry"
 )
 
-var errSendFailed = errors.New("send failed")
-
-type (
-	// failedClient simulates a failed send operation.
-	failedClient struct{}
-	// successfulClient simulates a successful send operation.
-	successfulClient struct{}
-)
-
-func (f *failedClient) SendTaskRequest(_ context.Context, _ orbital.TaskRequest) error {
-	return errSendFailed
-}
-
-func (f *failedClient) ReceiveTaskResponse(_ context.Context) (orbital.TaskResponse, error) {
-	return orbital.TaskResponse{}, nil
-}
-
-func (s *successfulClient) SendTaskRequest(_ context.Context, _ orbital.TaskRequest) error {
-	return nil
-}
-
-func (s *successfulClient) ReceiveTaskResponse(_ context.Context) (orbital.TaskResponse, error) {
-	return orbital.TaskResponse{}, nil
-}
-
 //nolint:gocognit
 func TestReconcile(t *testing.T) {
 	t.Run("should just return if there is no job ready for reconciliation", func(t *testing.T) {
@@ -235,11 +210,11 @@ func TestReconcile(t *testing.T) {
 		}{
 			{
 				name:   "should be incremented exponentially for each successful sent",
-				client: &successfulClient{},
+				client: successfulClient(),
 			},
 			{
 				name:   "should be incremented exponentially for unsuccessful sent",
-				client: &failedClient{},
+				client: failedClient(),
 			},
 		}
 		for _, tc := range tts {
@@ -466,7 +441,7 @@ func TestReconcile(t *testing.T) {
 		subj, err := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
 			orbital.WithTargetClients(map[string]orbital.Initiator{
-				target: &failedClient{},
+				target: failedClient(),
 			}),
 		)
 		assert.NoError(t, err)
@@ -544,12 +519,12 @@ func TestReconcile(t *testing.T) {
 		}{
 			{
 				name:                   "should be incremented after each successful send",
-				client:                 &successfulClient{},
+				client:                 successfulClient(),
 				isSentCountIncremented: true,
 			},
 			{
 				name:                   "should not be incremented after a failed send",
-				client:                 &failedClient{},
+				client:                 failedClient(),
 				isSentCountIncremented: false,
 			},
 		}
@@ -975,4 +950,45 @@ func TestProcessResponse(t *testing.T) {
 			assert.Equal(t, int64(0), task.TotalReceivedCount)
 		})
 	})
+}
+
+var errSendFailed = errors.New("send failed")
+
+type mockInitiatorClient struct {
+	FnSendTaskRequest     func(context.Context, orbital.TaskRequest) error
+	FnReceiveTaskResponse func(context.Context) (orbital.TaskResponse, error)
+}
+
+// ReceiveTaskResponse implements orbital.Initiator.
+func (m *mockInitiatorClient) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse, error) {
+	return m.FnReceiveTaskResponse(ctx)
+}
+
+// SendTaskRequest implements orbital.Initiator.
+func (m *mockInitiatorClient) SendTaskRequest(ctx context.Context, request orbital.TaskRequest) error {
+	return m.FnSendTaskRequest(ctx, request)
+}
+
+var _ orbital.Initiator = &mockInitiatorClient{}
+
+func failedClient() orbital.Initiator {
+	return &mockInitiatorClient{
+		FnSendTaskRequest: func(_ context.Context, _ orbital.TaskRequest) error {
+			return errSendFailed
+		},
+		FnReceiveTaskResponse: func(_ context.Context) (orbital.TaskResponse, error) {
+			return orbital.TaskResponse{}, nil
+		},
+	}
+}
+
+func successfulClient() orbital.Initiator {
+	return &mockInitiatorClient{
+		FnSendTaskRequest: func(_ context.Context, _ orbital.TaskRequest) error {
+			return nil
+		},
+		FnReceiveTaskResponse: func(_ context.Context) (orbital.TaskResponse, error) {
+			return orbital.TaskResponse{}, nil
+		},
+	}
 }
