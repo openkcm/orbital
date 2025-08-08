@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/openkcm/orbital"
-	"github.com/openkcm/orbital/interactortest"
+	"github.com/openkcm/orbital/client/embedded"
 )
 
 func initManager(repo *orbital.Repository, cfg TestConfig, termination *termination) (*orbital.Manager, error) {
@@ -40,7 +40,6 @@ func initManager(repo *orbital.Repository, cfg TestConfig, termination *terminat
 		return nil, fmt.Errorf("failed to create orbital manager: %w", err)
 	}
 	manager.Config = cfg.Manager
-
 	return manager, nil
 }
 
@@ -48,8 +47,8 @@ func targetName(i int) string {
 	return fmt.Sprintf("target-%d", i)
 }
 
-func operatorMock(cfg OperatorMockConfig) (*interactortest.Initiator, error) {
-	return interactortest.NewInitiator(
+func operatorMock(cfg OperatorMockConfig) (*embedded.Client, error) {
+	return embedded.NewClient(
 		func(_ context.Context, request orbital.TaskRequest) (orbital.TaskResponse, error) {
 			errRand := rand.Float64()
 			if errRand <= cfg.ErrorRate {
@@ -80,7 +79,7 @@ func operatorMock(cfg OperatorMockConfig) (*interactortest.Initiator, error) {
 
 			response.Status = string(orbital.TaskStatusDone)
 			return response, nil
-		}, nil,
+		},
 	)
 }
 
@@ -137,12 +136,12 @@ func jobConfirmFunc(cfg JobConfirmFuncConfig) orbital.JobConfirmFunc {
 		cancelRand := rand.Float64()
 		if cancelRand <= cfg.CancelRate {
 			return orbital.JobConfirmResult{
-				Confirmed: false,
+				IsCanceled: true,
 			}, nil
 		}
 
 		return orbital.JobConfirmResult{
-			Confirmed: true,
+			Done: true,
 		}, nil
 	}
 }

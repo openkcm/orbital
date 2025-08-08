@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -45,7 +46,16 @@ func main() {
 	})
 	mux.Handle("/metrics", promhttp.Handler())
 
-	err = http.ListenAndServe(":"+envCfg.ServerPort, mux)
+	timeout := time.Minute * 20
+	server := &http.Server{
+		ReadTimeout:       timeout,
+		ReadHeaderTimeout: timeout,
+		WriteTimeout:      timeout,
+		IdleTimeout:       timeout,
+		Addr:              ":" + envCfg.ServerPort,
+		Handler:           mux,
+	}
+	err = server.ListenAndServe()
 	handleErr("Failed to start http server", err)
 }
 

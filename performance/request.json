@@ -4,6 +4,9 @@
     "JobsNum": 20,
     "TargetsNum": 2,
     "Manager": {
+      "BackoffBaseIntervalSec": 10,
+      "BackoffMaxIntervalSec": 10240,
+      "MaxReconcileCount": 10,
       "TaskLimitNum": 500,
       "ConfirmJobInterval": 1000000000,
       "ConfirmJobDelay": 0,
