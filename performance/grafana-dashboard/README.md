@@ -11,6 +11,15 @@
   * Host, Port, Database, User, Password.
 * Click **Save & Test** to verify the connection.
 
+> **Enable Query Performance Tracking**
+> 
+> To get detailed SQL query performance metrics, ensure the `pg_stat_statements` extension is enabled in your PostgreSQL database:
+> 
+> ```sql
+> CREATE EXTENSION pg_stat_statements;
+> SELECT pg_stat_statements_reset();
+> ```
+
 ## PostgreSQL Dashboard
 
 * In the left sidebar, open the Grafana **Menu** and click **Dashboards**.
@@ -18,6 +27,9 @@
 * Enter `9628` in the Dashboard ID and click **Load**.
 * Select the `DS_PROMETHEUS` data source as `Prometheus`.
 * Click **Import** to finish.
+
+> Dashboard 9628 provides general PostgreSQL monitoring (connections, transactions, cache ratios). 
+> For detailed query performance analysis, consider creating custom panels using `pg_stat_statements` data.
 
 ## Go Metrics Dashboard
 
