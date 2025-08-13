@@ -18,7 +18,7 @@ var (
 	ErrTaskResolve = errors.New("task resolve error")
 )
 
-func initManager(repo *orbital.Repository, cfg TestConfig, termination *termination) (*orbital.Manager, error) {
+func initManager(repo *orbital.Repository, cfg Parameters, termination *termination) (*orbital.Manager, error) {
 	targetToClient := make(map[string]orbital.Initiator, cfg.TargetsNum)
 	for i := range cfg.TargetsNum {
 		target := targetName(i)

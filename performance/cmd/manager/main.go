@@ -64,7 +64,7 @@ func main() {
 	})
 	mux.Handle("/metrics", promhttp.Handler())
 
-	timeout := time.Minute * 20
+	timeout := time.Minute * 20 // to ensure long-running tests can complete
 	srv := &http.Server{
 		Addr:              ":" + cfg.ServerPort,
 		Handler:           mux,

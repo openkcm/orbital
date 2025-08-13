@@ -24,7 +24,7 @@ type EnvConfig struct {
 	ServerPort string
 }
 
-type TestConfig struct {
+type Parameters struct {
 	TestName string
 	Timeout  time.Duration
 
@@ -75,11 +75,11 @@ func NewEnvConfig() EnvConfig {
 	}
 }
 
-func newTestConfig(b []byte) (TestConfig, error) {
-	testCfg := TestConfig{}
+func newParameters(b []byte) (Parameters, error) {
+	testCfg := Parameters{}
 	err := json.Unmarshal(b, &testCfg)
 	if err != nil {
-		return TestConfig{}, err
+		return Parameters{}, err
 	}
 	return testCfg, nil
 }

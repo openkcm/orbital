@@ -34,7 +34,7 @@ type TestRunMetrics struct {
 	JobFailures      int64
 	JobCancellations int64
 
-	TestConfig TestConfig
+	Parameters Parameters
 }
 
 type testRunResult struct {
@@ -73,7 +73,7 @@ func (h *Handler) StartTest(w http.ResponseWriter, r *http.Request) {
 		cancel()
 	}()
 
-	cfg, err := parseTestConfig(r)
+	cfg, err := parseParamters(r)
 	if err != nil {
 		http.Error(w, "Failed to parse test configuration: "+err.Error(), http.StatusBadRequest)
 		return
@@ -129,7 +129,7 @@ func (h *Handler) releaseTestLock() {
 	h.mutex.Unlock()
 }
 
-func (h *Handler) executeTest(ctx context.Context, cfg TestConfig) (testRunResult, error) {
+func (h *Handler) executeTest(ctx context.Context, cfg Parameters) (testRunResult, error) {
 	termination := &termination{
 		expectedJobs: cfg.JobsNum,
 		finished:     make(chan struct{}),
@@ -150,11 +150,11 @@ func (h *Handler) executeTest(ctx context.Context, cfg TestConfig) (testRunResul
 		return testRunResult{}, fmt.Errorf("test execution failed: %w", err)
 	}
 
-	result.metrics.TestConfig = cfg
+	result.metrics.Parameters = cfg
 	return result, nil
 }
 
-func (h *Handler) sendTestResults(w http.ResponseWriter, r *http.Request, result testRunResult, cfg TestConfig) {
+func (h *Handler) sendTestResults(w http.ResponseWriter, r *http.Request, result testRunResult, cfg Parameters) {
 	metricsBytes, err := json.MarshalIndent(result.metrics, "", "  ")
 	if err != nil {
 		http.Error(w, "Failed to marshal metrics: "+err.Error(), http.StatusInternalServerError)
@@ -177,14 +177,14 @@ func (h *Handler) sendTestResults(w http.ResponseWriter, r *http.Request, result
 	http.ServeContent(w, r, fileName, time.Now(), bytes.NewReader(downloadBytes))
 }
 
-func parseTestConfig(r *http.Request) (TestConfig, error) {
+func parseParamters(r *http.Request) (Parameters, error) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		return TestConfig{}, err
+		return Parameters{}, err
 	}
-	testCfg, err := newTestConfig(body)
+	testCfg, err := newParameters(body)
 	if err != nil {
-		return TestConfig{}, err
+		return Parameters{}, err
 	}
 	return testCfg, nil
 }
