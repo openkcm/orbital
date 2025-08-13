@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -19,17 +22,29 @@ import (
 )
 
 func main() {
-	log.Println("Starting orbital manager performance test...")
-	envCfg := performance.NewEnvConfig()
+	cfg := performance.NewEnvConfig()
 
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		envCfg.Postgres.Host, envCfg.Postgres.Port, envCfg.Postgres.User,
-		envCfg.Postgres.Password, envCfg.Postgres.DBName, envCfg.Postgres.SSLMode)
+		cfg.Postgres.Host, cfg.Postgres.Port, cfg.Postgres.User,
+		cfg.Postgres.Password, cfg.Postgres.DBName, cfg.Postgres.SSLMode)
+
 	db, err := stdsql.Open("postgres", connStr)
 	handleErr("Failed to create database handle", err)
-	defer db.Close()
+	defer func() {
+		if cerr := db.Close(); cerr != nil {
+			log.Printf("DB close error: %v", cerr)
+		}
+	}()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigs
+		cancel()
+	}()
 
 	store, err := sql.New(ctx, db)
 	handleErr("Failed to create store", err)
@@ -37,26 +52,40 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	handler := performance.NewHandler(db, repo)
-	mux.HandleFunc("/orbital/run", handler.StartTest)
-	mux.HandleFunc("/orbital/stop", handler.StopTest)
+	h := performance.NewHandler(db, repo)
+	mux.HandleFunc("/orbital/start", h.StartTest)
+	mux.HandleFunc("/orbital/stop", h.StopTest)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		_, err := w.Write([]byte("ok"))
+		if err != nil {
+			log.Printf("Health response error: %v", err)
+		}
 	})
 	mux.Handle("/metrics", promhttp.Handler())
 
 	timeout := time.Minute * 20
-	server := &http.Server{
+	srv := &http.Server{
+		Addr:              ":" + cfg.ServerPort,
+		Handler:           mux,
 		ReadTimeout:       timeout,
 		ReadHeaderTimeout: timeout,
 		WriteTimeout:      timeout,
 		IdleTimeout:       timeout,
-		Addr:              ":" + envCfg.ServerPort,
-		Handler:           mux,
 	}
-	err = server.ListenAndServe()
-	handleErr("Failed to start http server", err)
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server start failed: %v", err)
+		}
+	}()
+
+	<-ctx.Done()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Server shutdown error: %v", err)
+	}
 }
 
 func handleErr(msg string, err error) {

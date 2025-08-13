@@ -29,7 +29,7 @@ type Handler struct {
 
 type TestRunMetrics struct {
 	DateTime         time.Time
-	TimeTaken        time.Duration
+	TotalTime        time.Duration
 	JobDones         int64
 	JobFailures      int64
 	JobCancellations int64
@@ -45,6 +45,7 @@ type testRunResult struct {
 
 type termination struct {
 	expectedJobs int
+	finished     chan struct{}
 
 	jobFailures      atomic.Int64
 	jobDones         atomic.Int64
@@ -59,75 +60,35 @@ func NewHandler(db *sql.DB, repo *orbital.Repository) *Handler {
 }
 
 func (h *Handler) StartTest(w http.ResponseWriter, r *http.Request) {
-	h.mutex.Lock()
-	if h.cancelTest != nil {
-		h.mutex.Unlock()
-		http.Error(w, "Test already running", http.StatusConflict)
+	ctx, cancel := context.WithCancel(r.Context())
+
+	err := h.acquireTestLock(cancel)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
-	ctxCancel, cancel := context.WithCancel(r.Context())
-	h.cancelTest = cancel
-	h.mutex.Unlock()
-
 	defer func() {
-		h.mutex.Lock()
-		h.cancelTest = nil
-		h.mutex.Unlock()
+		h.releaseTestLock()
 		_ = h.cleanupDB()
 		cancel()
 	}()
 
-	testCfg, err := parseTestConfig(r)
+	cfg, err := parseTestConfig(r)
 	if err != nil {
 		http.Error(w, "Failed to parse test configuration: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	termination := &termination{
-		expectedJobs: testCfg.JobsNum,
-	}
-	manager, err := initManager(h.repo, testCfg, termination)
-	if err != nil {
-		http.Error(w, "Failed to create orbital manager: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	err = prepareJobs(ctxCancel, manager, testCfg.JobsNum, testCfg.TargetsNum)
-	if err != nil {
-		http.Error(w, "Failed to prepare jobs: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	result, err := runTest(ctxCancel, manager, termination)
+	result, err := h.executeTest(ctx, cfg)
 	if err != nil {
 		http.Error(w, "Test failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	result.metrics.TestConfig = testCfg
 
-	metricsBytes, err := json.MarshalIndent(result.metrics, "", "  ")
-	if err != nil {
-		http.Error(w, "Failed to marshal metrics: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	downloadBytes, err := zipMultipleFiles(map[string][]byte{
-		"mem.prof": result.memProfile.Bytes(),
-		"cpu.prof": result.cpuProfile.Bytes(),
-		"metrics":  metricsBytes,
-	})
-	if err != nil {
-		http.Error(w, "Failed to create zip file: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	fileName := fileName(testCfg.TestName)
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", "attachment; filename=\""+fileName+"\"")
-	http.ServeContent(w, r, fileName, time.Now(), bytes.NewReader(downloadBytes))
+	h.sendTestResults(w, r, result, cfg)
 }
 
-func (h *Handler) StopTest(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) StopTest(w http.ResponseWriter, _ *http.Request) {
 	h.mutex.Lock()
 	defer h.mutex.Unlock()
 
@@ -145,7 +106,75 @@ func (h *Handler) StopTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Test stopped successfully"))
+	_, err = w.Write([]byte("Test stopped successfully"))
+	if err != nil {
+		log.Printf("Failed to write response: %v", err)
+		return
+	}
+}
+
+func (h *Handler) acquireTestLock(cancel context.CancelFunc) error {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+	if h.cancelTest != nil {
+		return fmt.Errorf("test already running")
+	}
+	h.cancelTest = cancel
+	return nil
+}
+
+func (h *Handler) releaseTestLock() {
+	h.mutex.Lock()
+	h.cancelTest = nil
+	h.mutex.Unlock()
+}
+
+func (h *Handler) executeTest(ctx context.Context, cfg TestConfig) (testRunResult, error) {
+	termination := &termination{
+		expectedJobs: cfg.JobsNum,
+		finished:     make(chan struct{}),
+	}
+
+	manager, err := initManager(h.repo, cfg, termination)
+	if err != nil {
+		return testRunResult{}, fmt.Errorf("failed to create orbital manager: %w", err)
+	}
+
+	err = prepareJobs(ctx, manager, cfg.JobsNum)
+	if err != nil {
+		return testRunResult{}, fmt.Errorf("failed to prepare jobs: %w", err)
+	}
+
+	result, err := profileTest(ctx, manager, termination)
+	if err != nil {
+		return testRunResult{}, fmt.Errorf("test execution failed: %w", err)
+	}
+
+	result.metrics.TestConfig = cfg
+	return result, nil
+}
+
+func (h *Handler) sendTestResults(w http.ResponseWriter, r *http.Request, result testRunResult, cfg TestConfig) {
+	metricsBytes, err := json.MarshalIndent(result.metrics, "", "  ")
+	if err != nil {
+		http.Error(w, "Failed to marshal metrics: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	downloadBytes, err := zipMultipleFiles(map[string][]byte{
+		"mem.prof":              result.memProfile.Bytes(),
+		"cpu.prof":              result.cpuProfile.Bytes(),
+		"business_metrics.json": metricsBytes,
+	})
+	if err != nil {
+		http.Error(w, "Failed to create zip file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	fileName := fileName(cfg.TestName)
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+fileName+"\"")
+	http.ServeContent(w, r, fileName, time.Now(), bytes.NewReader(downloadBytes))
 }
 
 func parseTestConfig(r *http.Request) (TestConfig, error) {
@@ -160,19 +189,45 @@ func parseTestConfig(r *http.Request) (TestConfig, error) {
 	return testCfg, nil
 }
 
-func prepareJobs(ctx context.Context, manager *orbital.Manager, jobsNum, targetsNum int) error {
-	log.Printf("Preparing %d jobs with %d targets each...\n", jobsNum, targetsNum)
-	for range jobsNum {
-		job := orbital.NewJob("test-job", []byte{})
-		_, err := manager.PrepareJob(ctx, job)
-		if err != nil {
+func prepareJobs(ctx context.Context, manager *orbital.Manager, jobsNum int) error {
+	workers := min(jobsNum, 10)
+	jobs := make(chan int, jobsNum)
+	errs := make(chan error, workers)
+
+	for i := range jobsNum {
+		jobs <- i
+	}
+	close(jobs)
+
+	for range workers {
+		go func() {
+			for range jobs {
+				jobCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+				job := orbital.NewJob("test-job", []byte{})
+				_, err := manager.PrepareJob(jobCtx, job)
+				cancel()
+				if err != nil {
+					select {
+					case errs <- err:
+					case <-ctx.Done():
+						return
+					}
+					return
+				}
+			}
+			errs <- nil
+		}()
+	}
+
+	for range workers {
+		if err := <-errs; err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func runTest(ctx context.Context, manager *orbital.Manager, termination *termination) (testRunResult, error) {
+func profileTest(ctx context.Context, manager *orbital.Manager, termination *termination) (testRunResult, error) {
 	cpuBuf := new(bytes.Buffer)
 	if err := pprof.StartCPUProfile(cpuBuf); err != nil {
 		return testRunResult{}, fmt.Errorf("could not start CPU profile: %w", err)
@@ -192,8 +247,8 @@ func runTest(ctx context.Context, manager *orbital.Manager, termination *termina
 	}
 
 	result := TestRunMetrics{
-		DateTime:         time.Now(),
-		TimeTaken:        timeTaken,
+		DateTime:         time.Now().UTC(),
+		TotalTime:        timeTaken,
 		JobDones:         termination.jobDones.Load(),
 		JobFailures:      termination.jobFailures.Load(),
 		JobCancellations: termination.jobCancellations.Load(),
@@ -207,26 +262,13 @@ func runTest(ctx context.Context, manager *orbital.Manager, termination *termina
 }
 
 func checkForJobTermination(ctx context.Context, t *termination) time.Duration {
-	before := time.Now()
-	log.Println("Checking for job termination...")
-	for {
-		select {
-		case <-ctx.Done():
-			log.Println("Context cancelled, exiting...")
-			return time.Since(before).Truncate(time.Millisecond)
-		default:
-			dones := t.jobDones.Load()
-			failures := t.jobFailures.Load()
-			cancellations := t.jobCancellations.Load()
+	start := time.Now()
 
-			sum := dones + failures + cancellations
-			log.Printf("Jobs terminated: %d/%d; done: %d; failures: %d; cancellations: %d\n",
-				sum, t.expectedJobs, dones, failures, cancellations)
-			if sum >= int64(t.expectedJobs) {
-				return time.Since(before).Truncate(time.Millisecond)
-			}
-			time.Sleep(1 * time.Second) // this interfers with the test duration, should be fixed
-		}
+	select {
+	case <-ctx.Done():
+		return time.Since(start)
+	case <-t.finished:
+		return time.Since(start)
 	}
 }
 
@@ -253,10 +295,13 @@ func zipMultipleFiles(files map[string][]byte) ([]byte, error) {
 }
 
 func (h *Handler) cleanupDB() error {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	tables := []string{"jobs", "tasks", "job_cursor", "job_event"}
 	for _, table := range tables {
-		if _, err := h.db.ExecContext(ctx, "DELETE FROM "+table); err != nil {
+		_, err := h.db.ExecContext(ctx, "DELETE FROM "+table)
+		if err != nil {
 			log.Printf("Failed to clean up table %s: %v", table, err)
 			return err
 		}
@@ -265,6 +310,6 @@ func (h *Handler) cleanupDB() error {
 }
 
 func fileName(testName string) string {
-	fileName := time.Now().Format(time.RFC3339) + "_" + testName
+	fileName := time.Now().UTC().Format(time.RFC3339) + "_" + testName
 	return strings.ReplaceAll(fileName, " ", "_") + ".zip"
 }

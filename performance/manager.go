@@ -12,6 +12,12 @@ import (
 	"github.com/openkcm/orbital/client/embedded"
 )
 
+var (
+	ErrClient      = errors.New("client error")
+	ErrJobConfirm  = errors.New("job confirm error")
+	ErrTaskResolve = errors.New("task resolve error")
+)
+
 func initManager(repo *orbital.Repository, cfg TestConfig, termination *termination) (*orbital.Manager, error) {
 	targetToClient := make(map[string]orbital.Initiator, cfg.TargetsNum)
 	for i := range cfg.TargetsNum {
@@ -32,9 +38,9 @@ func initManager(repo *orbital.Repository, cfg TestConfig, termination *terminat
 
 		orbital.WithTargetClients(targetToClient),
 
-		orbital.WithJobDoneEventFunc(jobTerminateFunc(&termination.jobDones)),
-		orbital.WithJobFailedEventFunc(jobTerminateFunc(&termination.jobFailures)),
-		orbital.WithJobCanceledEventFunc(jobTerminateFunc(&termination.jobCancellations)),
+		orbital.WithJobDoneEventFunc(jobTerminateFunc(&termination.jobDones, termination)),
+		orbital.WithJobFailedEventFunc(jobTerminateFunc(&termination.jobFailures, termination)),
+		orbital.WithJobCanceledEventFunc(jobTerminateFunc(&termination.jobCancellations, termination)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create orbital manager: %w", err)
@@ -52,7 +58,7 @@ func operatorMock(cfg OperatorMockConfig) (*embedded.Client, error) {
 		func(_ context.Context, request orbital.TaskRequest) (orbital.TaskResponse, error) {
 			errRand := rand.Float64()
 			if errRand <= cfg.ErrorRate {
-				return orbital.TaskResponse{}, errors.New("client error")
+				return orbital.TaskResponse{}, ErrClient
 			}
 
 			timeRand := randIntN(cfg.LatencyAverageSec * 2)
@@ -87,7 +93,7 @@ func taskResolveFunc(targetsNum int, cfg TaskResolveFuncConfig) orbital.TaskReso
 	return func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 		errRand := rand.Float64()
 		if errRand <= cfg.ErrorRate {
-			return orbital.TaskResolverResult{}, errors.New("task resolve error")
+			return orbital.TaskResolverResult{}, ErrTaskResolve
 		}
 
 		timeRand := randIntN(cfg.LatencyAverageSec * 2)
@@ -127,7 +133,7 @@ func jobConfirmFunc(cfg JobConfirmFuncConfig) orbital.JobConfirmFunc {
 	return func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 		errRand := rand.Float64()
 		if errRand <= cfg.ErrorRate {
-			return orbital.JobConfirmResult{}, errors.New("job confirm error")
+			return orbital.JobConfirmResult{}, ErrJobConfirm
 		}
 
 		timeRand := randIntN(cfg.LatencyAverageSec * 2)
@@ -146,9 +152,18 @@ func jobConfirmFunc(cfg JobConfirmFuncConfig) orbital.JobConfirmFunc {
 	}
 }
 
-func jobTerminateFunc(terminatedJobs *atomic.Int64) orbital.JobTerminatedEventFunc {
+func jobTerminateFunc(terminatedJobs *atomic.Int64, t *termination) orbital.JobTerminatedEventFunc {
 	return func(_ context.Context, _ orbital.Job) error {
 		terminatedJobs.Add(1)
+		total := t.jobDones.Load() + t.jobFailures.Load() + t.jobCancellations.Load()
+		if total >= int64(t.expectedJobs) {
+			select {
+			case <-t.finished:
+				// Already closed
+			default:
+				close(t.finished)
+			}
+		}
 		return nil
 	}
 }
