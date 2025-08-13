@@ -182,11 +182,11 @@ func parseParameters(r *http.Request) (Parameters, error) {
 	if err != nil {
 		return Parameters{}, err
 	}
-	testCfg, err := newParameters(body)
+	params, err := parametersFromJSON(body)
 	if err != nil {
 		return Parameters{}, err
 	}
-	return testCfg, nil
+	return params, nil
 }
 
 func prepareJobs(ctx context.Context, manager *orbital.Manager, jobsNum int) error {

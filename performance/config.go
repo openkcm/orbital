@@ -75,13 +75,13 @@ func NewEnvConfig() EnvConfig {
 	}
 }
 
-func newParameters(b []byte) (Parameters, error) {
-	testCfg := Parameters{}
-	err := json.Unmarshal(b, &testCfg)
+func parametersFromJSON(b []byte) (Parameters, error) {
+	params := Parameters{}
+	err := json.Unmarshal(b, &params)
 	if err != nil {
 		return Parameters{}, err
 	}
-	return testCfg, nil
+	return params, nil
 }
 
 func getPostgresConfig() PostgresConfig {

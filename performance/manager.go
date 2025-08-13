@@ -61,7 +61,7 @@ func operatorMock(cfg OperatorMockConfig) (*embedded.Client, error) {
 				return orbital.TaskResponse{}, ErrClient
 			}
 
-			timeRand := randIntN(cfg.LatencyAverageSec * 2)
+			timeRand := randIntN(cfg.LatencyAverageSec*2 + 1)
 			time.Sleep(time.Duration(timeRand) * time.Second)
 
 			response := orbital.TaskResponse{
@@ -72,7 +72,7 @@ func operatorMock(cfg OperatorMockConfig) (*embedded.Client, error) {
 
 			retryRand := rand.Float64()
 			if retryRand <= cfg.UnfinishedRate {
-				response.ReconcileAfterSec = int64(randIntN(cfg.ReconcileAfterAverageSec * 2))
+				response.ReconcileAfterSec = int64(randIntN(cfg.ReconcileAfterAverageSec*2 + 1))
 				response.Status = string(orbital.TaskStatusProcessing)
 				return response, nil
 			}
@@ -96,7 +96,7 @@ func taskResolveFunc(targetsNum int, cfg TaskResolveFuncConfig) orbital.TaskReso
 			return orbital.TaskResolverResult{}, ErrTaskResolve
 		}
 
-		timeRand := randIntN(cfg.LatencyAverageSec * 2)
+		timeRand := randIntN(cfg.LatencyAverageSec*2 + 1)
 		time.Sleep(time.Duration(timeRand) * time.Second)
 
 		unfinishedRand := rand.Float64()
@@ -136,7 +136,7 @@ func jobConfirmFunc(cfg JobConfirmFuncConfig) orbital.JobConfirmFunc {
 			return orbital.JobConfirmResult{}, ErrJobConfirm
 		}
 
-		timeRand := randIntN(cfg.LatencyAverageSec * 2)
+		timeRand := randIntN(cfg.LatencyAverageSec*2 + 1)
 		time.Sleep(time.Duration(timeRand) * time.Second)
 
 		cancelRand := rand.Float64()
