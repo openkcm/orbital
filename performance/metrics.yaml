@@ -35,49 +35,6 @@ data:
           - targets: ['exporter-service:9187']
 ---
 apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: postgres-secret
-  labels:
-    app: postgres
-data:
-  POSTGRES_DB: orbital
-  POSTGRES_USER: orbitaluser
-  POSTGRES_PASSWORD: password
----
-# PersistentVolume
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: postgres-volume
-  labels:
-    type: local
-    app: postgres
-spec:
-  storageClassName: manual
-  capacity:
-    storage: 1Gi
-  accessModes:
-    - ReadWriteMany
-  hostPath:
-    path: /data/postgresql
----
-# PersistentVolumeClaim
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: postgres-pvc
-  labels:
-    app: postgres
-spec:
-  storageClassName: manual
-  accessModes:
-    - ReadWriteMany
-  resources:
-    requests:
-      storage: 1Gi
----
-apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: grafana-pvc
@@ -160,39 +117,6 @@ spec:
         - containerPort: 9187
           name: exporter
       restartPolicy: Always
-
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: postgres
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: postgres
-  template:
-    metadata:
-      labels:
-        app: postgres
-    spec:
-      containers:
-        - name: postgres
-          image: 'postgres:17-alpine'
-          args: ["-c", "max_connections=200"]
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 5432
-          envFrom:
-            - configMapRef:
-                name: postgres-secret
-          volumeMounts:
-            - mountPath: /var/lib/postgresql/data
-              name: postgresdata
-      volumes:
-        - name: postgresdata
-          persistentVolumeClaim:
-            claimName: postgres-pvc
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -261,7 +185,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: grafana
+  name: grafana-service
 spec:
   ports:
     - port: 3000
@@ -284,20 +208,6 @@ spec:
     - protocol: TCP
       port: 9090
       targetPort: 9090
-  type: LoadBalancer
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: postgres-service
-  namespace: default
-spec:
-  selector:
-    app: postgres
-  ports:
-    - protocol: TCP
-      port: 5432
-      targetPort: 5432
   type: LoadBalancer
 ---
 apiVersion: v1
