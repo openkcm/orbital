@@ -73,7 +73,7 @@ func (h *Handler) StartTest(w http.ResponseWriter, r *http.Request) {
 		cancel()
 	}()
 
-	cfg, err := parseParamters(r)
+	cfg, err := parseParameters(r)
 	if err != nil {
 		http.Error(w, "Failed to parse test configuration: "+err.Error(), http.StatusBadRequest)
 		return
@@ -177,7 +177,7 @@ func (h *Handler) sendTestResults(w http.ResponseWriter, r *http.Request, result
 	http.ServeContent(w, r, fileName, time.Now(), bytes.NewReader(downloadBytes))
 }
 
-func parseParamters(r *http.Request) (Parameters, error) {
+func parseParameters(r *http.Request) (Parameters, error) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return Parameters{}, err
