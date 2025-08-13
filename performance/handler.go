@@ -190,38 +190,13 @@ func parseParameters(r *http.Request) (Parameters, error) {
 }
 
 func prepareJobs(ctx context.Context, manager *orbital.Manager, jobsNum int) error {
-	workers := min(jobsNum, 10)
-	jobs := make(chan int, jobsNum)
-	errs := make(chan error, workers)
-
-	for i := range jobsNum {
-		jobs <- i
-	}
-	close(jobs)
-
-	for range workers {
-		go func() {
-			for range jobs {
-				jobCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-				job := orbital.NewJob("test-job", []byte{})
-				_, err := manager.PrepareJob(jobCtx, job)
-				cancel()
-				if err != nil {
-					select {
-					case errs <- err:
-					case <-ctx.Done():
-						return
-					}
-					return
-				}
-			}
-			errs <- nil
-		}()
-	}
-
-	for range workers {
-		if err := <-errs; err != nil {
-			return err
+	for range jobsNum {
+		jobCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		job := orbital.NewJob("test-job", []byte{})
+		_, err := manager.PrepareJob(jobCtx, job)
+		cancel()
+		if err != nil {
+			return fmt.Errorf("failed to prepare job: %w", err)
 		}
 	}
 	return nil
