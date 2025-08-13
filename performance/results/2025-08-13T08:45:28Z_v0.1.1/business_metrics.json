@@ -1,14 +1,16 @@
-  {
+{
+  "DateTime": "2025-08-13T08:45:27.977604754Z",
+  "TotalTime": 11451433005,
+  "JobDones": 1000,
+  "JobFailures": 0,
+  "JobCancellations": 0,
+  "Parameters": {
     "TestName": "v0.1.1",
     "Timeout": 600000000000,
     "JobsNum": 1000,
     "TargetsNum": 3,
     "Manager": {
-      "BackoffBaseIntervalSec": 10,
-      "BackoffMaxIntervalSec": 10240,
-      "MaxReconcileCount": 10,
       "TaskLimitNum": 500,
-      "ConfirmJobInterval": 1000000000,
       "ConfirmJobDelay": 0,
       "ConfirmJobWorkerConfig": {
         "NoOfWorkers": 10,
@@ -29,7 +31,10 @@
         "NoOfWorkers": 10,
         "ExecInterval": 1000,
         "Timeout": 10000000000
-      }
+      },
+      "BackoffBaseIntervalSec": 10,
+      "BackoffMaxIntervalSec": 10240,
+      "MaxReconcileCount": 10
     },
     "JobConfirmFunc": {
       "LatencyAverageSec": 0,
@@ -50,3 +55,4 @@
       "TaskFailureRate": 0
     }
   }
+}
