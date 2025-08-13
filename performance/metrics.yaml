@@ -63,7 +63,7 @@ spec:
     spec:
       containers:
         - name: prometheus
-          image: prom/prometheus
+          image: prom/prometheus:v3.5.0
           ports:
             - containerPort: 9090
           volumeMounts:
@@ -101,7 +101,7 @@ spec:
     spec:
       containers:
       - name: exporter
-        image: prometheuscommunity/postgres-exporter:latest
+        image: prometheuscommunity/postgres-exporter:v0.17.1
         imagePullPolicy: 
         resources:
           requests:
@@ -139,7 +139,7 @@ spec:
           - 0
       containers:
         - name: grafana
-          image: grafana/grafana:latest
+          image: grafana/grafana:11.6.5
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
