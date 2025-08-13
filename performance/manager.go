@@ -61,8 +61,8 @@ func operatorMock(cfg OperatorMockConfig) (*embedded.Client, error) {
 				return orbital.TaskResponse{}, ErrClient
 			}
 
-			timeRand := randIntN(cfg.LatencyAverageSec*2 + 1)
-			time.Sleep(time.Duration(timeRand) * time.Second)
+			latRand := randLatency(cfg.LatencyAverageSec)
+			time.Sleep(time.Duration(latRand) * time.Second)
 
 			response := orbital.TaskResponse{
 				TaskID: request.TaskID,
@@ -72,7 +72,7 @@ func operatorMock(cfg OperatorMockConfig) (*embedded.Client, error) {
 
 			retryRand := rand.Float64()
 			if retryRand <= cfg.UnfinishedRate {
-				response.ReconcileAfterSec = int64(randIntN(cfg.ReconcileAfterAverageSec*2 + 1))
+				response.ReconcileAfterSec = int64(randLatency(cfg.ReconcileAfterAverageSec))
 				response.Status = string(orbital.TaskStatusProcessing)
 				return response, nil
 			}
@@ -96,8 +96,8 @@ func taskResolveFunc(targetsNum int, cfg TaskResolveFuncConfig) orbital.TaskReso
 			return orbital.TaskResolverResult{}, ErrTaskResolve
 		}
 
-		timeRand := randIntN(cfg.LatencyAverageSec*2 + 1)
-		time.Sleep(time.Duration(timeRand) * time.Second)
+		latRand := randLatency(cfg.LatencyAverageSec)
+		time.Sleep(time.Duration(latRand) * time.Second)
 
 		unfinishedRand := rand.Float64()
 		if unfinishedRand <= cfg.UnfinishedRate {
@@ -136,8 +136,8 @@ func jobConfirmFunc(cfg JobConfirmFuncConfig) orbital.JobConfirmFunc {
 			return orbital.JobConfirmResult{}, ErrJobConfirm
 		}
 
-		timeRand := randIntN(cfg.LatencyAverageSec*2 + 1)
-		time.Sleep(time.Duration(timeRand) * time.Second)
+		latRand := randLatency(cfg.LatencyAverageSec)
+		time.Sleep(time.Duration(latRand) * time.Second)
 
 		cancelRand := rand.Float64()
 		if cancelRand <= cfg.CancelRate {
@@ -168,9 +168,10 @@ func jobTerminateFunc(terminatedJobs *atomic.Int64, t *termination) orbital.JobT
 	}
 }
 
-func randIntN(n int) int {
-	if n <= 0 {
+func randLatency(avg int) int {
+	if avg <= 0 {
 		return 0
 	}
-	return rand.IntN(n)
+	// The expected value of this uniform distribution is avg.
+	return rand.IntN(avg*2 + 1)
 }
