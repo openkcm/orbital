@@ -1,5 +1,5 @@
   {
-    "TestName": "test1",
+    "TestName": "v0.1.1",
     "Timeout": 600000000000,
     "JobsNum": 20,
     "TargetsNum": 2,
