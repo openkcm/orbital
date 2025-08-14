@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand/v2"
+	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -61,8 +61,7 @@ func operatorMock(cfg OperatorMockConfig) (*embedded.Client, error) {
 				return orbital.TaskResponse{}, ErrClient
 			}
 
-			latRand := randLatency(cfg.LatencyAverageSec)
-			time.Sleep(time.Duration(latRand) * time.Second)
+			time.Sleep(randLatency(cfg.LatencyAverageSec))
 
 			response := orbital.TaskResponse{
 				TaskID: request.TaskID,
@@ -96,8 +95,7 @@ func taskResolveFunc(targetsNum int, cfg TaskResolveFuncConfig) orbital.TaskReso
 			return orbital.TaskResolverResult{}, ErrTaskResolve
 		}
 
-		latRand := randLatency(cfg.LatencyAverageSec)
-		time.Sleep(time.Duration(latRand) * time.Second)
+		time.Sleep(randLatency(cfg.LatencyAverageSec))
 
 		unfinishedRand := rand.Float64()
 		if unfinishedRand <= cfg.UnfinishedRate {
@@ -136,8 +134,7 @@ func jobConfirmFunc(cfg JobConfirmFuncConfig) orbital.JobConfirmFunc {
 			return orbital.JobConfirmResult{}, ErrJobConfirm
 		}
 
-		latRand := randLatency(cfg.LatencyAverageSec)
-		time.Sleep(time.Duration(latRand) * time.Second)
+		time.Sleep(randLatency(cfg.LatencyAverageSec))
 
 		cancelRand := rand.Float64()
 		if cancelRand <= cfg.CancelRate {
@@ -168,10 +165,11 @@ func jobTerminateFunc(terminatedJobs *atomic.Int64, t *termination) orbital.JobT
 	}
 }
 
-func randLatency(avg int) int {
-	if avg <= 0 {
+// randLatency generates a random latency duration
+// based on the average seconds provided.
+func randLatency(avgSec int) time.Duration {
+	if avgSec <= 0 {
 		return 0
 	}
-	// The expected value of this uniform distribution is avg.
-	return rand.IntN(avg*2 + 1)
+	return time.Duration(rand.Int63n(int64(time.Second) * int64(avgSec) * 2))
 }
