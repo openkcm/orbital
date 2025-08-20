@@ -57,7 +57,7 @@ func operatorMock(cfg OperatorMockConfig) (*embedded.Client, error) {
 	return embedded.NewClient(
 		func(_ context.Context, request orbital.TaskRequest) (orbital.TaskResponse, error) {
 			errRand := rand.Float64()
-			if errRand <= cfg.ErrorRate {
+			if errRand < cfg.ErrorRate {
 				return orbital.TaskResponse{}, ErrClient
 			}
 
@@ -70,14 +70,14 @@ func operatorMock(cfg OperatorMockConfig) (*embedded.Client, error) {
 			}
 
 			retryRand := rand.Float64()
-			if retryRand <= cfg.UnfinishedRate {
+			if retryRand < cfg.UnfinishedRate {
 				response.ReconcileAfterSec = int64(randLatency(cfg.ReconcileAfterAverageSec))
 				response.Status = string(orbital.TaskStatusProcessing)
 				return response, nil
 			}
 
 			taskFailRand := rand.Float64()
-			if taskFailRand <= cfg.TaskFailureRate {
+			if taskFailRand < cfg.TaskFailureRate {
 				response.Status = string(orbital.TaskStatusFailed)
 				return response, nil
 			}
@@ -91,21 +91,21 @@ func operatorMock(cfg OperatorMockConfig) (*embedded.Client, error) {
 func taskResolveFunc(targetsNum int, cfg TaskResolveFuncConfig) orbital.TaskResolveFunc {
 	return func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 		errRand := rand.Float64()
-		if errRand <= cfg.ErrorRate {
+		if errRand < cfg.ErrorRate {
 			return orbital.TaskResolverResult{}, ErrTaskResolve
 		}
 
 		time.Sleep(randLatency(cfg.LatencyAverageSec))
 
 		unfinishedRand := rand.Float64()
-		if unfinishedRand <= cfg.UnfinishedRate {
+		if unfinishedRand < cfg.UnfinishedRate {
 			return orbital.TaskResolverResult{
 				Done: false,
 			}, nil
 		}
 
 		cancelRand := rand.Float64()
-		if cancelRand <= cfg.CancelRate {
+		if cancelRand < cfg.CancelRate {
 			return orbital.TaskResolverResult{
 				IsCanceled: true,
 			}, nil
@@ -130,14 +130,14 @@ func taskResolveFunc(targetsNum int, cfg TaskResolveFuncConfig) orbital.TaskReso
 func jobConfirmFunc(cfg JobConfirmFuncConfig) orbital.JobConfirmFunc {
 	return func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 		errRand := rand.Float64()
-		if errRand <= cfg.ErrorRate {
+		if errRand < cfg.ErrorRate {
 			return orbital.JobConfirmResult{}, ErrJobConfirm
 		}
 
 		time.Sleep(randLatency(cfg.LatencyAverageSec))
 
 		cancelRand := rand.Float64()
-		if cancelRand <= cfg.CancelRate {
+		if cancelRand < cfg.CancelRate {
 			return orbital.JobConfirmResult{
 				IsCanceled: true,
 			}, nil

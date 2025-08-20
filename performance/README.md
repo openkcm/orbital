@@ -9,6 +9,7 @@ This directory contains performance testing tools for the Orbital library. It pr
 - [Running Performance Tests](#running-performance-tests)
 - [Metrics and Monitoring](#metrics-and-monitoring)
 - [Profiling](#profiling)
+- [Cleanup](#cleanup)
 
 ## Prerequisites
 
@@ -87,3 +88,10 @@ For visualizing the profiles, you can use the `pprof` tool:
 go tool pprof -http=:8080 results/<timestamp>-<testname>/cpu/mem.prof
 ```
 
+## Cleanup
+
+To clean up the deployed resources, run:
+
+```bash
+make undeploy && make undeploy-metrics
+``` 
