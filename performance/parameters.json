@@ -1,0 +1,52 @@
+  {
+    "TestName": "v0.1.1",
+    "Timeout": 600000000000,
+    "JobsNum": 1000,
+    "TargetsNum": 3,
+    "Manager": {
+      "BackoffBaseIntervalSec": 10,
+      "BackoffMaxIntervalSec": 10240,
+      "MaxReconcileCount": 10,
+      "TaskLimitNum": 500,
+      "ConfirmJobInterval": 1000000000,
+      "ConfirmJobDelay": 0,
+      "ConfirmJobWorkerConfig": {
+        "NoOfWorkers": 10,
+        "ExecInterval": 1000,
+        "Timeout": 10000000000
+      },
+      "CreateTasksWorkerConfig": {
+        "NoOfWorkers": 10,
+        "ExecInterval": 1000,
+        "Timeout": 10000000000
+      },
+      "ReconcileWorkerConfig": {
+        "NoOfWorkers": 10,
+        "ExecInterval": 1000,
+        "Timeout": 10000000000
+      },
+      "NotifyWorkerConfig": {
+        "NoOfWorkers": 10,
+        "ExecInterval": 1000,
+        "Timeout": 10000000000
+      }
+    },
+    "JobConfirmFunc": {
+      "LatencyAverageSec": 0,
+      "ErrorRate": 0,
+      "CancelRate": 0
+    },
+    "TaskResolveFunc": {
+      "LatencyAverageSec": 0,
+      "ErrorRate": 0,
+      "UnfinishedRate": 0,
+      "CancelRate": 0
+    },
+    "OperatorMock": {
+      "LatencyAverageSec": 0,
+      "ReconcileAfterAverageSec": 0,
+      "UnfinishedRate": 0,
+      "ErrorRate": 0,
+      "TaskFailureRate": 0
+    }
+  }
