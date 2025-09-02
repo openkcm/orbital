@@ -215,7 +215,7 @@ func createAndStartManager(ctx context.Context, t *testing.T, store *sql.SQL, co
 	manager.Config.CreateTasksWorkerConfig.ExecInterval = 200 * time.Millisecond
 	manager.Config.ReconcileWorkerConfig.ExecInterval = 300 * time.Millisecond
 	manager.Config.NotifyWorkerConfig.ExecInterval = 200 * time.Millisecond
-	manager.Config.ConfirmJobDelay = 100 * time.Millisecond
+	manager.Config.ConfirmJobAfter = 100 * time.Millisecond
 
 	err = manager.Start(ctx)
 	if err != nil {

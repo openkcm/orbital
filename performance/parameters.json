@@ -9,7 +9,7 @@
       "MaxReconcileCount": 10,
       "TaskLimitNum": 500,
       "ConfirmJobInterval": 1000000000,
-      "ConfirmJobDelay": 0,
+      "ConfirmJobAfter": 0,
       "ConfirmJobWorkerConfig": {
         "NoOfWorkers": 10,
         "ExecInterval": 1000,
