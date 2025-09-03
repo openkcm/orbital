@@ -579,6 +579,48 @@ func TestReconcile(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("should update task to failed when no target client is present", func(t *testing.T) {
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+			Status: orbital.JobStatusProcessing,
+		})
+		assert.NoError(t, err)
+
+		target := "target"
+		ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
+			{
+				JobID:  job.ID,
+				Status: orbital.TaskStatusCreated,
+				Target: target,
+			},
+		})
+		assert.NoError(t, err)
+		assert.Len(t, ids, 1)
+
+		assert.NoError(t, err)
+
+		subj, err := orbital.NewManager(repo,
+			mockTaskResolveFunc(),
+			orbital.WithTargetClients(map[string]orbital.Initiator{}),
+		)
+		assert.NoError(t, err)
+
+		// when
+		err = orbital.Reconcile(subj)(ctx)
+
+		// then
+		assert.NoError(t, err)
+		actTask, ok, err := orbital.GetRepoTask(repo)(ctx, ids[0])
+		assert.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, orbital.TaskStatusFailed, actTask.Status)
+		assert.Equal(t, int64(0), actTask.TotalSentCount)
+	})
 }
 
 //nolint:gocognit
