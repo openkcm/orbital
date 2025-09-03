@@ -76,8 +76,8 @@ type (
 	Config struct {
 		// TaskLimitNum is the maximum number of tasks to process at once.
 		TaskLimitNum int
-		// ConfirmJobDelay is the delay before confirming a job.
-		ConfirmJobDelay time.Duration
+		// ConfirmJobAfter is the delay before confirming a job.
+		ConfirmJobAfter time.Duration
 		// ConfirmJobWorkerConfig holds the configuration for the job confirmation worker.
 		ConfirmJobWorkerConfig WorkerConfig
 		// CreateTasksWorkerConfig holds the configuration for the task creation worker.
@@ -100,7 +100,7 @@ type (
 
 // Default values for configs.
 const (
-	defConfirmJobDelay     = 5 * time.Second
+	defConfirmJobAfter     = 0
 	defNoOfWorker          = 5
 	defWorkTimeout         = 5 * time.Second
 	defTaskLimitNum        = 500
@@ -148,7 +148,7 @@ func NewManager(repo *Repository, taskResolver TaskResolveFunc, optFuncs ...Mana
 				ExecInterval: defWorkExecInterval,
 				Timeout:      defWorkTimeout,
 			},
-			ConfirmJobDelay:        defConfirmJobDelay,
+			ConfirmJobAfter:        defConfirmJobAfter,
 			TaskLimitNum:           defTaskLimitNum,
 			BackoffBaseIntervalSec: defBackoffBaseInterval,
 			BackoffMaxIntervalSec:  defBackoffMaxInterval,
@@ -288,7 +288,7 @@ func (m *Manager) confirmJob(ctx context.Context) error {
 		now := clock.Now()
 		jobs, err := repo.listJobs(ctx, ListJobsQuery{
 			Status:             JobStatusCreated,
-			CreatedAt:          clock.ToUnixNano(now.Add(-m.Config.ConfirmJobDelay)),
+			CreatedAt:          clock.ToUnixNano(now.Add(-m.Config.ConfirmJobAfter)),
 			Limit:              1,
 			RetrievalModeQueue: true,
 			OrderByUpdatedAt:   true,
