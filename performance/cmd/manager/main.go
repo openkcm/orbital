@@ -13,13 +13,13 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/openkcm/orbital"
-	"github.com/openkcm/orbital/performance"
-	"github.com/openkcm/orbital/store/sql"
-
 	_ "github.com/lib/pq"
 
 	stdsql "database/sql"
+
+	"github.com/openkcm/orbital"
+	"github.com/openkcm/orbital/performance"
+	"github.com/openkcm/orbital/store/sql"
 )
 
 func main() {

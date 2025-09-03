@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
 	"github.com/openkcm/common-sdk/pkg/logger"
+
 	slogctx "github.com/veqryn/slog-context"
 
 	"github.com/openkcm/orbital/internal/clock"
