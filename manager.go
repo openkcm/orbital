@@ -3,6 +3,7 @@ package orbital
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -112,6 +113,7 @@ var (
 	ErrMsgFailedTasks     = "job has failed tasks"
 	ErrJobUnCancelable    = errors.New("job cannot be canceled in its current state")
 	ErrJobNotFound        = errors.New("job not found")
+	ErrNoClientForTarget  = errors.New("no client for task target")
 )
 
 // NewManager creates a new Manager instance.
@@ -356,6 +358,13 @@ func (m *Manager) createTask(ctx context.Context) error {
 			return m.updateJobAndCreateJobEvent(ctx, repo, job)
 		}
 
+		if err := m.targetsExist(resolverResult.TaskInfos); err != nil {
+			job.Status = JobStatusFailed
+			job.ErrorMessage = err.Error()
+			return m.updateJobAndCreateJobEvent(ctx, repo, job)
+		}
+
+		// Create tasks and update the cursor.
 		jobCursor.Cursor = resolverResult.Cursor
 		_, err = repo.createTasks(ctx, newTasks(job.ID, resolverResult.TaskInfos))
 		if err != nil {
@@ -376,6 +385,17 @@ func (m *Manager) createTask(ctx context.Context) error {
 
 		return repo.updateJob(ctx, job)
 	})
+}
+
+// targetsExist checks if all targets in the provided TaskInfo slice have corresponding clients.
+// It returns an error if any target does not have a corresponding client.
+func (m *Manager) targetsExist(infos []TaskInfo) error {
+	for _, info := range infos {
+		if _, ok := m.targetToInitiator[info.Target]; !ok {
+			return fmt.Errorf("%w target: %s", ErrNoClientForTarget, info.Target)
+		}
+	}
+	return nil
 }
 
 // createOrUpdateCursor creates or updates a JobCursor in the repository.
@@ -542,8 +562,11 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 	}
 
 	client, ok := m.targetToInitiator[task.Target]
+	// this is an additional safeguard, this should never happen as we check for the existence of targets while creating tasks.
 	if !ok {
 		slog.Warn("no client for task target", "target", task.Target, "taskID", task.ID)
+		task.Status = TaskStatusFailed
+		repo.updateTask(ctx, task) //nolint:errcheck
 		return
 	}
 

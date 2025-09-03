@@ -338,9 +338,13 @@ func TestCreateTasks(t *testing.T) {
 						Done: true,
 					}, nil
 				}
+				initiatorMap := map[string]orbital.Initiator{
+					"target-1": nil,
+				}
 				subj, _ := orbital.NewManager(
 					repo,
 					resolverFunc,
+					orbital.WithTargetClients(initiatorMap),
 				)
 
 				_, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
@@ -369,9 +373,9 @@ func TestCreateTasks(t *testing.T) {
 			{
 				name: "with empty fields",
 				info: orbital.TaskInfo{
-					Target: "",
+					Target: "target",
 					Data:   []byte{},
-					Type:   "",
+					Type:   "target",
 				},
 			},
 			{
@@ -398,9 +402,13 @@ func TestCreateTasks(t *testing.T) {
 					}, nil
 				}
 
+				initiatorMap := map[string]orbital.Initiator{
+					"target": nil,
+				}
 				subj, _ := orbital.NewManager(
 					repo,
 					resolverFunc,
+					orbital.WithTargetClients(initiatorMap),
 				)
 
 				job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
@@ -462,9 +470,13 @@ func TestCreateTasks(t *testing.T) {
 				Done: true,
 			}, nil
 		}
+		initiatorMap := map[string]orbital.Initiator{
+			"target-1": nil,
+		}
 		subj, _ := orbital.NewManager(
 			repo,
 			resolverFunc,
+			orbital.WithTargetClients(initiatorMap),
 		)
 
 		assert.NoError(t, err)
@@ -513,6 +525,18 @@ func TestCreateTasks(t *testing.T) {
 				expStatus: orbital.JobStatusReady,
 			},
 			{
+				name: "to FAILED if the target does not exist",
+				resolverResult: orbital.TaskResolverResult{
+					TaskInfos: []orbital.TaskInfo{
+						{
+							Target: "target-2",
+						},
+					},
+					Done: false,
+				},
+				expStatus: orbital.JobStatusFailed,
+			},
+			{
 				name: "to RESOLVING if the all targets are not resolved",
 				resolverResult: orbital.TaskResolverResult{
 					TaskInfos: []orbital.TaskInfo{
@@ -536,8 +560,14 @@ func TestCreateTasks(t *testing.T) {
 			resolverFunc := func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 				return tt.resolverResult, nil
 			}
-			subj, _ := orbital.NewManager(repo,
+
+			initiatorMap := map[string]orbital.Initiator{
+				"target-1": nil,
+			}
+			subj, _ := orbital.NewManager(
+				repo,
 				resolverFunc,
+				orbital.WithTargetClients(initiatorMap),
 			)
 
 			// when
@@ -695,8 +725,13 @@ func TestCreateTasks(t *testing.T) {
 			}, nil
 		}
 
-		subj, _ := orbital.NewManager(repo,
+		initiatorMap := map[string]orbital.Initiator{
+			"target": nil,
+		}
+		subj, _ := orbital.NewManager(
+			repo,
 			resolverFunc,
+			orbital.WithTargetClients(initiatorMap),
 		)
 
 		for createTaskCalledTimes := range 2 {
@@ -750,8 +785,14 @@ func TestCreateTasks(t *testing.T) {
 			}, nil
 		}
 
-		subj, _ := orbital.NewManager(repo,
+		initiatorMap := map[string]orbital.Initiator{
+			"target-1": nil,
+			"target-2": nil,
+		}
+		subj, _ := orbital.NewManager(
+			repo,
 			resolverFunc,
+			orbital.WithTargetClients(initiatorMap),
 		)
 
 		for createTaskCalledTimes := range 2 {
