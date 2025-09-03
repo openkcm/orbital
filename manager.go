@@ -303,14 +303,15 @@ func (m *Manager) confirmJob(ctx context.Context) error {
 		}
 		job := jobs[0]
 
-		slogctx.Debug(ctx, "confirming job", "jobID", job.ID)
+		ctx = slogctx.With(ctx, "jobID", job.ID)
+		slogctx.Debug(ctx, "confirming job")
 
 		err = m.handleConfirmJob(ctx, repo, job)
 		if err != nil {
 			slog.Error("handleConfirmJob", "error", err)
 		}
 
-		slogctx.Debug(ctx, "confirming job finished", "jobID", job.ID, "status", job.Status)
+		slogctx.Debug(ctx, "job confirmed", "status", job.Status)
 
 		return err
 	})
@@ -345,7 +346,6 @@ func (m *Manager) createTask(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-
 		if !ok {
 			slogctx.Log(ctx, logger.LevelTrace, "no jobs found for task creation")
 			return nil

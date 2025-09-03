@@ -68,7 +68,7 @@ func (r *Runner) Stop() error {
 	if r.cancelFunc == nil {
 		return errRunnerNotRunning
 	}
-	slog.Debug("Stopping all works")
+	slog.Debug("stopping all works")
 	r.cancelFunc()
 	r.cancelFunc = nil
 	return nil
@@ -84,7 +84,7 @@ func setupWorkers(ctxCancel context.Context, workChan <-chan struct{}, work Work
 				select {
 				case _, ok := <-workChan:
 					if !ok {
-						slog.Error("Worker channel closed for", "work", work.Name)
+						slog.Error("worker channel closed", "name", work.Name)
 						return
 					}
 					ctxTimeout, cancel := context.WithTimeout(ctxCancel, work.Timeout)
@@ -93,7 +93,7 @@ func setupWorkers(ctxCancel context.Context, workChan <-chan struct{}, work Work
 					errChan := make(chan error)
 
 					go func(ctxTimeout context.Context, errChan chan<- error) {
-						slog.Log(ctxCancel, logger.LevelTrace, "Worker started for", "work", work.Name)
+						slog.Log(ctxCancel, logger.LevelTrace, "worker started", "name", work.Name)
 
 						errChan <- work.Fn(ctxTimeout)
 						defer close(errChan)
@@ -102,15 +102,15 @@ func setupWorkers(ctxCancel context.Context, workChan <-chan struct{}, work Work
 					select {
 					case err := <-errChan:
 						if err != nil {
-							slog.Error("Worker error for", "work", work.Name, "error", err)
+							slog.Error("worker error", "name", work.Name, "error", err)
 						}
 					case <-ctxTimeout.Done():
-						slog.Error("Worker timeout for", "work", work.Name)
+						slog.Error("worker timeout", "name", work.Name)
 						continue
 					}
 
 				case <-ctxCancel.Done():
-					slog.Error("Worker cancelled for", "work", work.Name)
+					slog.Error("worker cancelled", "name", work.Name)
 					return
 				}
 			}
