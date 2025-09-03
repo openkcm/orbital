@@ -5,6 +5,8 @@ import (
 	"errors"
 	"log/slog"
 	"time"
+
+	"github.com/openkcm/common-sdk/pkg/logger"
 )
 
 type (
@@ -91,7 +93,7 @@ func setupWorkers(ctxCancel context.Context, workChan <-chan struct{}, work Work
 					errChan := make(chan error)
 
 					go func(ctxTimeout context.Context, errChan chan<- error) {
-						slog.Debug("Worker started for", "work", work.Name)
+						slog.Log(ctxCancel, logger.LevelTrace, "Worker started for", "work", work.Name)
 
 						errChan <- work.Fn(ctxTimeout)
 						defer close(errChan)

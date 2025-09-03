@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/openkcm/common-sdk/pkg/logger"
 
 	"github.com/openkcm/orbital/internal/clock"
 	"github.com/openkcm/orbital/internal/retry"
@@ -290,7 +291,7 @@ func (m *Manager) confirmJob(ctx context.Context) error {
 			return err
 		}
 		if len(jobs) == 0 {
-			slog.Debug("no jobs to confirm")
+			slog.Log(ctx, logger.LevelTrace, "no jobs to confirm")
 			return nil
 		}
 		job := jobs[0]
@@ -334,7 +335,7 @@ func (m *Manager) createTask(ctx context.Context) error {
 		}
 
 		if !ok {
-			slog.Debug("no jobs found for task creation")
+			slog.Log(ctx, logger.LevelTrace, "no jobs found for task creation")
 			return nil
 		}
 
@@ -434,7 +435,7 @@ func (m *Manager) reconcile(ctx context.Context) error {
 			return err
 		}
 		if job.ID == uuid.Nil {
-			slog.Debug("no jobs ready for reconciliation")
+			slog.Log(ctx, logger.LevelTrace, "no jobs ready for reconciliation")
 			return nil
 		}
 		job.Status = JobStatusProcessing
@@ -621,7 +622,7 @@ func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error 
 		}
 
 		if resp.ETag != task.ETag {
-			slog.Debug("discarding stale response", "taskID", task.ID)
+			slog.Debug("discarding stale response", "taskID", task.ID, "etag", resp.ETag)
 			return nil
 		}
 
