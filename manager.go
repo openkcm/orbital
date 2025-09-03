@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/openkcm/common-sdk/pkg/logger"
+	slogctx "github.com/veqryn/slog-context"
 
 	"github.com/openkcm/orbital/internal/clock"
 	"github.com/openkcm/orbital/internal/retry"
@@ -240,7 +242,9 @@ func (m *Manager) Start(ctx context.Context) error {
 // PrepareJob prepares a job by creating it in the repository with status CREATED.
 func (m *Manager) PrepareJob(ctx context.Context, job Job) (Job, error) {
 	job.Status = JobStatusCreated
-	return m.repo.createJob(ctx, job)
+	job, err := m.repo.createJob(ctx, job)
+	slogctx.Debug(ctx, "new job prepared", "jobID", job.ID)
+	return job, err
 }
 
 // GetJob retrieves a job by its ID from the repository.
@@ -256,6 +260,7 @@ func (m *Manager) ListTasks(ctx context.Context, query ListTasksQuery) ([]Task, 
 // CancelJob cancels a job and associated running tasks. It updates the job status to "USER_CANCEL".
 func (m *Manager) CancelJob(ctx context.Context, jobID uuid.UUID) error {
 	return m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
+		slogctx.Debug(ctx, "cancelling job", "jobID", jobID)
 		job, ok, err := repo.getJobForUpdate(ctx, jobID)
 		if err != nil {
 			return err
@@ -296,10 +301,15 @@ func (m *Manager) confirmJob(ctx context.Context) error {
 		}
 		job := jobs[0]
 
+		slogctx.Debug(ctx, "confirming job", "jobID", job.ID)
+
 		err = m.handleConfirmJob(ctx, repo, job)
 		if err != nil {
 			slog.Error("handleConfirmJob", "error", err)
 		}
+
+		slogctx.Debug(ctx, "confirming job finished", "jobID", job.ID, "status", job.Status)
+
 		return err
 	})
 }
@@ -335,23 +345,27 @@ func (m *Manager) createTask(ctx context.Context) error {
 		}
 
 		if !ok {
-			slog.Log(ctx, logger.LevelTrace, "no jobs found for task creation")
+			slogctx.Log(ctx, logger.LevelTrace, "no jobs found for task creation")
 			return nil
 		}
 
+		ctx = slogctx.With(ctx, "jobID", job.ID)
+		slogctx.Debug(ctx, "creating tasks for job")
+
 		jobCursor, found, err := m.getJobCursor(ctx, repo, job.ID)
 		if err != nil {
-			slog.Error("jobCursor", "error", err, "jobID", job.ID)
+			slog.Error("jobCursor", "error", err)
 			return err
 		}
 
 		resolverResult, err := m.taskResolveFunc(ctx, job, jobCursor.Cursor)
 		if err != nil {
-			slog.Error("taskResolver", "error", err, "jobID", job.ID)
+			slogctx.Error(ctx, "taskResolver", "error", err)
 			// NOTE: here we update the job to change the updated_at timestamp in order to spread the fetching of jobs.
 			return repo.updateJob(ctx, job)
 		}
 		if resolverResult.IsCanceled {
+			slogctx.Debug(ctx, "job cancelled by task resolver")
 			job.Status = JobStatusResolveCanceled
 			job.ErrorMessage = resolverResult.CanceledErrorMessage
 			return m.updateJobAndCreateJobEvent(ctx, repo, job)
@@ -360,19 +374,22 @@ func (m *Manager) createTask(ctx context.Context) error {
 		jobCursor.Cursor = resolverResult.Cursor
 		_, err = repo.createTasks(ctx, newTasks(job.ID, resolverResult.TaskInfos))
 		if err != nil {
-			slog.Error("createTasks", "error", err, "jobID", job.ID)
+			slogctx.Error(ctx, "createTasks", "error", err)
 			return err
 		}
 
 		err = m.createOrUpdateCursor(ctx, repo, found, jobCursor)
 		if err != nil {
-			slog.Error("createOrUpdateCursor", "error", err, "jobID", job.ID)
+			slogctx.Error(ctx, "createOrUpdateCursor", "error", err)
 			return err
 		}
 
-		job.Status = JobStatusResolving
 		if resolverResult.Done {
+			slogctx.Debug(ctx, "tasks resolved successfully")
 			job.Status = JobStatusReady
+		} else {
+			slogctx.Debug(ctx, "task resolving still in progress")
+			job.Status = JobStatusResolving
 		}
 
 		return repo.updateJob(ctx, job)
@@ -438,6 +455,7 @@ func (m *Manager) reconcile(ctx context.Context) error {
 			slog.Log(ctx, logger.LevelTrace, "no jobs ready for reconciliation")
 			return nil
 		}
+
 		job.Status = JobStatusProcessing
 
 		// Check if there are any tasks not terminated yet,
@@ -495,6 +513,7 @@ func (m *Manager) getJobForReconcile(ctx context.Context, repo Repository) (Job,
 
 // terminateJob updates the job status to DONE or FAILED based on the status of its tasks.
 func (m *Manager) terminateJob(ctx context.Context, repo Repository, job Job) error {
+	slog.Debug("terminating job", "jobID", job.ID)
 	job.Status = JobStatusDone
 
 	tasks, err := repo.listTasks(ctx, ListTasksQuery{
@@ -506,6 +525,7 @@ func (m *Manager) terminateJob(ctx context.Context, repo Repository, job Job) er
 		return err
 	}
 	if len(tasks) > 0 {
+		slog.Debug("job has failed tasks", "jobID", job.ID)
 		job.ErrorMessage = ErrMsgFailedTasks
 		job.Status = JobStatusFailed
 	}
@@ -536,6 +556,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 	defer wg.Done()
 
 	if task.ReconcileCount >= m.Config.MaxReconcileCount {
+		slog.Debug("max reconcile count for task exceeded", "taskID", task.ID, "etag", task.ETag, "reconcileCount", task.ReconcileCount)
 		task.ETag = uuid.NewString()
 		task.Status = TaskStatusFailed
 		repo.updateTask(ctx, task) //nolint:errcheck
@@ -564,6 +585,10 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 		WorkingState: task.WorkingState,
 		ETag:         task.ETag,
 	}
+
+	slog.Debug("sending task request", slog.String("target", task.Target), slog.String("taskID", task.ID.String()),
+		slog.String("etag", task.ETag), slog.Any("reconcileCount", task.ReconcileCount), slog.Any("reconcileAfterSec", task.ReconcileAfterSec),
+		slog.Any("request", req))
 
 	if err := client.SendTaskRequest(ctx, req); err != nil {
 		slog.Error("sendRequestAndUpdateTask", "error", err, "taskID", task.ID)
@@ -606,6 +631,10 @@ func (m *Manager) handleResponses(ctx context.Context, client Initiator, target 
 				slog.Error("receiveTask", "error", err, "target", target)
 				continue
 			}
+
+			slog.Debug("received task response", slog.String("target", target), slog.String("taskID", resp.TaskID.String()),
+				slog.String("etag", resp.ETag), slog.Any("response", resp))
+
 			if err := m.processResponse(ctx, resp); err != nil {
 				slog.Error("processResponse", "error", err, "taskID", resp.TaskID)
 			}
