@@ -245,7 +245,9 @@ func (m *Manager) Start(ctx context.Context) error {
 func (m *Manager) PrepareJob(ctx context.Context, job Job) (Job, error) {
 	job.Status = JobStatusCreated
 	job, err := m.repo.createJob(ctx, job)
-	slogctx.Debug(ctx, "new job prepared", "jobID", job.ID)
+	if err == nil {
+		slogctx.Debug(ctx, "new job prepared", "jobID", job.ID)
+	}
 	return job, err
 }
 
