@@ -3,7 +3,7 @@ module github.com/openkcm/orbital
 go 1.24.3
 
 require (
-	github.com/Azure/go-amqp v1.4.0
+	github.com/Azure/go-amqp v1.5.0
 	github.com/docker/docker v28.3.3+incompatible
 	github.com/docker/go-connections v0.6.0
 	github.com/google/uuid v1.6.0
