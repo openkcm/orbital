@@ -658,7 +658,7 @@ func (m *Manager) handleResponses(ctx context.Context, client Initiator, target 
 			}
 
 			slog.Debug("received task response", slog.String("target", target), slog.String("taskID", resp.TaskID.String()),
-				slog.String("etag", resp.ETag), slog.Any("response", resp))
+				slog.String("etag", resp.ETag), slog.String("status", resp.Status), slog.Any("response", resp))
 
 			if err := m.processResponse(ctx, resp); err != nil {
 				slog.Error("processResponse", "error", err, "taskID", resp.TaskID)
@@ -676,7 +676,7 @@ func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error 
 		}
 
 		if resp.ETag != task.ETag {
-			slog.Debug("discarding stale response", "taskID", task.ID, "etag", resp.ETag)
+			slog.Debug("discarding stale task response", "taskID", task.ID, "etag", resp.ETag)
 			return nil
 		}
 
@@ -689,6 +689,7 @@ func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error 
 		task.TotalReceivedCount++
 		if task.Status == TaskStatusFailed {
 			task.ErrorMessage = resp.ErrorMessage
+			slogctx.Debug(ctx, "task failed", "taskID", task.ID, "errorMessage", task.ErrorMessage)
 		}
 
 		return repo.updateTask(txCtx, task)
