@@ -110,6 +110,7 @@ func Encode[T EntityTypes](entityType T) (Entity, error) {
 			CreatedAt: obj.CreatedAt,
 			Values: map[string]any{
 				"id":            obj.ID,
+				"external_id":   obj.ExternalID,
 				"data":          obj.Data,
 				"type":          obj.Type,
 				"status":        obj.Status,
@@ -303,6 +304,9 @@ func decodeJob[T EntityTypes](e Entity) (T, error) {
 	j.ID, j.CreatedAt, j.UpdatedAt = e.ID, e.CreatedAt, e.UpdatedAt
 	vals := e.Values
 	var err error
+	if j.ExternalID, err = resolve[string](vals, "external_id"); err != nil {
+		return empty, err
+	}
 	if j.Type, err = resolve[string](vals, "type"); err != nil {
 		return empty, err
 	}

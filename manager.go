@@ -116,6 +116,7 @@ var (
 	ErrMsgFailedTasks     = "job has failed tasks"
 	ErrJobUnCancelable    = errors.New("job cannot be canceled in its current state")
 	ErrJobNotFound        = errors.New("job not found")
+	ErrJobAlreadyExists   = errors.New("job already exists")
 	ErrNoClientForTarget  = errors.New("no client for task target")
 )
 
@@ -251,9 +252,50 @@ func (m *Manager) PrepareJob(ctx context.Context, job Job) (Job, error) {
 	return job, err
 }
 
+// RunJobOnce runs a job if none exists with the same external ID and type in a non-terminal status.
+func (m *Manager) RunJobOnce(ctx context.Context, job Job) (Job, error) {
+	var result Job
+	err := m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
+		jobs, err := repo.listJobs(ctx, ListJobsQuery{
+			ExternalID: job.ExternalID,
+			Type:       job.Type,
+			// non-terminal statuses
+			StatusIn: []JobStatus{
+				JobStatusCreated,
+				JobStatusConfirming,
+				JobStatusConfirmed,
+				JobStatusResolving,
+				JobStatusReady,
+				JobStatusProcessing,
+			},
+			Limit: 1,
+		})
+		if err != nil {
+			return err
+		}
+		if len(jobs) > 0 {
+			slogctx.Debug(ctx, "job already exists", "jobID", jobs[0].ID)
+			return fmt.Errorf("%w; ID: %s; status: %s", ErrJobAlreadyExists, jobs[0].ID, jobs[0].Status)
+		}
+		job.Status = JobStatusCreated
+		result, err = repo.createJob(ctx, job)
+		if err != nil {
+			return err
+		}
+		slogctx.Debug(ctx, "new job created", "jobID", job.ID)
+		return nil
+	})
+	return result, err
+}
+
 // GetJob retrieves a job by its ID from the repository.
 func (m *Manager) GetJob(ctx context.Context, jobID uuid.UUID) (Job, bool, error) {
 	return m.repo.getJob(ctx, jobID)
+}
+
+// ListJobs retrieves jobs by query from the repository.
+func (m *Manager) ListJobs(ctx context.Context, query ListJobsQuery) ([]Job, error) {
+	return m.repo.listJobs(ctx, query)
 }
 
 // ListTasks retrieves tasks by query from the repository.
@@ -436,7 +478,6 @@ func (m *Manager) jobForTaskCreation(ctx context.Context, repo Repository) (Job,
 	var empty Job
 	jobs, err := repo.listJobs(ctx, ListJobsQuery{
 		StatusIn:           []JobStatus{JobStatusResolving, JobStatusConfirmed},
-		CreatedAt:          clock.NowUnixNano(),
 		Limit:              1,
 		RetrievalModeQueue: true,
 		OrderByUpdatedAt:   true,
@@ -517,7 +558,6 @@ func (m *Manager) reconcile(ctx context.Context) error {
 func (m *Manager) getJobForReconcile(ctx context.Context, repo Repository) (Job, error) {
 	jobs, err := repo.listJobs(ctx, ListJobsQuery{
 		StatusIn:           []JobStatus{JobStatusReady, JobStatusProcessing},
-		CreatedAt:          clock.NowUnixNano(),
 		OrderByUpdatedAt:   true,
 		RetrievalModeQueue: true,
 		Limit:              1,

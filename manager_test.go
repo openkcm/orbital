@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/openkcm/orbital"
-	"github.com/openkcm/orbital/internal/clock"
 )
 
 var errResourceNotFound = errors.New("resource not found")
@@ -28,7 +27,7 @@ func TestPrepareJob(t *testing.T) {
 
 	subj, _ := orbital.NewManager(repo, mockTaskResolveFunc())
 
-	job := orbital.NewJob("resource-data", []byte("type"))
+	job := orbital.NewJob("resource-data", []byte("type"), uuid.NewString())
 	_, ok, err := subj.GetJob(ctx, job.ID)
 	assert.NoError(t, err)
 	assert.False(t, ok)
@@ -44,6 +43,38 @@ func TestPrepareJob(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, orbital.JobStatusCreated, preparedJob.Status)
+}
+
+func TestRunJobOnce(t *testing.T) {
+	// given
+	ctx := t.Context()
+	db, store := createSQLStore(t)
+	defer clearTables(t, db)
+	repo := orbital.NewRepository(store)
+
+	subj, _ := orbital.NewManager(repo, mockTaskResolveFunc())
+
+	job := orbital.NewJob("job-type", []byte("data"), uuid.NewString())
+
+	// when
+	createdJob, err := subj.RunJobOnce(ctx, job)
+
+	// then
+	assert.NoError(t, err)
+	assert.NotEqual(t, uuid.Nil, createdJob.ID)
+
+	preparedJob, ok, err := subj.GetJob(ctx, createdJob.ID)
+	assert.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, orbital.JobStatusCreated, preparedJob.Status)
+
+	// when try to create the same job again
+	createdJob, err = subj.RunJobOnce(ctx, job)
+
+	// then
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, orbital.ErrJobAlreadyExists)
+	assert.Equal(t, uuid.Nil, createdJob.ID)
 }
 
 func TestNewManagerTaskResolverErr(t *testing.T) {
@@ -122,7 +153,7 @@ func TestConfirmJob(t *testing.T) {
 				)
 				subj.Config.ConfirmJobAfter = 10 * time.Millisecond
 
-				job := orbital.NewJob("", nil)
+				job := orbital.NewJob("", nil, uuid.NewString())
 				jobCreated, err := subj.PrepareJob(ctx, job)
 				assert.NoError(t, err)
 
@@ -158,7 +189,7 @@ func TestConfirmJob(t *testing.T) {
 		)
 		subj.Config.ConfirmJobAfter = 10 * time.Millisecond
 
-		job := orbital.NewJob("", nil)
+		job := orbital.NewJob("", nil, uuid.NewString())
 		jobCreated, err := subj.PrepareJob(ctx, job)
 		assert.NoError(t, err)
 
@@ -192,7 +223,7 @@ func TestConfirmJob(t *testing.T) {
 		)
 		subj.Config.ConfirmJobAfter = 10 * time.Millisecond
 
-		job := orbital.NewJob("", nil)
+		job := orbital.NewJob("", nil, uuid.NewString())
 		jobCreated, err := subj.PrepareJob(ctx, job)
 		assert.NoError(t, err)
 
@@ -229,7 +260,7 @@ func TestConfirmJob(t *testing.T) {
 		)
 		subj.Config.ConfirmJobAfter = 10 * time.Millisecond
 
-		job := orbital.NewJob("", nil)
+		job := orbital.NewJob("", nil, uuid.NewString())
 		jobCreated, err := subj.PrepareJob(ctx, job)
 		assert.NoError(t, err)
 
@@ -291,7 +322,6 @@ func TestConfirmJob(t *testing.T) {
 		assert.Equal(t, "start second retrieval mode list", <-callerChan)
 		actJobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
 			RetrievalModeQueue: true,
-			CreatedAt:          clock.NowUnixNano(),
 		})
 		assert.NoError(t, err)
 		assert.Len(t, actJobs, 1)
@@ -489,7 +519,6 @@ func TestCreateTasks(t *testing.T) {
 		assert.Equal(t, "start second retrieval mode list", <-callerChan)
 		actJobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
 			RetrievalModeQueue: true,
-			CreatedAt:          clock.NowUnixNano(),
 		})
 		assert.NoError(t, err)
 		assert.Len(t, actJobs, 1)
@@ -824,6 +853,143 @@ func TestCreateTasks(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestListJobs(t *testing.T) {
+	ctx := t.Context()
+	db, store := createSQLStore(t)
+	defer clearTables(t, db)
+	repo := orbital.NewRepository(store)
+
+	subj, _ := orbital.NewManager(repo, mockTaskResolveFunc())
+
+	// given
+	jobs := []orbital.Job{
+		{
+			ID:         uuid.New(),
+			Status:     orbital.JobStatusCreated,
+			ExternalID: "external-id-1",
+			Type:       "type-1",
+			CreatedAt:  1,
+			UpdatedAt:  1,
+		},
+		{
+			ID:         uuid.New(),
+			Status:     orbital.JobStatusConfirmed,
+			ExternalID: "external-id-2",
+			Type:       "type-2",
+			CreatedAt:  2,
+			UpdatedAt:  2,
+		},
+	}
+
+	for _, job := range jobs {
+		_, err := orbital.CreateRepoJob(repo)(ctx, job)
+		assert.NoError(t, err)
+	}
+
+	tests := []struct {
+		name     string
+		query    orbital.ListJobsQuery
+		expLen   int
+		validate func(t *testing.T, jobs []orbital.Job)
+	}{
+		{
+			name: "should list all jobs",
+			query: orbital.ListJobsQuery{
+				Limit: 10,
+			},
+			expLen: 2,
+			validate: func(t *testing.T, jobs []orbital.Job) {
+				t.Helper()
+				assert.Equal(t, "external-id-1", jobs[0].ExternalID)
+				assert.Equal(t, "external-id-2", jobs[1].ExternalID)
+			},
+		},
+		{
+			name: "should limit the number of jobs",
+			query: orbital.ListJobsQuery{
+				Limit: 1,
+			},
+			expLen: 1,
+			validate: func(t *testing.T, jobs []orbital.Job) {
+				t.Helper()
+				assert.Equal(t, "external-id-1", jobs[0].ExternalID)
+			},
+		},
+		{
+			name: "should filter by createdAt",
+			query: orbital.ListJobsQuery{
+				CreatedAt: 1,
+				Limit:     10,
+			},
+			expLen: 1,
+			validate: func(t *testing.T, jobs []orbital.Job) {
+				t.Helper()
+				assert.Equal(t, "external-id-1", jobs[0].ExternalID)
+			},
+		},
+		{
+			name: "should filter by status",
+			query: orbital.ListJobsQuery{
+				Status: orbital.JobStatusCreated,
+				Limit:  10,
+			},
+			expLen: 1,
+			validate: func(t *testing.T, jobs []orbital.Job) {
+				t.Helper()
+				assert.Equal(t, orbital.JobStatusCreated, jobs[0].Status)
+			},
+		},
+		{
+			name: "should filter by external ID",
+			query: orbital.ListJobsQuery{
+				ExternalID: "external-id-2",
+				Limit:      10,
+			},
+			expLen: 1,
+			validate: func(t *testing.T, jobs []orbital.Job) {
+				t.Helper()
+				assert.Equal(t, "external-id-2", jobs[0].ExternalID)
+			},
+		},
+		{
+			name: "should filter by type",
+			query: orbital.ListJobsQuery{
+				Type:  "type-1",
+				Limit: 10,
+			},
+			expLen: 1,
+			validate: func(t *testing.T, jobs []orbital.Job) {
+				t.Helper()
+				assert.Equal(t, "type-1", jobs[0].Type)
+			},
+		},
+		{
+			name: "should filter by updatedAt",
+			query: orbital.ListJobsQuery{
+				UpdatedAt: 1,
+				Limit:     10,
+			},
+			expLen: 1,
+			validate: func(t *testing.T, jobs []orbital.Job) {
+				t.Helper()
+				assert.Equal(t, int64(1), jobs[0].UpdatedAt)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// when
+			actJobs, err := subj.ListJobs(ctx, tt.query)
+
+			// then
+			assert.NoError(t, err)
+			assert.Len(t, actJobs, tt.expLen)
+			tt.validate(t, actJobs)
+		})
+	}
 }
 
 func TestListTasks(t *testing.T) {

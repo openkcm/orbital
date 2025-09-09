@@ -77,6 +77,24 @@ func TestQueryClause(t *testing.T) {
 			},
 		},
 		{
+			name: "should create clause with Type",
+			clauseCreator: func() query.Clause {
+				return query.ClauseWithType("type")
+			},
+			expClause: query.Clause{
+				Field: "type", Operator: query.Operator("="), Value: "type",
+			},
+		},
+		{
+			name: "should create clause with ExternalID",
+			clauseCreator: func() query.Clause {
+				return query.ClauseWithExternalID("external-id")
+			},
+			expClause: query.Clause{
+				Field: "external_id", Operator: query.Operator("="), Value: "external-id",
+			},
+		},
+		{
 			name: "should create clause with ReadyToBeSent",
 			clauseCreator: func() query.Clause {
 				return query.ClauseWithReadyToBeSent(100)

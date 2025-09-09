@@ -12,6 +12,8 @@ const (
 	operatorIn                                Operator   = "IN"
 	fieldID                                   Field      = "id"
 	fieldJobID                                Field      = "job_id"
+	fieldExternalID                           Field      = "external_id"
+	fieldType                                 Field      = "type"
 	fieldStatus                               Field      = "status"
 	fieldCreatedAt                            Field      = "created_at"
 	fieldUpdatedAt                            Field      = "updated_at"
@@ -84,6 +86,18 @@ func ClauseWithID(id uuid.UUID) Clause {
 // the equality operator and the provided UUID value.
 func ClauseWithJobID(jobID uuid.UUID) Clause {
 	return Clause{Field: fieldJobID, Operator: operatorEqual, Value: jobID}
+}
+
+// ClauseWithExternalID creates a Clause that filters by the external ID field using
+// the equality operator and the provided external ID value.
+func ClauseWithExternalID(externalID string) Clause {
+	return Clause{Field: fieldExternalID, Operator: operatorEqual, Value: externalID}
+}
+
+// ClauseWithType creates a Clause that filters by the type field using
+// the equality operator and the provided type value.
+func ClauseWithType(t string) Clause {
+	return Clause{Field: fieldType, Operator: operatorEqual, Value: t}
 }
 
 // ClauseWithStatus creates a Clause that filters by the status field using

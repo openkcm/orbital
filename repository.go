@@ -34,10 +34,12 @@ type (
 	// It allows filtering by status, creation time, result limit, and enables
 	// queue-like retrieval mode when specified.
 	ListJobsQuery struct {
+		ExternalID         string      // Filter jobs by their external ID.
+		Type               string      // Filter jobs by their type.
 		Status             JobStatus   // Filter jobs by their status.
 		StatusIn           []JobStatus // Filter jobs by a list of statuses.
-		UpdatedAt          int64       // Filter jobs updated at or after this timestamp.
-		CreatedAt          int64       // Filter jobs created at or after this timestamp.
+		UpdatedAt          int64       // Filter jobs updated before this timestamp.
+		CreatedAt          int64       // Filter jobs created before this timestamp.
 		Limit              int         // Maximum number of jobs to return.
 		RetrievalModeQueue bool        // If true, enables queue-like retrieval mode.
 		OrderByUpdatedAt   bool        // If true, orders jobs by updated_at in descending order.
@@ -50,8 +52,8 @@ type (
 		JobID              uuid.UUID    // Filter tasks by the associated job ID.
 		Status             TaskStatus   // Filter tasks by their status.
 		StatusIn           []TaskStatus // Filter tasks by a list of statuses.
-		CreatedAt          int64        // Filter tasks created at or after this timestamp.
-		UpdatedAt          int64        // Filter tasks updated at or after this timestamp.
+		CreatedAt          int64        // Filter tasks created before this timestamp.
+		UpdatedAt          int64        // Filter tasks updated before this timestamp.
 		Limit              int          // Maximum number of tasks to return.
 		IsReconcileReady   bool         // If true, filters tasks that are ready to be reconciled.
 		RetrievalModeQueue bool         // If true, enables queue-like retrieval mode.
@@ -100,10 +102,8 @@ func (r *Repository) updateJob(ctx context.Context, job Job) error {
 func (r *Repository) listJobs(ctx context.Context, jobsQuery ListJobsQuery) ([]Job, error) {
 	q := query.Query{
 		EntityName: query.EntityNameJobs,
-		Clauses: []query.Clause{
-			query.ClauseWithCreatedBefore(jobsQuery.CreatedAt),
-		},
-		Limit: jobsQuery.Limit,
+		Clauses:    []query.Clause{},
+		Limit:      jobsQuery.Limit,
 	}
 
 	if string(jobsQuery.Status) != "" {
@@ -117,6 +117,20 @@ func (r *Repository) listJobs(ctx context.Context, jobsQuery ListJobsQuery) ([]J
 		}
 		q.Clauses = append(q.Clauses, query.ClauseWithStatuses(statuses...))
 	}
+
+	if jobsQuery.ExternalID != "" {
+		q.Clauses = append(q.Clauses, query.ClauseWithExternalID(jobsQuery.ExternalID))
+	}
+
+	if jobsQuery.Type != "" {
+		q.Clauses = append(q.Clauses, query.ClauseWithType(jobsQuery.Type))
+	}
+
+	createdAt := clock.NowUnixNano()
+	if jobsQuery.CreatedAt != 0 {
+		createdAt = jobsQuery.CreatedAt
+	}
+	q.Clauses = append(q.Clauses, query.ClauseWithCreatedBefore(createdAt))
 
 	if jobsQuery.UpdatedAt > 0 {
 		q.Clauses = append(q.Clauses, query.ClauseWithUpdatedBefore(jobsQuery.UpdatedAt))
@@ -191,13 +205,13 @@ func (r *Repository) updateTask(ctx context.Context, task Task) error {
 
 // listTasks retrieves a list of task entities from the repository based on the provided query parameters.
 // It takes a context and a ListTasksQuery object as input and returns a slice of Task entities or an error if the operation fails.
-//
-//nolint:cyclop
 func (r *Repository) listTasks(ctx context.Context, tasksQuery ListTasksQuery) ([]Task, error) {
 	q := query.Query{
 		EntityName: query.EntityNameTasks,
 		Clauses:    []query.Clause{},
+		Limit:      tasksQuery.Limit,
 	}
+
 	if tasksQuery.Status != "" {
 		q.Clauses = append(q.Clauses, query.ClauseWithStatus(string(tasksQuery.Status)))
 	}
@@ -214,23 +228,19 @@ func (r *Repository) listTasks(ctx context.Context, tasksQuery ListTasksQuery) (
 		q.Clauses = append(q.Clauses, query.ClauseWithJobID(tasksQuery.JobID))
 	}
 
-	now := clock.NowUnixNano()
+	createdAt := clock.NowUnixNano()
 	if tasksQuery.CreatedAt != 0 {
-		q.Clauses = append(q.Clauses, query.ClauseWithCreatedBefore(tasksQuery.CreatedAt))
+		createdAt = tasksQuery.CreatedAt
 	}
-	q.Clauses = append(q.Clauses, query.ClauseWithCreatedBefore(now))
+	q.Clauses = append(q.Clauses, query.ClauseWithCreatedBefore(createdAt))
 
 	if tasksQuery.UpdatedAt != 0 {
 		q.Clauses = append(q.Clauses, query.ClauseWithUpdatedBefore(tasksQuery.UpdatedAt))
 	}
-	q.Clauses = append(q.Clauses, query.ClauseWithUpdatedBefore(now))
-
-	if tasksQuery.Limit > 0 {
-		q.Limit = tasksQuery.Limit
-	}
+	q.Clauses = append(q.Clauses, query.ClauseWithUpdatedBefore(createdAt))
 
 	if tasksQuery.IsReconcileReady {
-		q.Clauses = append(q.Clauses, query.ClauseWithReadyToBeSent(now))
+		q.Clauses = append(q.Clauses, query.ClauseWithReadyToBeSent(createdAt))
 	}
 
 	q.RetrievalMode = query.RetrievalModeDefault

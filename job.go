@@ -23,6 +23,7 @@ type (
 	// Job is the translated domain object representing an event.
 	Job struct {
 		ID           uuid.UUID
+		ExternalID   string
 		Data         []byte
 		Type         string
 		Status       JobStatus
@@ -36,10 +37,11 @@ type (
 )
 
 // NewJob creates a new Job instance with the given parameters.
-func NewJob(jobType string, data []byte) Job {
+func NewJob(jobType string, data []byte, externalID string) Job {
 	return Job{
-		Data: data,
-		Type: jobType,
+		Type:       jobType,
+		Data:       data,
+		ExternalID: externalID,
 	}
 }
 

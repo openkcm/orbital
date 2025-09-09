@@ -38,6 +38,8 @@ func New(ctx context.Context, db *sql.DB) (*SQL, error) {
    			updated_at BIGINT NOT NULL,
    			created_at BIGINT NOT NULL
    		);
+		ALTER TABLE jobs 
+			ADD COLUMN IF NOT EXISTS external_id VARCHAR(100);
    		CREATE TABLE IF NOT EXISTS tasks(
    			id UUID PRIMARY KEY,
    			job_id UUID NOT NULL,

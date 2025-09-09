@@ -518,9 +518,8 @@ func TestRepoTransaction(t *testing.T) {
 	assert.NoError(t, err)
 
 	jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
-		Status:    orbital.JobStatusConfirmed,
-		CreatedAt: clock.NowUnixNano(),
-		Limit:     10,
+		Status: orbital.JobStatusConfirmed,
+		Limit:  10,
 	})
 	assert.NoError(t, err)
 	assert.Len(t, jobs, 1)
@@ -546,9 +545,8 @@ func TestRepoTransactionError(t *testing.T) {
 	assert.Equal(t, errTransaction, err)
 
 	jobs, err := orbital.ListRepoJobs(repo)(t.Context(), orbital.ListJobsQuery{
-		Status:    orbital.JobStatusCreated,
-		CreatedAt: clock.NowUnixNano(),
-		Limit:     10,
+		Status: orbital.JobStatusCreated,
+		Limit:  10,
 	})
 	assert.NoError(t, err)
 	assert.Empty(t, jobs)
@@ -606,7 +604,6 @@ func TestRepoTransactionRaceCondition(t *testing.T) {
 				result, err := orbital.ListRepoJobs(&repo)(ctx, orbital.ListJobsQuery{
 					Status:             orbital.JobStatusCreated,
 					RetrievalModeQueue: true,
-					CreatedAt:          clock.NowUnixNano(),
 					Limit:              10,
 				})
 				assert.NoError(t, err)
@@ -629,9 +626,8 @@ func TestRepoTransactionRaceCondition(t *testing.T) {
 
 		// should fetch the updated job for the first transaction
 		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
-			Status:    orbital.JobStatusResolveCanceled,
-			CreatedAt: clock.NowUnixNano(),
-			Limit:     10,
+			Status: orbital.JobStatusResolveCanceled,
+			Limit:  10,
 		})
 		assert.NoError(t, err)
 		assert.Len(t, jobs, 1)
@@ -703,9 +699,8 @@ func TestRepoTransactionRaceCondition(t *testing.T) {
 
 		// should fetch the updated job for the second transaction
 		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
-			Status:    orbital.JobStatusConfirmCanceled,
-			CreatedAt: clock.NowUnixNano(),
-			Limit:     10,
+			Status: orbital.JobStatusConfirmCanceled,
+			Limit:  10,
 		})
 		assert.NoError(t, err)
 		assert.Len(t, jobs, 1)

@@ -223,6 +223,7 @@ func TestEncodes(t *testing.T) {
 				Data:         []byte("foo-data"),
 				Status:       orbital.JobStatusCreated,
 				Type:         "baz-type",
+				ExternalID:   "external-id",
 			},
 		}
 		expected := []orbital.Entity{
@@ -239,6 +240,7 @@ func TestEncodes(t *testing.T) {
 					"data":          []byte("foo-data"),
 					"status":        orbital.JobStatusCreated,
 					"type":          "baz-type",
+					"external_id":   "external-id",
 				},
 			},
 		}
@@ -659,6 +661,7 @@ func TestDecodeValueVariants(t *testing.T) {
 				"status":        orbital.JobStatusConfirmCanceled,
 				"data":          []byte("x"),
 				"error_message": "error",
+				"external_id":   "external-id",
 			},
 		}
 		job, err := orbital.Decode[orbital.Job](e)
@@ -676,6 +679,7 @@ func TestDecodeValueVariants(t *testing.T) {
 				"status":        "CONFIRMED",
 				"data":          []byte("x"),
 				"error_message": "error",
+				"external_id":   "external-id",
 			},
 		}
 		job, err := orbital.Decode[orbital.Job](e)
@@ -693,6 +697,7 @@ func TestDecodeValueVariants(t *testing.T) {
 				"status":        "CREATED",
 				"data":          nil,
 				"error_message": "error",
+				"external_id":   "external-id",
 			},
 		}
 		job, err := orbital.Decode[orbital.Job](e)
@@ -720,9 +725,10 @@ func TestDecodeValueVariants(t *testing.T) {
 			CreatedAt: now,
 			UpdatedAt: now,
 			Values: map[string]any{
-				"type":   "foo",
-				"status": "CREATED",
-				"data":   "not-bytes",
+				"type":        "foo",
+				"status":      "CREATED",
+				"data":        "not-bytes",
+				"external_id": "external-id",
 			},
 		}
 		_, err := orbital.Decode[orbital.Job](e)
@@ -735,9 +741,10 @@ func TestDecodeValueVariants(t *testing.T) {
 			CreatedAt: now,
 			UpdatedAt: now,
 			Values: map[string]any{
-				"type":   "foo",
-				"status": 10,
-				"data":   "not-bytes",
+				"type":        "foo",
+				"status":      10,
+				"data":        "not-bytes",
+				"external_id": "external-id",
 			},
 		}
 		_, err := orbital.Decode[orbital.Job](e)

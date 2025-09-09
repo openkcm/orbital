@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -250,7 +251,7 @@ func createAndStartOperator(ctx context.Context, t *testing.T, responder orbital
 func createTestJob(ctx context.Context, t *testing.T, manager *orbital.Manager, jobType string, data []byte) (orbital.Job, error) {
 	t.Helper()
 
-	job := orbital.NewJob(jobType, data)
+	job := orbital.NewJob(jobType, data, uuid.NewString())
 	createdJob, err := manager.PrepareJob(ctx, job)
 	if err != nil {
 		return orbital.Job{}, fmt.Errorf("failed to prepare job: %w", err)
