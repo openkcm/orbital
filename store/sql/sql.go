@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 
 	"github.com/lib/pq"
 
@@ -46,14 +47,7 @@ func New(ctx context.Context, db *sql.DB) (*SQL, error) {
 			ADD COLUMN IF NOT EXISTS external_id VARCHAR(100);
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_job
 			ON jobs (external_id, type)
-			WHERE status IN ('` +
-		string(orbital.JobStatusCreated) + `', '` +
-		string(orbital.JobStatusConfirming) + `', '` +
-		string(orbital.JobStatusConfirmed) + `', '` +
-		string(orbital.JobStatusResolving) + `', '` +
-		string(orbital.JobStatusReady) + `', '` +
-		string(orbital.JobStatusProcessing) +
-		`');
+			WHERE status IN ('` + strings.Join(orbital.TransientStatuses().StringSlice(), "', '") + `');
 		CREATE TABLE IF NOT EXISTS tasks(
    			id UUID PRIMARY KEY,
    			job_id UUID NOT NULL,

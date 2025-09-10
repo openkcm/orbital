@@ -4,7 +4,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Possible job states.
+// Possible job statuses.
 const (
 	JobStatusCreated         JobStatus = "CREATED"
 	JobStatusConfirming      JobStatus = "CONFIRMING"
@@ -32,7 +32,7 @@ type (
 		CreatedAt    int64
 	}
 
-	// JobStatus represents the possible states of a Job.
+	// JobStatus represents the possible statuses of a Job.
 	JobStatus string
 )
 
@@ -45,12 +45,48 @@ func NewJob(jobType string, data []byte) Job {
 }
 
 // WithExternalID allows to set an external identifier for the job.
-func (j *Job) WithExternalID(id string) {
+func (j Job) WithExternalID(id string) Job {
 	j.ExternalID = id
+	return j
 }
 
 // isCancelable checks if the job can be canceled based on its current status.
-func (j *Job) isCancelable() bool {
+func (j Job) isCancelable() bool {
 	return j.Status == JobStatusCreated || j.Status == JobStatusConfirmed || j.Status == JobStatusResolving ||
 		j.Status == JobStatusReady || j.Status == JobStatusProcessing
+}
+
+// JobStatuses is a slice of JobStatus values.
+type JobStatuses []JobStatus
+
+// StringSlice converts the JobStatuses to a slice of strings.
+func (js JobStatuses) StringSlice() []string {
+	result := make([]string, len(js))
+	for i, state := range js {
+		result[i] = string(state)
+	}
+	return result
+}
+
+// TransientStatuses returns the list of job statuses that are considered transient.
+func TransientStatuses() JobStatuses {
+	return []JobStatus{
+		JobStatusCreated,
+		JobStatusConfirming,
+		JobStatusConfirmed,
+		JobStatusResolving,
+		JobStatusReady,
+		JobStatusProcessing,
+	}
+}
+
+// TerminalStatuses returns the list of job statuses that are considered terminal.
+func TerminalStatuses() []JobStatus {
+	return []JobStatus{
+		JobStatusDone,
+		JobStatusFailed,
+		JobStatusResolveCanceled,
+		JobStatusConfirmCanceled,
+		JobStatusUserCanceled,
+	}
 }
