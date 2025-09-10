@@ -26,8 +26,12 @@ func NewRepository(store Store) *Repository {
 	}
 }
 
-// ErrRepoCreate is returned when the repository fails to create an entity.
-var ErrRepoCreate = errors.New("failed to create entity")
+var (
+	// ErrRepoCreate is returned when the repository fails to create an entity.
+	ErrRepoCreate = errors.New("failed to create entity")
+	// ErrEntityUniqueViolation is returned when an entity violates a unique constraint.
+	ErrEntityUniqueViolation = errors.New("entity violates unique contraint")
+)
 
 type (
 	// ListJobsQuery defines the parameters for querying jobs from the repository.

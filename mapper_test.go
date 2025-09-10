@@ -208,6 +208,40 @@ func TestInit(t *testing.T) {
 		// then
 		assert.Equal(t, expected, entity)
 	})
+
+	t.Run("should initialize external ID for jobs", func(t *testing.T) {
+		// given
+		entity := &orbital.Entity{
+			Name: query.EntityNameJobs,
+		}
+
+		// when
+		orbital.Init(entity)
+
+		// then
+		extID, ok := entity.Values["external_id"]
+		assert.True(t, ok)
+		assert.Equal(t, entity.ID.String(), extID)
+	})
+
+	t.Run("should preserve external ID for jobs", func(t *testing.T) {
+		// given
+		entity := &orbital.Entity{
+			Name: query.EntityNameJobs,
+			Values: map[string]any{
+				"external_id": "ext-id",
+			},
+		}
+
+		// when
+		orbital.Init(entity)
+
+		// then
+		extID, ok := entity.Values["external_id"]
+		assert.True(t, ok)
+		assert.Equal(t, "ext-id", extID)
+		assert.NotEqual(t, entity.ID.String(), extID)
+	})
 }
 
 func TestEncodes(t *testing.T) {
@@ -223,6 +257,7 @@ func TestEncodes(t *testing.T) {
 				Data:         []byte("foo-data"),
 				Status:       orbital.JobStatusCreated,
 				Type:         "baz-type",
+				ExternalID:   "ext-id",
 			},
 		}
 		expected := []orbital.Entity{
@@ -239,6 +274,7 @@ func TestEncodes(t *testing.T) {
 					"data":          []byte("foo-data"),
 					"status":        orbital.JobStatusCreated,
 					"type":          "baz-type",
+					"external_id":   "ext-id",
 				},
 			},
 		}
@@ -655,6 +691,7 @@ func TestDecodeValueVariants(t *testing.T) {
 			CreatedAt: now,
 			UpdatedAt: now,
 			Values: map[string]any{
+				"external_id":   "ext-id",
 				"type":          "foo",
 				"status":        orbital.JobStatusConfirmCanceled,
 				"data":          []byte("x"),
@@ -672,6 +709,7 @@ func TestDecodeValueVariants(t *testing.T) {
 			CreatedAt: now,
 			UpdatedAt: now,
 			Values: map[string]any{
+				"external_id":   "ext-id",
 				"type":          "foo",
 				"status":        "CONFIRMED",
 				"data":          []byte("x"),
@@ -689,6 +727,7 @@ func TestDecodeValueVariants(t *testing.T) {
 			CreatedAt: now,
 			UpdatedAt: now,
 			Values: map[string]any{
+				"external_id":   "ext-id",
 				"type":          "foo",
 				"status":        "CREATED",
 				"data":          nil,
@@ -720,9 +759,10 @@ func TestDecodeValueVariants(t *testing.T) {
 			CreatedAt: now,
 			UpdatedAt: now,
 			Values: map[string]any{
-				"type":   "foo",
-				"status": "CREATED",
-				"data":   "not-bytes",
+				"external_id": "ext-id",
+				"type":        "foo",
+				"status":      "CREATED",
+				"data":        "not-bytes",
 			},
 		}
 		_, err := orbital.Decode[orbital.Job](e)
@@ -735,9 +775,10 @@ func TestDecodeValueVariants(t *testing.T) {
 			CreatedAt: now,
 			UpdatedAt: now,
 			Values: map[string]any{
-				"type":   "foo",
-				"status": 10,
-				"data":   "not-bytes",
+				"external_id": "ext-id",
+				"type":        "foo",
+				"status":      10,
+				"data":        "not-bytes",
 			},
 		}
 		_, err := orbital.Decode[orbital.Job](e)

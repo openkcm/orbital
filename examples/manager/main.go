@@ -29,7 +29,7 @@ var (
 // This is a simple resource struct.
 type Resource struct {
 	ID   string
-	Data string
+	Data []byte
 }
 
 // This is a simple in-memory database to store resources.
@@ -69,13 +69,13 @@ func main() {
 	// Create and store a resource
 	resource := Resource{
 		ID:   uuid.NewString(),
-		Data: "resource-data",
+		Data: []byte("resource-data"),
 	}
 	resourceDB[resource.ID] = resource
 	log.Printf("Resource stored: %s\n", resource.ID)
 
 	// Prepare a job for the stored resource
-	job := orbital.NewJob(resource.Data, []byte("RESOURCE_CREATED"))
+	job := orbital.NewJob("CREATE_RESOURCE", resource.Data).WithExternalID(resource.ID)
 	createdJob, err := orbitalManager.PrepareJob(ctx, job)
 	handleErr("Failed to prepare job", err)
 

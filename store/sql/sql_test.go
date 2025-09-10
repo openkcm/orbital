@@ -204,6 +204,43 @@ func TestCreate(t *testing.T) {
 		assert.Equal(t, entities, result.Entities)
 	})
 
+	t.Run("should return error if unique constraint is violated", func(t *testing.T) {
+		// given
+		entity := orbital.Entity{
+			Name:      "jobs",
+			ID:        id,
+			CreatedAt: now,
+			UpdatedAt: now,
+			Values: map[string]any{
+				"id":          id,
+				"external_id": "ext-id",
+				"type":        "type",
+				"status":      orbital.JobStatusCreated,
+				"created_at":  now,
+				"updated_at":  now,
+			},
+		}
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+
+		// when
+		entities, err := store.Create(ctx, entity)
+
+		// then
+		assert.NoError(t, err)
+		assert.Len(t, entities, 1)
+
+		// when trying to create another job entity
+		// with the same external_id and type in a non-terminal status
+		entities, err = store.Create(ctx, entity)
+
+		// then
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, orbital.ErrEntityUniqueViolation)
+		assert.Nil(t, entities)
+	})
+
 	t.Run("should return error if entities values are missing differ", func(t *testing.T) {
 		// given
 		id2 := uuid.New()
