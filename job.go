@@ -23,6 +23,7 @@ type (
 	// Job is the translated domain object representing an event.
 	Job struct {
 		ID           uuid.UUID
+		ExternalID   string
 		Data         []byte
 		Type         string
 		Status       JobStatus
@@ -41,6 +42,11 @@ func NewJob(jobType string, data []byte) Job {
 		Data: data,
 		Type: jobType,
 	}
+}
+
+// WithExternalID allows to set an external identifier for the job.
+func (j *Job) WithExternalID(id string) {
+	j.ExternalID = id
 }
 
 // isCancelable checks if the job can be canceled based on its current status.

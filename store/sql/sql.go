@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/lib/pq"
+
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/store/query"
 )
@@ -17,6 +19,8 @@ type SQL struct {
 }
 
 var _ orbital.Store = &SQL{}
+
+const pqErrCodeUniqueViolation = "23505" // see https://www.postgresql.org/docs/17/errcodes-appendix.html
 
 var (
 	ErrNoColumn = errors.New("no column found")
@@ -38,7 +42,19 @@ func New(ctx context.Context, db *sql.DB) (*SQL, error) {
    			updated_at BIGINT NOT NULL,
    			created_at BIGINT NOT NULL
    		);
-   		CREATE TABLE IF NOT EXISTS tasks(
+		ALTER TABLE jobs 
+			ADD COLUMN IF NOT EXISTS external_id VARCHAR(100);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_job
+			ON jobs (external_id, type)
+			WHERE status IN ('` +
+		string(orbital.JobStatusCreated) + `', '` +
+		string(orbital.JobStatusConfirming) + `', '` +
+		string(orbital.JobStatusConfirmed) + `', '` +
+		string(orbital.JobStatusResolving) + `', '` +
+		string(orbital.JobStatusReady) + `', '` +
+		string(orbital.JobStatusProcessing) +
+		`');
+		CREATE TABLE IF NOT EXISTS tasks(
    			id UUID PRIMARY KEY,
    			job_id UUID NOT NULL,
 			type VARCHAR(100),
@@ -82,6 +98,10 @@ func (s *SQL) Create(ctx context.Context, rs ...orbital.Entity) ([]orbital.Entit
 	}
 	err = s.execContext(ctx, stm, params...)
 	if err != nil {
+		var pgErr *pq.Error
+		if errors.As(err, &pgErr) && pgErr.Code == pqErrCodeUniqueViolation {
+			return nil, orbital.ErrEntityUniqueViolation
+		}
 		return nil, err
 	}
 	return rs, err

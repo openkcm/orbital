@@ -21,29 +21,215 @@ var errResourceNotFound = errors.New("resource not found")
 
 func TestPrepareJob(t *testing.T) {
 	// given
-	ctx := t.Context()
-	db, store := createSQLStore(t)
-	defer clearTables(t, db)
-	repo := orbital.NewRepository(store)
+	tests := []struct {
+		name     string
+		existJob orbital.Job
+		prepJob  orbital.Job
+		expErr   error
+	}{
+		{
+			name: "should prepare job with existing type but different external ID",
+			existJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+				Status:     orbital.JobStatusCreated,
+			},
+			prepJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id-diff",
+			},
+			expErr: nil,
+		},
+		{
+			name: "should prepare job with no external ID",
+			existJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+				Status:     orbital.JobStatusCreated,
+			},
+			prepJob: orbital.Job{
+				Type: "type",
+			},
+			expErr: nil,
+		},
+		{
+			name: "should return error when preparing job with same type and external ID and existing job is created",
+			existJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+				Status:     orbital.JobStatusCreated,
+			},
+			prepJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+			},
+			expErr: orbital.ErrJobAlreadyExists,
+		},
+		{
+			name: "should return error when preparing job with same type and external ID and existing job is confirming",
+			existJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+				Status:     orbital.JobStatusConfirming,
+			},
+			prepJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+			},
+			expErr: orbital.ErrJobAlreadyExists,
+		},
+		{
+			name: "should return error when preparing job with same type and external ID and existing job is confirmed",
+			existJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+				Status:     orbital.JobStatusConfirmed,
+			},
+			prepJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+			},
+			expErr: orbital.ErrJobAlreadyExists,
+		},
+		{
+			name: "should return error when preparing job with same type and external ID and existing job is resolving",
+			existJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+				Status:     orbital.JobStatusResolving,
+			},
+			prepJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+			},
+			expErr: orbital.ErrJobAlreadyExists,
+		},
+		{
+			name: "should return error when preparing job with same type and external ID and existing job is ready",
+			existJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+				Status:     orbital.JobStatusReady,
+			},
+			prepJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+			},
+			expErr: orbital.ErrJobAlreadyExists,
+		},
+		{
+			name: "should return error when preparing job with same type and external ID and existing job is processing",
+			existJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+				Status:     orbital.JobStatusProcessing,
+			},
+			prepJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+			},
+			expErr: orbital.ErrJobAlreadyExists,
+		},
+		{
+			name: "should prepare job when existing job is done",
+			existJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+				Status:     orbital.JobStatusDone,
+			},
+			prepJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+			},
+			expErr: nil,
+		},
+		{
+			name: "should prepare job when existing job is failed",
+			existJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+				Status:     orbital.JobStatusFailed,
+			},
+			prepJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+			},
+			expErr: nil,
+		},
+		{
+			name: "should prepare job when existing job is canceled in resolving",
+			existJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+				Status:     orbital.JobStatusResolveCanceled,
+			},
+			prepJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+			},
+			expErr: nil,
+		},
+		{
+			name: "should prepare job when existing job is canceled in confirming",
+			existJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+				Status:     orbital.JobStatusConfirmCanceled,
+			},
+			prepJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+			},
+			expErr: nil,
+		},
+		{
+			name: "should prepare job when existing job is canceled by user",
+			existJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+				Status:     orbital.JobStatusUserCanceled,
+			},
+			prepJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id",
+			},
+			expErr: nil,
+		},
+	}
 
-	subj, _ := orbital.NewManager(repo, mockTaskResolveFunc())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, store := createSQLStore(t)
+			defer clearTables(t, db)
+			repo := orbital.NewRepository(store)
 
-	job := orbital.NewJob("resource-data", []byte("type"))
-	_, ok, err := subj.GetJob(ctx, job.ID)
-	assert.NoError(t, err)
-	assert.False(t, ok)
+			subj, _ := orbital.NewManager(repo, mockTaskResolveFunc())
 
-	// when
-	createdJob, err := subj.PrepareJob(ctx, job)
+			ctx := t.Context()
 
-	// then
-	assert.NoError(t, err)
-	assert.NotEqual(t, uuid.Nil, createdJob.ID)
+			job, err := orbital.CreateRepoJob(repo)(ctx, tt.existJob)
+			assert.NoError(t, err)
+			assert.NotEqual(t, uuid.Nil, job.ID)
 
-	preparedJob, ok, err := subj.GetJob(ctx, createdJob.ID)
-	assert.NoError(t, err)
-	assert.True(t, ok)
-	assert.Equal(t, orbital.JobStatusCreated, preparedJob.Status)
+			// when
+			job, err = subj.PrepareJob(ctx, tt.prepJob)
+
+			// then
+			if tt.expErr != nil {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, tt.expErr)
+				assert.Equal(t, uuid.Nil, job.ID)
+				return
+			}
+			assert.NoError(t, err)
+			assert.NotEqual(t, uuid.Nil, job.ID)
+
+			preparedJob, ok, err := subj.GetJob(ctx, job.ID)
+			assert.NoError(t, err)
+			assert.True(t, ok)
+			assert.Equal(t, orbital.JobStatusCreated, preparedJob.Status)
+		})
+	}
 }
 
 func TestNewManagerTaskResolverErr(t *testing.T) {
