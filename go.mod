@@ -16,6 +16,7 @@ require (
 	github.com/veqryn/slog-context v0.8.0
 	golang.org/x/sync v0.17.0
 	google.golang.org/protobuf v1.36.8
+	solace.dev/go/messaging v1.10.0
 )
 
 require (
