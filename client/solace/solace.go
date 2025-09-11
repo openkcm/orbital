@@ -26,6 +26,14 @@ var (
 	ErrPublisherNotReady       = errors.New("publisher is not ready")
 )
 
+// QueueType represents the type of Solace queue to be used.
+type QueueType uint
+
+const (
+	QueueTypeDurableNonExclusive QueueType = iota
+	QueueTypeDurableExclusive
+)
+
 type Solace struct {
 	topic       string
 	messageChan chan message.InboundMessage
@@ -35,11 +43,15 @@ type Solace struct {
 	receiver    solace.PersistentMessageReceiver
 }
 
+// ConnectionInfo holds the connection details for the Solace messaging service.
+// Target is the topic to publish to, and Source is the queue to receive from.
+// QueueType specifies the type of queue to use (default is QueueTypeDurableNonExclusive).
 type ConnectionInfo struct {
-	Host   string
-	VPN    string
-	Target string
-	Source string
+	Host      string
+	VPN       string
+	Target    string
+	Source    string
+	QueueType *QueueType
 }
 
 type ClientOption func(solace.MessagingServiceBuilder)
@@ -63,7 +75,7 @@ func WithExternalMTLS(certFile, keyFile, caDir string) ClientOption {
 		)
 
 		tls := config.NewTransportSecurityStrategy().
-			WithCertificateValidation(true, true, caDir, "")
+			WithCertificateValidation(false, true, caDir, "")
 		svc.WithTransportSecurityStrategy(tls)
 	}
 }
@@ -93,7 +105,12 @@ func NewClient(codec orbital.Codec, connectionInfo ConnectionInfo, opts ...Clien
 		publisher:   publisher,
 	}
 
-	err = sol.setupReceiver(messagingService, connectionInfo.Source)
+	queueType := QueueTypeDurableNonExclusive
+	if connectionInfo.QueueType != nil {
+		queueType = *connectionInfo.QueueType
+	}
+
+	err = sol.setupReceiver(messagingService, queueType, connectionInfo.Source)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +212,7 @@ func (s *Solace) SendTaskRequest(ctx context.Context, request orbital.TaskReques
 			return ErrPublisherNotReady
 		}
 
-		err = s.publisher.Publish(msg, resource.TopicOf(s.topic), nil, nil)
+		err = s.publisher.PublishAwaitAcknowledgement(msg, resource.TopicOf(s.topic), publishAckTimeout, nil)
 		if err != nil {
 			return err
 		}
@@ -225,8 +242,12 @@ func (s *Solace) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse,
 }
 
 // setupReceiver sets up and starts a persistent message receiver for the given source (queue).
-func (s *Solace) setupReceiver(messagingService solace.MessagingService, source string) error {
+func (s *Solace) setupReceiver(messagingService solace.MessagingService, queueType QueueType, source string) error {
 	queue := resource.QueueDurableNonExclusive(source)
+	if queueType != QueueTypeDurableNonExclusive {
+		queue = resource.QueueDurableExclusive(source)
+	}
+
 	receiver, err := messagingService.
 		CreatePersistentMessageReceiverBuilder().
 		WithMessageAutoAcknowledgement().
