@@ -681,7 +681,7 @@ func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error 
 		if err != nil || !found {
 			return err
 		}
-		ctx = slogctx.With(txCtx, "taskID", task.ID, "etag", task.ETag)
+		ctx = slogctx.With(ctx, "taskID", task.ID, "etag", task.ETag)
 
 		if resp.ETag != task.ETag {
 			slogctx.Debug(ctx, "discarding stale response")
