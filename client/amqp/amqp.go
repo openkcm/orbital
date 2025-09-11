@@ -9,8 +9,10 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"time"
 
 	"github.com/Azure/go-amqp"
+	slogctx "github.com/veqryn/slog-context"
 
 	"github.com/openkcm/orbital"
 )
@@ -110,9 +112,11 @@ func NewClient(ctx context.Context, codec orbital.Codec, connInfo ConnectionInfo
 		return nil, ErrCodecNotProvided
 	}
 
+	hostname := fmt.Sprintf("%s.%s-%d", connInfo.Source, connInfo.Target, time.Now().UnixNano())
 	connOpts := &amqp.ConnOptions{
 		SASLType:   amqp.SASLTypeAnonymous(),
 		Properties: map[string]any{},
+		HostName:   hostname,
 	}
 
 	for _, opt := range opts {
@@ -193,6 +197,7 @@ func (a *AMQP) SendTaskResponse(ctx context.Context, resp orbital.TaskResponse) 
 // ReceiveTaskResponse receives, decodes and acknowledges a TaskResponse message.
 func (a *AMQP) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse, error) {
 	msg, err := a.receiver.Receive(ctx, nil)
+	slogctx.Debug(ctx, "received amqp task response message", "properties", *msg.Properties)
 	if err != nil {
 		return orbital.TaskResponse{}, err
 	}
