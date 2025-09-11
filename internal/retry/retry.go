@@ -12,3 +12,12 @@ func ExponentialBackoffInterval(baseIntervalSec, maxIntervalSec, attempts int64)
 	}
 	return interval
 }
+
+// LinearBackoffInterval calculates the backoff interval for a given attempt using linear growth.
+func LinearBackoffInterval(baseIntervalSec, maxIntervalSec, attempts int64) int64 {
+	interval := baseIntervalSec * attempts
+	if interval > maxIntervalSec {
+		return maxIntervalSec
+	}
+	return interval
+}

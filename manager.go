@@ -597,7 +597,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 	task.LastReconciledAt = clock.NowUnixNano()
 	task.ReconcileCount++
 	task.Status = TaskStatusProcessing
-	task.ReconcileAfterSec = retry.ExponentialBackoffInterval(
+	task.ReconcileAfterSec = retry.LinearBackoffInterval(
 		m.Config.BackoffBaseIntervalSec,
 		m.Config.BackoffMaxIntervalSec,
 		task.ReconcileCount,
