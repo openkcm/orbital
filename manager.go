@@ -681,9 +681,10 @@ func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error 
 		if err != nil || !found {
 			return err
 		}
+		txCtx = slogctx.With(txCtx, "taskID", task.ID, "etag", task.ETag)
 
 		if resp.ETag != task.ETag {
-			slog.Debug("discarding stale response", "taskID", task.ID, "etag", resp.ETag)
+			slogctx.Debug(txCtx, "discarding stale response")
 			return nil
 		}
 
@@ -695,6 +696,7 @@ func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error 
 		task.ReconcileCount = 0                     // Reset the reconcile count since the task has been processed successfully.
 		task.TotalReceivedCount++
 		if task.Status == TaskStatusFailed {
+			slogctx.Debug(txCtx, "task failed", "errorMessage", resp.ErrorMessage)
 			task.ErrorMessage = resp.ErrorMessage
 		}
 
