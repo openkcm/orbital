@@ -116,6 +116,7 @@ var (
 	ErrMsgFailedTasks     = "job has failed tasks"
 	ErrJobUnCancelable    = errors.New("job cannot be canceled in its current state")
 	ErrJobNotFound        = errors.New("job not found")
+	ErrJobAlreadyExists   = errors.New("job already exists")
 	ErrNoClientForTarget  = errors.New("no client for task target")
 )
 
@@ -242,13 +243,19 @@ func (m *Manager) Start(ctx context.Context) error {
 }
 
 // PrepareJob prepares a job by creating it in the repository with status CREATED.
+// It returns an error if a job with the same type and external ID in a non-terminal status already exists.
 func (m *Manager) PrepareJob(ctx context.Context, job Job) (Job, error) {
 	job.Status = JobStatusCreated
 	job, err := m.repo.createJob(ctx, job)
-	if err == nil {
-		slogctx.Debug(ctx, "new job prepared", "jobID", job.ID)
+	if err != nil {
+		if errors.Is(err, ErrEntityUniqueViolation) {
+			return job, ErrJobAlreadyExists
+		}
+		return job, err
 	}
-	return job, err
+
+	slogctx.Debug(ctx, "new job prepared", "jobID", job.ID)
+	return job, nil
 }
 
 // GetJob retrieves a job by its ID from the repository.

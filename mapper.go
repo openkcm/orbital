@@ -63,7 +63,7 @@ func TransformToEntity(entityName query.EntityName, objs map[string]any) (Entity
 }
 
 // Init ensures that the metadata of the entity is properly initialized.
-// It sets default values for CreatedAt, UpdatedAt, and ID if they are not already set.
+// It sets default values for CreatedAt, UpdatedAt, ID and ExternalID if they are not already set.
 func Init(e *Entity) {
 	now := clock.NowUnixNano()
 
@@ -81,6 +81,15 @@ func Init(e *Entity) {
 	if e.ID == uuid.Nil {
 		e.ID = uuid.New()
 		e.Values["id"] = e.ID
+	}
+
+	if e.Name != query.EntityNameJobs {
+		return
+	}
+	// Set external_id to the job's ID if not already provided.
+	extID, ok := e.Values["external_id"]
+	if !ok || extID == nil || extID == "" {
+		e.Values["external_id"] = e.ID.String()
 	}
 }
 
@@ -110,6 +119,7 @@ func Encode[T EntityTypes](entityType T) (Entity, error) {
 			CreatedAt: obj.CreatedAt,
 			Values: map[string]any{
 				"id":            obj.ID,
+				"external_id":   obj.ExternalID,
 				"data":          obj.Data,
 				"type":          obj.Type,
 				"status":        obj.Status,
@@ -303,6 +313,9 @@ func decodeJob[T EntityTypes](e Entity) (T, error) {
 	j.ID, j.CreatedAt, j.UpdatedAt = e.ID, e.CreatedAt, e.UpdatedAt
 	vals := e.Values
 	var err error
+	if j.ExternalID, err = resolve[string](vals, "external_id"); err != nil {
+		return empty, err
+	}
 	if j.Type, err = resolve[string](vals, "type"); err != nil {
 		return empty, err
 	}
