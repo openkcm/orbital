@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/Azure/go-amqp"
@@ -112,11 +113,13 @@ func NewClient(ctx context.Context, codec orbital.Codec, connInfo ConnectionInfo
 		return nil, ErrCodecNotProvided
 	}
 
-	hostname := fmt.Sprintf("%s.%s-%d", connInfo.Source, connInfo.Target, time.Now().UnixNano())
+	// get current application name
+
+	contId := fmt.Sprintf("%s-%s-%s-%d", filepath.Base(os.Args[0]), connInfo.Source, connInfo.Target, time.Now().UnixNano())
 	connOpts := &amqp.ConnOptions{
-		SASLType:   amqp.SASLTypeAnonymous(),
-		Properties: map[string]any{},
-		HostName:   hostname,
+		SASLType:    amqp.SASLTypeAnonymous(),
+		Properties:  map[string]any{},
+		ContainerID: contId,
 	}
 
 	for _, opt := range opts {
