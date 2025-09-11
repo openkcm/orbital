@@ -7,8 +7,8 @@ package retry
 // Returns the interval in seconds, capped at maxIntervalSec.
 func ExponentialBackoffInterval(baseIntervalSec, maxIntervalSec, attempts int64) int64 {
 	interval := baseIntervalSec * int64(1) << attempts
-	if interval > maxIntervalSec {
+	if interval <= 0 {
 		return maxIntervalSec
 	}
-	return interval
+	return min(interval, maxIntervalSec)
 }
