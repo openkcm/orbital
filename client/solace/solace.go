@@ -3,6 +3,7 @@ package solace
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"solace.dev/go/messaging"
@@ -24,6 +25,7 @@ const (
 var (
 	ErrFailedToGetPayloadBytes = errors.New("failed to get payload bytes")
 	ErrPublisherNotReady       = errors.New("publisher is not ready")
+	ErrReceiverChannelClosed   = errors.New("receiver channel is closed")
 )
 
 // QueueType represents the type of Solace queue to be used.
@@ -41,17 +43,17 @@ type Solace struct {
 	service     solace.MessagingService
 	publisher   solace.PersistentMessagePublisher
 	receiver    solace.PersistentMessageReceiver
+	close       sync.Once
 }
 
 // ConnectionInfo holds the connection details for the Solace messaging service.
-// Target is the topic to publish to, and Source is the queue to receive from.
-// QueueType specifies the type of queue to use (default is QueueTypeDurableNonExclusive).
 type ConnectionInfo struct {
-	Host      string
-	VPN       string
-	Target    string
-	Source    string
-	QueueType *QueueType
+	Host      string     // Host is the Solace broker host address
+	VPN       string     // VPN is the Solace VPN name
+	Target    string     // Target is the topic to publish messages to
+	Source    string     // Source is the queue to receive messages from
+	QueueType *QueueType // QueueType specifies the type of queue to use, if nil it defaults to QueueTypeDurableNonExclusive.
+
 }
 
 type ClientOption func(solace.MessagingServiceBuilder)
@@ -81,8 +83,8 @@ func WithExternalMTLS(certFile, keyFile, caDir string) ClientOption {
 }
 
 // NewClient creates and returns a new Solace client.
-func NewClient(codec orbital.Codec, connectionInfo ConnectionInfo, opts ...ClientOption) (*Solace, error) {
-	messagingService, err := setupMessagingService(connectionInfo.Host, connectionInfo.VPN, opts...)
+func NewClient(codec orbital.Codec, connInfo ConnectionInfo, opts ...ClientOption) (*Solace, error) {
+	messagingService, err := setupMessagingService(connInfo.Host, connInfo.VPN, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -98,19 +100,19 @@ func NewClient(codec orbital.Codec, connectionInfo ConnectionInfo, opts ...Clien
 	}
 
 	sol := Solace{
-		topic:       connectionInfo.Target,
+		topic:       connInfo.Target,
 		service:     messagingService,
 		codec:       codec,
-		messageChan: make(chan message.InboundMessage),
+		messageChan: make(chan message.InboundMessage, 5),
 		publisher:   publisher,
 	}
 
 	queueType := QueueTypeDurableNonExclusive
-	if connectionInfo.QueueType != nil {
-		queueType = *connectionInfo.QueueType
+	if connInfo.QueueType != nil {
+		queueType = *connInfo.QueueType
 	}
 
-	err = sol.setupReceiver(messagingService, queueType, connectionInfo.Source)
+	err = sol.setupReceiver(messagingService, queueType, connInfo.Source)
 	if err != nil {
 		return nil, err
 	}
@@ -120,34 +122,42 @@ func NewClient(codec orbital.Codec, connectionInfo ConnectionInfo, opts ...Clien
 
 // Close terminates the Solace client, including the receiver, publisher, and messaging service.
 func (s *Solace) Close() error {
-	if s.receiver != nil {
-		if err := s.receiver.Terminate(terminateTimeout); err != nil {
-			return err
+	var err error
+
+	s.close.Do(func() {
+		if s.receiver != nil {
+			if err = s.receiver.Terminate(terminateTimeout); err != nil {
+				return
+			}
 		}
-	}
 
-	if s.publisher != nil {
-		if err := s.publisher.Terminate(terminateTimeout); err != nil {
-			return err
+		if s.publisher != nil {
+			if err = s.publisher.Terminate(terminateTimeout); err != nil {
+				return
+			}
 		}
-	}
 
-	if s.service != nil {
-		if err := s.service.Disconnect(); err != nil {
-			return err
+		if s.service != nil {
+			if err = s.service.Disconnect(); err != nil {
+				return
+			}
 		}
-	}
 
-	if s.messageChan != nil {
-		close(s.messageChan)
-	}
+		if s.messageChan != nil {
+			close(s.messageChan)
+		}
+	})
 
-	return nil
+	return err
 }
 
 func (s *Solace) ReceiveTaskRequest(ctx context.Context) (orbital.TaskRequest, error) {
 	select {
-	case msg := <-s.messageChan:
+	case msg, isOpen := <-s.messageChan:
+		if !isOpen {
+			return orbital.TaskRequest{}, ErrReceiverChannelClosed
+		}
+
 		payload, ok := msg.GetPayloadAsBytes()
 		if !ok {
 			return orbital.TaskRequest{}, ErrFailedToGetPayloadBytes
@@ -223,7 +233,11 @@ func (s *Solace) SendTaskRequest(ctx context.Context, request orbital.TaskReques
 
 func (s *Solace) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse, error) {
 	select {
-	case msg := <-s.messageChan:
+	case msg, isOpen := <-s.messageChan:
+		if !isOpen {
+			return orbital.TaskResponse{}, ErrReceiverChannelClosed
+		}
+
 		payload, ok := msg.GetPayloadAsBytes()
 		if !ok {
 			return orbital.TaskResponse{}, ErrFailedToGetPayloadBytes
