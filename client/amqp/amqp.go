@@ -6,11 +6,12 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"log/slog"
 	"maps"
 	"os"
 
 	"github.com/Azure/go-amqp"
+
+	slogctx "github.com/veqryn/slog-context"
 
 	"github.com/openkcm/orbital"
 )
@@ -167,7 +168,7 @@ func (a *AMQP) ReceiveTaskRequest(ctx context.Context) (orbital.TaskRequest, err
 	data := msg.GetData()
 	req, errDec := a.codec.DecodeTaskRequest(data)
 	if errDec != nil {
-		slog.Error("failed to decode TaskRequest", "data", string(data), "error", errDec)
+		slogctx.Error(ctx, "failed to decode task request", "data", string(data), "error", errDec)
 	}
 
 	if errAck := a.receiver.AcceptMessage(ctx, msg); errAck != nil {
@@ -200,7 +201,7 @@ func (a *AMQP) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse, e
 	data := msg.GetData()
 	resp, errDec := a.codec.DecodeTaskResponse(data)
 	if errDec != nil {
-		slog.Error("failed to decode TaskResponse", "data", string(data), "error", errDec)
+		slogctx.Error(ctx, "failed to decode task response", "data", string(data), "error", errDec)
 	}
 
 	if errAck := a.receiver.AcceptMessage(ctx, msg); errAck != nil {

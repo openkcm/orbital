@@ -66,7 +66,7 @@ func TestStart(t *testing.T) {
 				err := w.Run(ctxTimeOut)
 				assert.NoError(t, err)
 				defer func() {
-					err := w.Stop()
+					err := w.Stop(ctxTimeOut)
 					assert.NoError(t, err)
 				}()
 
@@ -94,10 +94,11 @@ func TestStart(t *testing.T) {
 		}
 
 		// starting runner
-		err := w.Run(t.Context())
+		ctx := t.Context()
+		err := w.Run(ctx)
 		assert.NoError(t, err)
 		defer func() {
-			err := w.Stop()
+			err := w.Stop(ctx)
 			assert.NoError(t, err)
 		}()
 
@@ -123,11 +124,12 @@ func TestStart(t *testing.T) {
 		}
 
 		// starting runner
-		err := w.Run(t.Context())
+		ctx := t.Context()
+		err := w.Run(ctx)
 		assert.NoError(t, err)
 
 		// stopping runner
-		err = w.Stop()
+		err = w.Stop(ctx)
 		assert.NoError(t, err)
 
 		// when

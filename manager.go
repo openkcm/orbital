@@ -118,6 +118,8 @@ var (
 	ErrJobNotFound        = errors.New("job not found")
 	ErrJobAlreadyExists   = errors.New("job already exists")
 	ErrNoClientForTarget  = errors.New("no client for task target")
+	ErrLoadingJob         = errors.New("failed to load job")
+	ErrUpdatingJob        = errors.New("failed to update job")
 )
 
 // NewManager creates a new Manager instance.
@@ -254,7 +256,7 @@ func (m *Manager) PrepareJob(ctx context.Context, job Job) (Job, error) {
 		return job, err
 	}
 
-	slogctx.Debug(ctx, "new job prepared", "jobID", job.ID)
+	slogctx.Debug(ctx, "new job prepared", "jobID", job.ID, "externalID", job.ExternalID, "type", job.Type)
 	return job, nil
 }
 
@@ -274,7 +276,7 @@ func (m *Manager) CancelJob(ctx context.Context, jobID uuid.UUID) error {
 		slogctx.Debug(ctx, "cancelling job", "jobID", jobID)
 		job, ok, err := repo.getJobForUpdate(ctx, jobID)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: %w", ErrLoadingJob, err)
 		}
 		if !ok {
 			return ErrJobNotFound
@@ -286,7 +288,11 @@ func (m *Manager) CancelJob(ctx context.Context, jobID uuid.UUID) error {
 		job.Status = JobStatusUserCanceled
 		job.ErrorMessage = "job has been canceled by the user"
 
-		return m.updateJobAndCreateJobEvent(ctx, repo, job)
+		if err := m.updateJobAndCreateJobEvent(ctx, repo, job); err != nil {
+			return fmt.Errorf("%w: %w", ErrUpdatingJob, err)
+		}
+
+		return nil
 	})
 }
 
@@ -303,21 +309,21 @@ func (m *Manager) confirmJob(ctx context.Context) error {
 			OrderByUpdatedAt:   true,
 		})
 		if err != nil {
-			slog.Error("confirmJob listJobs", "error", err)
+			slogctx.Error(ctx, "listing jobs to be confirmed failed", "error", err)
 			return err
 		}
 		if len(jobs) == 0 {
-			slog.Log(ctx, logger.LevelTrace, "no jobs to confirm")
+			slogctx.Log(ctx, logger.LevelTrace, "no jobs to confirm")
 			return nil
 		}
 		job := jobs[0]
 
-		ctx = slogctx.With(ctx, "jobID", job.ID)
+		ctx = slogctx.With(ctx, "jobID", job.ID, "externalID", job.ExternalID, "type", job.Type)
 		slogctx.Debug(ctx, "confirming job")
 
 		err = m.handleConfirmJob(ctx, repo, job)
 		if err != nil {
-			slog.Error("handleConfirmJob", "error", err)
+			slogctx.Error(ctx, "failed to confirm job", "error", err)
 		}
 
 		slogctx.Debug(ctx, "job confirmed", "status", job.Status)
@@ -331,10 +337,12 @@ func (m *Manager) confirmJob(ctx context.Context) error {
 func (m *Manager) handleConfirmJob(ctx context.Context, repo Repository, job Job) error {
 	res, err := m.jobConfirmFunc(ctx, job)
 	if err != nil {
+		slogctx.Error(ctx, "error in job confirmation function", "error", err)
 		// NOTE: here we update the job to change the updated_at timestamp in order to spread the fetching of jobs.
 		return repo.updateJob(ctx, job)
 	}
 	if res.IsCanceled {
+		slogctx.Debug(ctx, "job cancelled by job confirmation function")
 		job.Status = JobStatusConfirmCanceled
 		job.ErrorMessage = res.CanceledErrorMessage
 		return m.updateJobAndCreateJobEvent(ctx, repo, job)
@@ -353,6 +361,7 @@ func (m *Manager) createTask(ctx context.Context) error {
 	return m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
 		job, ok, err := m.jobForTaskCreation(ctx, repo)
 		if err != nil {
+			slogctx.Error(ctx, "failed to get job for task creation", "error", err)
 			return err
 		}
 		if !ok {
@@ -360,58 +369,63 @@ func (m *Manager) createTask(ctx context.Context) error {
 			return nil
 		}
 
-		ctx = slogctx.With(ctx, "jobID", job.ID)
-		slogctx.Debug(ctx, "creating tasks for job")
-
-		jobCursor, found, err := m.getJobCursor(ctx, repo, job.ID)
-		if err != nil {
-			slog.Error("jobCursor", "error", err)
-			return err
-		}
-
-		resolverResult, err := m.taskResolveFunc(ctx, job, jobCursor.Cursor)
-		if err != nil {
-			slogctx.Error(ctx, "taskResolver", "error", err)
-			// NOTE: here we update the job to change the updated_at timestamp in order to spread the fetching of jobs.
-			return repo.updateJob(ctx, job)
-		}
-		if resolverResult.IsCanceled {
-			slogctx.Debug(ctx, "job cancelled by task resolver")
-			job.Status = JobStatusResolveCanceled
-			job.ErrorMessage = resolverResult.CanceledErrorMessage
-			return m.updateJobAndCreateJobEvent(ctx, repo, job)
-		}
-
-		if err := m.targetsExist(resolverResult.TaskInfos); err != nil {
-			job.Status = JobStatusFailed
-			job.ErrorMessage = err.Error()
-			return m.updateJobAndCreateJobEvent(ctx, repo, job)
-		}
-
-		// Create tasks and update the cursor.
-		jobCursor.Cursor = resolverResult.Cursor
-		_, err = repo.createTasks(ctx, newTasks(job.ID, resolverResult.TaskInfos))
-		if err != nil {
-			slogctx.Error(ctx, "createTasks", "error", err)
-			return err
-		}
-
-		err = m.createOrUpdateCursor(ctx, repo, found, jobCursor)
-		if err != nil {
-			slogctx.Error(ctx, "createOrUpdateCursor", "error", err)
-			return err
-		}
-
-		if resolverResult.Done {
-			slogctx.Debug(ctx, "tasks resolved successfully")
-			job.Status = JobStatusReady
-		} else {
-			slogctx.Debug(ctx, "task resolving still in progress")
-			job.Status = JobStatusResolving
-		}
-
-		return repo.updateJob(ctx, job)
+		return m.createTaskForJob(ctx, repo, job)
 	})
+}
+
+func (m *Manager) createTaskForJob(ctx context.Context, repo Repository, job Job) error {
+	ctx = slogctx.With(ctx, "jobID", job.ID, "externalID", job.ExternalID, "type", job.Type)
+	slogctx.Debug(ctx, "creating tasks for job")
+
+	jobCursor, found, err := m.getJobCursor(ctx, repo, job.ID)
+	if err != nil {
+		slogctx.Error(ctx, "failed to get job cursor", "error", err)
+		return err
+	}
+
+	resolverResult, err := m.taskResolveFunc(ctx, job, jobCursor.Cursor)
+	if err != nil {
+		slogctx.Error(ctx, "failed to resolve tasks for job", "error", err)
+		// NOTE: here we update the job to change the updated_at timestamp in order to spread the fetching of jobs.
+		return repo.updateJob(ctx, job)
+	}
+	if resolverResult.IsCanceled {
+		slogctx.Debug(ctx, "job cancelled by task resolver")
+		job.Status = JobStatusResolveCanceled
+		job.ErrorMessage = resolverResult.CanceledErrorMessage
+		return m.updateJobAndCreateJobEvent(ctx, repo, job)
+	}
+
+	if err := m.targetsExist(resolverResult.TaskInfos); err != nil {
+		slogctx.Debug(ctx, "failed to resolve task targets for job", "error", err)
+		job.Status = JobStatusFailed
+		job.ErrorMessage = err.Error()
+		return m.updateJobAndCreateJobEvent(ctx, repo, job)
+	}
+
+	// Create tasks and update the cursor.
+	jobCursor.Cursor = resolverResult.Cursor
+	_, err = repo.createTasks(ctx, newTasks(job.ID, resolverResult.TaskInfos))
+	if err != nil {
+		slogctx.Error(ctx, "failed to create tasks for job", "error", err)
+		return err
+	}
+
+	err = m.createOrUpdateCursor(ctx, repo, found, jobCursor)
+	if err != nil {
+		slogctx.Error(ctx, "failed to create/update tasks cursor for job ", "error", err)
+		return err
+	}
+
+	if resolverResult.Done {
+		slogctx.Debug(ctx, "tasks resolved successfully")
+		job.Status = JobStatusReady
+	} else {
+		slogctx.Debug(ctx, "task resolving still in progress")
+		job.Status = JobStatusResolving
+	}
+
+	return repo.updateJob(ctx, job)
 }
 
 // targetsExist checks if all targets in the provided TaskInfo slice have corresponding clients.
@@ -478,12 +492,15 @@ func (m *Manager) reconcile(ctx context.Context) error {
 	return m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
 		job, err := m.getJobForReconcile(ctx, repo)
 		if err != nil {
+			slogctx.Error(ctx, "failed to get job to be reconciled", "error", err)
 			return err
 		}
 		if job.ID == uuid.Nil {
-			slog.Log(ctx, logger.LevelTrace, "no jobs ready for reconciliation")
+			slogctx.Log(ctx, logger.LevelTrace, "no jobs ready for reconciliation")
 			return nil
 		}
+
+		ctx = slogctx.With(ctx, "jobID", job.ID, "externalID", job.ExternalID, "type", job.Type)
 
 		job.Status = JobStatusProcessing
 
@@ -495,10 +512,12 @@ func (m *Manager) reconcile(ctx context.Context) error {
 			Limit:    1,
 		})
 		if err != nil {
+			slogctx.Error(ctx, "listing not terminated tasks for job failed", "error", err)
 			return err
 		}
 
 		if len(tasks) == 0 {
+			slogctx.Debug(ctx, "all tasks for job are processed, terminating job")
 			return m.terminateJob(ctx, repo, job)
 		}
 
@@ -511,6 +530,7 @@ func (m *Manager) reconcile(ctx context.Context) error {
 			Limit:              m.Config.TaskLimitNum,
 		})
 		if err != nil {
+			slogctx.Error(ctx, "listing tasks to be reconciled failed", "error", err)
 			return err
 		}
 
@@ -542,7 +562,7 @@ func (m *Manager) getJobForReconcile(ctx context.Context, repo Repository) (Job,
 
 // terminateJob updates the job status to DONE or FAILED based on the status of its tasks.
 func (m *Manager) terminateJob(ctx context.Context, repo Repository, job Job) error {
-	slog.Debug("terminating job", "jobID", job.ID)
+	slogctx.Debug(ctx, "terminating job")
 	job.Status = JobStatusDone
 
 	tasks, err := repo.listTasks(ctx, ListTasksQuery{
@@ -551,10 +571,11 @@ func (m *Manager) terminateJob(ctx context.Context, repo Repository, job Job) er
 		Limit:    1,
 	})
 	if err != nil {
+		slogctx.Error(ctx, "listing failed tasks for job failed", "error", err)
 		return err
 	}
 	if len(tasks) > 0 {
-		slog.Debug("job has failed tasks", "jobID", job.ID)
+		slogctx.Debug(ctx, "job has failed tasks, marking job as failed", "count", len(tasks))
 		job.ErrorMessage = ErrMsgFailedTasks
 		job.Status = JobStatusFailed
 	}
@@ -584,8 +605,11 @@ func (m *Manager) handleTasks(ctx context.Context, repo Repository, tasks []Task
 func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repository, task Task) {
 	defer wg.Done()
 
+	ctx = slogctx.With(ctx, "taskID", task.ID, "etag", task.ETag, "target", task.Target, "status", task.Status,
+		"reconcileCount", task.ReconcileCount, "reconcileAfterSec", task.ReconcileAfterSec)
+
 	if task.ReconcileCount >= m.Config.MaxReconcileCount {
-		slog.Debug("max reconcile count for task exceeded", "taskID", task.ID, "etag", task.ETag, "reconcileCount", task.ReconcileCount)
+		slogctx.Debug(ctx, "max reconcile count for task exceeded")
 		task.ETag = uuid.NewString()
 		task.Status = TaskStatusFailed
 		repo.updateTask(ctx, task) //nolint:errcheck
@@ -595,7 +619,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 	client, ok := m.targetToInitiator[task.Target]
 	// this is an additional safeguard, this should never happen as we check for the existence of targets while creating tasks.
 	if !ok {
-		slog.Warn("no client for task target", "target", task.Target, "taskID", task.ID)
+		slogctx.Warn(ctx, "no client found for task target, marking task as failed")
 		task.Status = TaskStatusFailed
 		repo.updateTask(ctx, task) //nolint:errcheck
 		return
@@ -618,12 +642,10 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 		ETag:         task.ETag,
 	}
 
-	slog.Debug("sending task request", slog.String("target", task.Target), slog.String("taskID", task.ID.String()),
-		slog.String("etag", task.ETag), slog.Any("reconcileCount", task.ReconcileCount), slog.Any("reconcileAfterSec", task.ReconcileAfterSec),
-		slog.Any("request", req))
+	slogctx.Debug(ctx, "sending task request", slog.Any("request", req))
 
 	if err := client.SendTaskRequest(ctx, req); err != nil {
-		slog.Error("sendRequestAndUpdateTask", "error", err, "taskID", task.ID)
+		slogctx.Error(ctx, "failed to send task request", "error", err)
 		repo.updateTask(ctx, task) //nolint:errcheck
 		return
 	}
@@ -638,7 +660,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 func (m *Manager) updateJobAndCreateJobEvent(ctx context.Context, repo Repository, job Job) error {
 	err := m.recordJobTerminatedEvent(ctx, repo, job)
 	if err != nil {
-		slog.Error("createJobEvent", "error", err, "jobID", job.ID)
+		slogctx.Error(ctx, "failed to record job terminated event", "error", err)
 		return err
 	}
 	return repo.updateJob(ctx, job)
@@ -660,15 +682,15 @@ func (m *Manager) handleResponses(ctx context.Context, client Initiator, target 
 		default:
 			resp, err := client.ReceiveTaskResponse(ctx)
 			if err != nil {
-				slog.Error("receiveTask", "error", err, "target", target)
+				slogctx.Error(ctx, "error receiving task response from target", "error", err, "target", target)
 				continue
 			}
 
-			slog.Debug("received task response", slog.String("target", target), slog.String("taskID", resp.TaskID.String()),
+			slogctx.Debug(ctx, "received task response", slog.String("target", target), slog.String("taskID", resp.TaskID.String()),
 				slog.String("etag", resp.ETag), slog.Any("response", resp))
 
 			if err := m.processResponse(ctx, resp); err != nil {
-				slog.Error("processResponse", "error", err, "taskID", resp.TaskID)
+				slogctx.Error(ctx, "failed to process task response", "error", err, "taskID", resp.TaskID)
 			}
 		}
 	}
