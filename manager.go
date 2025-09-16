@@ -273,7 +273,7 @@ func (m *Manager) ListTasks(ctx context.Context, query ListTasksQuery) ([]Task, 
 // CancelJob cancels a job and associated running tasks. It updates the job status to "USER_CANCEL".
 func (m *Manager) CancelJob(ctx context.Context, jobID uuid.UUID) error {
 	return m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
-		slogctx.Debug(ctx, "cancelling job", "jobID", jobID)
+		slogctx.Debug(ctx, "canceling job", "jobID", jobID)
 		job, ok, err := repo.getJobForUpdate(ctx, jobID)
 		if err != nil {
 			return fmt.Errorf("%w: %w", ErrLoadingJob, err)
@@ -342,7 +342,7 @@ func (m *Manager) handleConfirmJob(ctx context.Context, repo Repository, job Job
 		return repo.updateJob(ctx, job)
 	}
 	if res.IsCanceled {
-		slogctx.Debug(ctx, "job cancelled by job confirmation function")
+		slogctx.Debug(ctx, "job canceled by job confirmation function")
 		job.Status = JobStatusConfirmCanceled
 		job.ErrorMessage = res.CanceledErrorMessage
 		return m.updateJobAndCreateJobEvent(ctx, repo, job)
@@ -385,12 +385,12 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 
 	resolverResult, err := m.taskResolveFunc(ctx, job, jobCursor.Cursor)
 	if err != nil {
-		slogctx.Error(ctx, "failed to resolve tasks for job", "error", err)
+		slogctx.Error(ctx, "error in task resolver function", "error", err)
 		// NOTE: here we update the job to change the updated_at timestamp in order to spread the fetching of jobs.
 		return repo.updateJob(ctx, job)
 	}
 	if resolverResult.IsCanceled {
-		slogctx.Debug(ctx, "job cancelled by task resolver")
+		slogctx.Debug(ctx, "job canceled by task resolver")
 		job.Status = JobStatusResolveCanceled
 		job.ErrorMessage = resolverResult.CanceledErrorMessage
 		return m.updateJobAndCreateJobEvent(ctx, repo, job)

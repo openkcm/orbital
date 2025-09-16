@@ -111,7 +111,7 @@ func setupWorkers(ctxCancel context.Context, workChan <-chan struct{}, work Work
 					}
 
 				case <-ctxCancel.Done():
-					slogctx.Info(ctxCancel, "worker cancelled", "name", work.Name)
+					slogctx.Info(ctxCancel, "worker canceled", "name", work.Name)
 					return
 				}
 			}
