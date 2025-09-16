@@ -3,7 +3,7 @@ module github.com/openkcm/orbital
 go 1.24.3
 
 require (
-	github.com/Azure/go-amqp v1.4.0
+	github.com/Azure/go-amqp v1.5.0
 	github.com/docker/docker v28.3.3+incompatible
 	github.com/docker/go-connections v0.6.0
 	github.com/google/uuid v1.6.0
@@ -16,6 +16,7 @@ require (
 	github.com/veqryn/slog-context v0.8.0
 	golang.org/x/sync v0.17.0
 	google.golang.org/protobuf v1.36.9
+	solace.dev/go/messaging v1.10.0
 )
 
 require (

@@ -7,6 +7,8 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
+
+	slogctx "github.com/veqryn/slog-context"
 )
 
 var errJobNotFound = errors.New("job not found")
@@ -112,7 +114,7 @@ func (m *Manager) sendAndUpdateEvent(ctx context.Context, repo Repository, jobEv
 	}
 	err := jobEventFunc(ctx, job)
 	if err != nil {
-		slog.Error("failed to send job event",
+		slogctx.Error(ctx, "failed to send job event",
 			slog.String("jobID", job.ID.String()),
 			slog.String("status", string(job.Status)),
 			slog.Any("error", err))
