@@ -15,7 +15,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/rabbitmq v0.38.0
 	github.com/veqryn/slog-context v0.8.0
 	golang.org/x/sync v0.17.0
-	google.golang.org/protobuf v1.36.8
+	google.golang.org/protobuf v1.36.9
 	solace.dev/go/messaging v1.10.0
 )
 
