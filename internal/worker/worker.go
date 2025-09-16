@@ -3,10 +3,11 @@ package worker
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"time"
 
 	"github.com/openkcm/common-sdk/pkg/logger"
+
+	slogctx "github.com/veqryn/slog-context"
 )
 
 type (
@@ -64,11 +65,11 @@ func (r *Runner) Run(ctx context.Context) error {
 // Stop halts all running Work items managed by the Runner.
 // It cancels the context for all workers and closes their work channels.
 // Returns an error if the Runner is not running.
-func (r *Runner) Stop() error {
+func (r *Runner) Stop(ctx context.Context) error {
 	if r.cancelFunc == nil {
 		return errRunnerNotRunning
 	}
-	slog.Debug("stopping all works")
+	slogctx.Debug(ctx, "stopping all works")
 	r.cancelFunc()
 	r.cancelFunc = nil
 	return nil
@@ -84,7 +85,7 @@ func setupWorkers(ctxCancel context.Context, workChan <-chan struct{}, work Work
 				select {
 				case _, ok := <-workChan:
 					if !ok {
-						slog.Error("worker channel closed", "name", work.Name)
+						slogctx.Error(ctxCancel, "worker channel closed", "name", work.Name)
 						return
 					}
 					ctxTimeout, cancel := context.WithTimeout(ctxCancel, work.Timeout)
@@ -93,7 +94,7 @@ func setupWorkers(ctxCancel context.Context, workChan <-chan struct{}, work Work
 					errChan := make(chan error)
 
 					go func(ctxTimeout context.Context, errChan chan<- error) {
-						slog.Log(ctxCancel, logger.LevelTrace, "worker started", "name", work.Name)
+						slogctx.Log(ctxCancel, logger.LevelTrace, "worker started", "name", work.Name)
 
 						errChan <- work.Fn(ctxTimeout)
 						defer close(errChan)
@@ -102,15 +103,15 @@ func setupWorkers(ctxCancel context.Context, workChan <-chan struct{}, work Work
 					select {
 					case err := <-errChan:
 						if err != nil {
-							slog.Error("worker error", "name", work.Name, "error", err)
+							slogctx.Error(ctxCancel, "worker error", "name", work.Name, "error", err)
 						}
 					case <-ctxTimeout.Done():
-						slog.Error("worker timeout", "name", work.Name)
+						slogctx.Error(ctxCancel, "worker timeout", "name", work.Name)
 						continue
 					}
 
 				case <-ctxCancel.Done():
-					slog.Info("worker cancelled", "name", work.Name)
+					slogctx.Info(ctxCancel, "worker canceled", "name", work.Name)
 					return
 				}
 			}
