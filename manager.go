@@ -369,11 +369,11 @@ func (m *Manager) createTask(ctx context.Context) error {
 			return nil
 		}
 
-		return m.createTaskForJob(ctx, repo, job)
+		return m.createTasksForJob(ctx, repo, job)
 	})
 }
 
-func (m *Manager) createTaskForJob(ctx context.Context, repo Repository, job Job) error {
+func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Job) error {
 	ctx = slogctx.With(ctx, "jobID", job.ID, "externalID", job.ExternalID, "type", job.Type)
 	slogctx.Debug(ctx, "creating tasks for job")
 
