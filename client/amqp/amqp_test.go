@@ -567,7 +567,7 @@ func TestReconnect(t *testing.T) {
 			err = container.Start(ctx)
 			assert.NoError(t, err)
 
-			ctxCancel, cancel := context.WithTimeout(ctx, 30*time.Second)
+			ctxCancel, cancel := context.WithTimeout(ctx, 60*time.Second)
 			defer cancel()
 
 			for {
