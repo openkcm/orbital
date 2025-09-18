@@ -551,6 +551,9 @@ func TestReconnect(t *testing.T) {
 			url, err := getURL(ctx, container, protocol, port)
 			assert.NoError(t, err)
 
+			err = waitForClientReady(ctx, url)
+			assert.NoError(t, err)
+
 			client, err := amqp.NewClient(ctx, codec.JSON{}, amqp.ConnectionInfo{
 				URL: url, Target: "reconnect-q", Source: "reconnect-q",
 			})
