@@ -353,6 +353,57 @@ func TestWithMessageBroker(t *testing.T) {
 		assert.Equal(t, exp.TaskID, got.TaskID)
 	})
 
+	t.Run("Reconnection", func(t *testing.T) {
+		t.Parallel()
+		var protocol, port = "amqp", "5672"
+
+		ctx := t.Context()
+		// Start the container with a fixed port binding to be able to restart the container on the same port.
+		container, err := startRabbitMQ(ctx, withPortBinding(port))
+		assert.NoError(t, err)
+		defer func() {
+			err := container.Terminate(ctx)
+			assert.NoError(t, err)
+		}()
+
+		url, err := getURL(ctx, container, protocol, port)
+		assert.NoError(t, err)
+
+		client, err := amqp.NewClient(ctx, codec.JSON{}, amqp.ConnectionInfo{
+			URL: url, Target: "reconnect-q", Source: "reconnect-q",
+		})
+		assert.NoError(t, err)
+		defer closeClient(ctx, t, client)
+
+		err = container.Stop(ctx, nil)
+		assert.NoError(t, err)
+
+		err = client.SendTaskRequest(ctx, orbital.TaskRequest{TaskID: uuid.New()})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, amqp.ErrReconnectFailed)
+
+		err = container.Start(ctx)
+		assert.NoError(t, err)
+
+		ctxCancel, cancel := context.WithTimeout(ctx, 60*time.Second)
+		defer cancel()
+
+		for {
+			select {
+			case <-ctxCancel.Done():
+				assert.Fail(t, "timed out waiting for reconnection")
+				return
+			default:
+				err = client.SendTaskRequest(ctx, orbital.TaskRequest{TaskID: uuid.New()})
+				if err != nil {
+					time.Sleep(100 * time.Millisecond)
+					continue
+				}
+				return
+			}
+		}
+	})
+
 	t.Run("Solace", func(t *testing.T) {
 		t.Parallel()
 		var protocol, port = "amqp", "5672"
@@ -512,83 +563,6 @@ func TestReceiveTaskResponse(t *testing.T) {
 			assert.ErrorContains(t, err, expErrMsg[i])
 		}
 	})
-}
-
-func TestReconnect(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name           string
-		startContainer func(ctx context.Context, opts ...containerOpts) (testcontainers.Container, error)
-		hostPort       string
-	}{
-		{
-			name:           "with RabbitMQ",
-			startContainer: startRabbitMQ,
-			hostPort:       "6000",
-		},
-		{
-			name:           "with Solace",
-			startContainer: startSolace,
-			hostPort:       "6001",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			var protocol, port = "amqp", "5672"
-
-			ctx := t.Context()
-			// Start the container with a fixed port binding to be able to restart the container on the same port.
-			container, err := tt.startContainer(ctx, withPortBinding(tt.hostPort))
-			assert.NoError(t, err)
-			defer func() {
-				err := container.Terminate(ctx)
-				assert.NoError(t, err)
-			}()
-
-			url, err := getURL(ctx, container, protocol, port)
-			assert.NoError(t, err)
-
-			err = waitForClientReady(ctx, url)
-			assert.NoError(t, err)
-
-			client, err := amqp.NewClient(ctx, codec.JSON{}, amqp.ConnectionInfo{
-				URL: url, Target: "reconnect-q", Source: "reconnect-q",
-			})
-			assert.NoError(t, err)
-			defer closeClient(ctx, t, client)
-
-			err = container.Stop(ctx, nil)
-			assert.NoError(t, err)
-
-			err = client.SendTaskRequest(ctx, orbital.TaskRequest{TaskID: uuid.New()})
-			assert.Error(t, err)
-			assert.ErrorIs(t, err, amqp.ErrReconnectFailed)
-
-			err = container.Start(ctx)
-			assert.NoError(t, err)
-
-			ctxCancel, cancel := context.WithTimeout(ctx, 60*time.Second)
-			defer cancel()
-
-			for {
-				select {
-				case <-ctxCancel.Done():
-					assert.Fail(t, "timed out waiting for reconnection")
-					return
-				default:
-					err = client.SendTaskRequest(ctx, orbital.TaskRequest{TaskID: uuid.New()})
-					if err != nil {
-						time.Sleep(100 * time.Millisecond)
-						continue
-					}
-					return
-				}
-			}
-		})
-	}
 }
 
 func startRabbitMQ(ctx context.Context, opts ...containerOpts) (testcontainers.Container, error) {
