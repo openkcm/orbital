@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
@@ -281,9 +282,18 @@ func TestWithMessageBroker(t *testing.T) {
 
 	t.Run("RabbitMQ-Plain", func(t *testing.T) {
 		t.Parallel()
+		var protocol, port = "amqp", "5672"
 
-		rmqURL, rmqCleanup := startRabbitMQ(t.Context(), t, false, tlsFiles{})
-		defer rmqCleanup()
+		ctx := t.Context()
+		container, err := startRabbitMQ(ctx)
+		assert.NoError(t, err)
+		defer func() {
+			err := container.Terminate(ctx)
+			assert.NoError(t, err)
+		}()
+
+		url, err := getURL(ctx, container, protocol, port)
+		assert.NoError(t, err)
 
 		tt := []struct {
 			name     string
@@ -304,22 +314,29 @@ func TestWithMessageBroker(t *testing.T) {
 
 		for _, tc := range tt {
 			t.Run(tc.name, func(t *testing.T) {
-				tc.testFunc(t, rmqURL, tc.queue)
+				tc.testFunc(t, url, tc.queue)
 			})
 		}
 	})
 
 	t.Run("RabbitMQ-mTLS", func(t *testing.T) {
 		t.Parallel()
+		var protocol, port = "amqps", "5671"
 
 		ctx := t.Context()
-
 		files := createTLSFiles(t)
-		rmqURL, rmqCleanup := startRabbitMQ(ctx, t, true, files)
-		defer rmqCleanup()
+		container, err := startRabbitMQ(ctx, withMTLSForRabbitMQ(files))
+		assert.NoError(t, err)
+		defer func() {
+			err := container.Terminate(ctx)
+			assert.NoError(t, err)
+		}()
+
+		url, err := getURL(ctx, container, protocol, port)
+		assert.NoError(t, err)
 
 		cli, err := amqp.NewClient(ctx, codec.JSON{}, amqp.ConnectionInfo{
-			URL: rmqURL, Target: "mtls-q", Source: "mtls-q",
+			URL: url, Target: "mtls-q", Source: "mtls-q",
 		}, amqp.WithExternalMTLS(
 			files.clientCertPath,
 			files.clientKeyPath,
@@ -336,11 +353,76 @@ func TestWithMessageBroker(t *testing.T) {
 		assert.Equal(t, exp.TaskID, got.TaskID)
 	})
 
+	t.Run("Reconnection", func(t *testing.T) {
+		t.Parallel()
+		var protocol, port = "amqp", "5672"
+
+		ctx := t.Context()
+		// Start the container with a fixed port binding to be able to restart the container on the same port.
+		container, err := startRabbitMQ(ctx, withPortBinding(port))
+		assert.NoError(t, err)
+		defer func() {
+			err := container.Terminate(ctx)
+			assert.NoError(t, err)
+		}()
+
+		url, err := getURL(ctx, container, protocol, port)
+		assert.NoError(t, err)
+
+		client, err := amqp.NewClient(ctx, codec.JSON{}, amqp.ConnectionInfo{
+			URL: url, Target: "reconnect-q", Source: "reconnect-q",
+		})
+		assert.NoError(t, err)
+		defer closeClient(ctx, t, client)
+
+		err = container.Stop(ctx, nil)
+		assert.NoError(t, err)
+
+		err = client.SendTaskRequest(ctx, orbital.TaskRequest{TaskID: uuid.New()})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, amqp.ErrReconnectFailed)
+
+		err = container.Start(ctx)
+		assert.NoError(t, err)
+
+		ctxCancel, cancel := context.WithTimeout(ctx, 60*time.Second)
+		defer cancel()
+
+		for {
+			select {
+			case <-ctxCancel.Done():
+				assert.Fail(t, "timed out waiting for reconnection")
+				return
+			default:
+				err = client.SendTaskRequest(ctx, orbital.TaskRequest{TaskID: uuid.New()})
+				if err != nil {
+					time.Sleep(100 * time.Millisecond)
+					continue
+				}
+				return
+			}
+		}
+	})
+
 	t.Run("Solace", func(t *testing.T) {
 		t.Parallel()
+		var protocol, port = "amqp", "5672"
 
-		solURL, solCleanup := startSolace(t.Context(), t)
-		defer solCleanup()
+		ctx := t.Context()
+		container, err := startSolace(ctx)
+		assert.NoError(t, err)
+		defer func() {
+			err := container.Terminate(ctx)
+			assert.NoError(t, err)
+		}()
+
+		url, err := getURL(ctx, container, protocol, port)
+		assert.NoError(t, err)
+
+		// Even tought the container listens on port 5672, it may take more time
+		// for Solace to be ready to accept connections.
+		err = waitForClientReady(ctx, url)
+		assert.NoError(t, err, "waiting for client to be ready should not fail")
 
 		tt := []struct {
 			name     string
@@ -361,7 +443,7 @@ func TestWithMessageBroker(t *testing.T) {
 
 		for _, tc := range tt {
 			t.Run(tc.name, func(t *testing.T) {
-				tc.testFunc(t, solURL, tc.queue)
+				tc.testFunc(t, url, tc.queue)
 			})
 		}
 	})
@@ -370,8 +452,19 @@ func TestWithMessageBroker(t *testing.T) {
 func TestReceiveTaskRequest(t *testing.T) {
 	t.Run("should accept/ack the queue message even if there is an error while decoding the task request", func(t *testing.T) {
 		// given
-		url, cleanUp := startRabbitMQ(t.Context(), t, false, tlsFiles{})
-		defer cleanUp()
+		var protocol, port = "amqp", "5672"
+
+		ctx := t.Context()
+		container, err := startRabbitMQ(ctx)
+		assert.NoError(t, err)
+		defer func() {
+			err := container.Terminate(ctx)
+			assert.NoError(t, err)
+		}()
+
+		url, err := getURL(ctx, container, protocol, port)
+		assert.NoError(t, err)
+
 		queue := uuid.New().String()
 
 		mCodec := &mockCodec{}
@@ -385,7 +478,6 @@ func TestReceiveTaskRequest(t *testing.T) {
 			return orbital.TaskRequest{}, errors.New(string(bytes)) //nolint:err113
 		}
 
-		ctx := t.Context()
 		cli, err := amqp.NewClient(ctx, mCodec, amqp.ConnectionInfo{
 			URL: url, Target: queue, Source: queue,
 		})
@@ -418,8 +510,19 @@ func TestReceiveTaskRequest(t *testing.T) {
 func TestReceiveTaskResponse(t *testing.T) {
 	t.Run("should accept/ack the queue message even if there is an error while decoding the task response", func(t *testing.T) {
 		// given
-		url, cleanUp := startRabbitMQ(t.Context(), t, false, tlsFiles{})
-		defer cleanUp()
+		var protocol, port = "amqp", "5672"
+
+		ctx := t.Context()
+		container, err := startRabbitMQ(ctx)
+		assert.NoError(t, err)
+		defer func() {
+			err := container.Terminate(ctx)
+			assert.NoError(t, err)
+		}()
+
+		url, err := getURL(ctx, container, protocol, port)
+		assert.NoError(t, err)
+
 		queue := uuid.New().String()
 
 		mCodec := &mockCodec{}
@@ -433,7 +536,6 @@ func TestReceiveTaskResponse(t *testing.T) {
 			return orbital.TaskResponse{}, errors.New(string(bytes)) //nolint:err113
 		}
 
-		ctx := t.Context()
 		cli, err := amqp.NewClient(ctx, mCodec, amqp.ConnectionInfo{
 			URL: url, Target: queue, Source: queue,
 		})
@@ -463,9 +565,7 @@ func TestReceiveTaskResponse(t *testing.T) {
 	})
 }
 
-func startRabbitMQ(ctx context.Context, t *testing.T, mtls bool, files tlsFiles) (string, func()) {
-	t.Helper()
-
+func startRabbitMQ(ctx context.Context, opts ...containerOpts) (testcontainers.Container, error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "rabbitmq:4",
 		ExposedPorts: []string{"5672/tcp", "5671/tcp", "15672/tcp"},
@@ -475,11 +575,43 @@ func startRabbitMQ(ctx context.Context, t *testing.T, mtls bool, files tlsFiles)
 		),
 	}
 
-	if mtls {
+	for _, opt := range opts {
+		if err := opt(&req); err != nil {
+			return nil, err
+		}
+	}
+
+	return testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+}
+
+type containerOpts func(req *testcontainers.ContainerRequest) error
+
+func withPortBinding(port string) containerOpts {
+	return func(req *testcontainers.ContainerRequest) error {
+		existingModifier := req.HostConfigModifier
+		req.HostConfigModifier = func(hc *container.HostConfig) {
+			if existingModifier != nil {
+				existingModifier(hc)
+			}
+			hc.PortBindings = nat.PortMap{
+				"5672/tcp": []nat.PortBinding{{HostPort: port}},
+			}
+		}
+		return nil
+	}
+}
+
+func withMTLSForRabbitMQ(files tlsFiles) containerOpts {
+	return func(req *testcontainers.ContainerRequest) error {
 		confFile := filepath.Join(files.dir, rabbitMQConfigFile)
 		confContent := rabbitMQConfig(rootCACertFile, serverCertFile, serverKeyFile)
 		err := os.WriteFile(confFile, []byte(confContent), 0600)
-		assert.NoError(t, err)
+		if err != nil {
+			return err
+		}
 
 		containerCertDir := "/certs"
 		req.Files = []testcontainers.ContainerFile{
@@ -521,29 +653,9 @@ func startRabbitMQ(ctx context.Context, t *testing.T, mtls bool, files tlsFiles)
 			wait.ForListeningPort("5671/tcp"),
 			wait.ForLog("Server startup complete"),
 		)
+
+		return nil
 	}
-
-	cont, err := testcontainers.GenericContainer(ctx,
-		testcontainers.GenericContainerRequest{ContainerRequest: req, Started: true})
-	assert.NoError(t, err)
-
-	host, err := cont.Host(ctx)
-	assert.NoError(t, err)
-
-	cleanup := func() {
-		err := cont.Terminate(ctx)
-		assert.NoError(t, err, "terminating RabbitMQ container should not fail")
-	}
-
-	if mtls {
-		tls, err := cont.MappedPort(ctx, "5671")
-		assert.NoError(t, err)
-		return fmt.Sprintf("amqps://%s/", net.JoinHostPort(host, tls.Port())), cleanup
-	}
-
-	plain, err := cont.MappedPort(ctx, "5672")
-	assert.NoError(t, err)
-	return fmt.Sprintf("amqp://%s/", net.JoinHostPort(host, plain.Port())), cleanup
 }
 
 func rabbitMQConfig(caCert, serverCert, serverKey string) string {
@@ -568,9 +680,7 @@ management.tcp.port = 15672
 `, caCert, serverCert, serverKey)
 }
 
-func startSolace(ctx context.Context, t *testing.T) (string, func()) {
-	t.Helper()
-
+func startSolace(ctx context.Context, opts ...containerOpts) (testcontainers.Container, error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "solace/solace-pubsub-standard",
 		ExposedPorts: []string{"5672/tcp"},
@@ -582,32 +692,31 @@ func startSolace(ctx context.Context, t *testing.T) (string, func()) {
 		HostConfigModifier: func(hc *container.HostConfig) { hc.ShmSize = 2 << 30 },
 		WaitingFor:         wait.ForListeningPort("5672/tcp").WithStartupTimeout(2 * time.Minute),
 	}
-
-	cont, err := testcontainers.GenericContainer(ctx,
-		testcontainers.GenericContainerRequest{ContainerRequest: req, Started: true})
-	assert.NoError(t, err)
-
-	host, err := cont.Host(ctx)
-	assert.NoError(t, err)
-	port, err := cont.MappedPort(ctx, "5672")
-	assert.NoError(t, err)
-
-	url := fmt.Sprintf("amqp://%s/", net.JoinHostPort(host, port.Port()))
-
-	// Even tought the container listens on port 5672, it may take more time
-	// for Solace to be ready to accept connections.
-	err = waitForClientReady(ctx, t, url)
-	assert.NoError(t, err, "waiting for client to be ready should not fail")
-
-	return url, func() {
-		err := cont.Terminate(ctx)
-		assert.NoError(t, err, "terminating Solace container should not fail")
+	for _, opt := range opts {
+		if err := opt(&req); err != nil {
+			return nil, err
+		}
 	}
+
+	return testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
 }
 
-func waitForClientReady(ctx context.Context, t *testing.T, url string) error {
-	t.Helper()
+func getURL(ctx context.Context, container testcontainers.Container, protocol, port string) (string, error) {
+	host, err := container.Host(ctx)
+	if err != nil {
+		return "", err
+	}
+	p, err := container.MappedPort(ctx, nat.Port(port))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s://%s/", protocol, net.JoinHostPort(host, p.Port())), nil
+}
 
+func waitForClientReady(ctx context.Context, url string) error {
 	timeoutCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
@@ -682,7 +791,7 @@ func testSendReceiveTaskResponses(t *testing.T, url, queue string) {
 	}
 }
 
-func closeClient(ctx context.Context, t *testing.T, client *amqp.AMQP) {
+func closeClient(ctx context.Context, t *testing.T, client *amqp.Client) {
 	t.Helper()
 
 	err := client.Close(ctx)

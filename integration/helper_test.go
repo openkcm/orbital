@@ -169,7 +169,7 @@ func (env *testEnvironment) Cleanup(ctx context.Context) error {
 }
 
 // createAMQPClient creates an AMQP client for communication.
-func createAMQPClient(ctx context.Context, rabbitURL, target, source string) (*amqp.AMQP, error) {
+func createAMQPClient(ctx context.Context, rabbitURL, target, source string) (*amqp.Client, error) {
 	connInfo := amqp.ConnectionInfo{
 		URL:    rabbitURL,
 		Target: target,
@@ -185,7 +185,7 @@ func createAMQPClient(ctx context.Context, rabbitURL, target, source string) (*a
 }
 
 // closeClient closes the AMQP client connection.
-func closeClient(ctx context.Context, t *testing.T, client *amqp.AMQP) {
+func closeClient(ctx context.Context, t *testing.T, client *amqp.Client) {
 	t.Helper()
 
 	err := client.Close(ctx)
