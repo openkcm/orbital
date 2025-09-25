@@ -171,6 +171,7 @@ func TestReconcile(t *testing.T) {
 		client, err := embedded.NewClient(func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
 			assert.Equal(t, ids[0], req.TaskID)
 			assert.Equal(t, expType, req.Type)
+			assert.Equal(t, job.ExternalID, req.ExternalID)
 			assert.Equal(t, expData, req.Data)
 			assert.Equal(t, expWorkingState, req.WorkingState)
 			assert.Equal(t, expETag, req.ETag)

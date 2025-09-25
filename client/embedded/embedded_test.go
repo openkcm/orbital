@@ -57,8 +57,9 @@ func TestSendTask_ReceivedTaskResponse(t *testing.T) {
 
 	ctx := t.Context()
 	req := orbital.TaskRequest{
-		TaskID: uuid.New(),
-		ETag:   uuid.New().String(),
+		TaskID:     uuid.New(),
+		ETag:       uuid.New().String(),
+		ExternalID: uuid.New().String(),
 	}
 
 	err = client.SendTaskRequest(ctx, req)
@@ -70,6 +71,7 @@ func TestSendTask_ReceivedTaskResponse(t *testing.T) {
 	assert.Equal(t, req.TaskID, resp.TaskID)
 	assert.Equal(t, req.ETag, resp.ETag)
 	assert.Equal(t, req.Type, resp.Type)
+	assert.Equal(t, req.ExternalID, resp.ExternalID)
 }
 
 func TestOperatorFuncError(t *testing.T) {

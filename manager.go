@@ -534,7 +534,7 @@ func (m *Manager) reconcile(ctx context.Context) error {
 			return err
 		}
 
-		m.handleTasks(ctx, repo, tasks)
+		m.handleTasks(ctx, repo, job, tasks)
 
 		return repo.updateJob(ctx, job)
 	})
@@ -584,7 +584,7 @@ func (m *Manager) terminateJob(ctx context.Context, repo Repository, job Job) er
 }
 
 // handleTasks handles a list of tasks concurrently.
-func (m *Manager) handleTasks(ctx context.Context, repo Repository, tasks []Task) {
+func (m *Manager) handleTasks(ctx context.Context, repo Repository, job Job, tasks []Task) {
 	if len(tasks) == 0 {
 		return
 	}
@@ -592,7 +592,7 @@ func (m *Manager) handleTasks(ctx context.Context, repo Repository, tasks []Task
 	var wg sync.WaitGroup
 	for _, task := range tasks {
 		wg.Add(1)
-		go m.handleTask(ctx, &wg, repo, task)
+		go m.handleTask(ctx, &wg, repo, job, task)
 	}
 	wg.Wait()
 }
@@ -602,11 +602,12 @@ func (m *Manager) handleTasks(ctx context.Context, repo Repository, tasks []Task
 // If the task has reached its max sent count, it updates the task status to FAILED.
 // If the task can be sent, it retrieves the corresponding client,
 // sends the task request, and updates the task.
-func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repository, task Task) {
+func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repository, job Job, task Task) {
 	defer wg.Done()
 
-	ctx = slogctx.With(ctx, "taskID", task.ID, "etag", task.ETag, "target", task.Target, "status", task.Status,
-		"reconcileCount", task.ReconcileCount, "reconcileAfterSec", task.ReconcileAfterSec)
+	ctx = slogctx.With(ctx, "externalID", job.ExternalID, "taskID", task.ID, "etag", task.ETag, "target",
+		task.Target, "status", task.Status, "reconcileCount", task.ReconcileCount,
+		"reconcileAfterSec", task.ReconcileAfterSec)
 
 	if task.ReconcileCount >= m.Config.MaxReconcileCount {
 		slogctx.Debug(ctx, "max reconcile count for task exceeded")
@@ -637,6 +638,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 	req := TaskRequest{
 		TaskID:       task.ID,
 		Type:         task.Type,
+		ExternalID:   job.ExternalID,
 		Data:         task.Data,
 		WorkingState: task.WorkingState,
 		ETag:         task.ETag,
@@ -686,8 +688,8 @@ func (m *Manager) handleResponses(ctx context.Context, client Initiator, target 
 				continue
 			}
 
-			slogctx.Debug(ctx, "received task response", slog.String("target", target), slog.String("taskID", resp.TaskID.String()),
-				slog.String("etag", resp.ETag), slog.Any("response", resp))
+			slogctx.Debug(ctx, "received task response", slog.String("target", target), slog.String("externalID", resp.ExternalID),
+				slog.String("taskID", resp.TaskID.String()), slog.String("etag", resp.ETag), slog.Any("response", resp))
 
 			if err := m.processResponse(ctx, resp); err != nil {
 				slogctx.Error(ctx, "failed to process task response", "error", err, "taskID", resp.TaskID)
@@ -703,7 +705,7 @@ func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error 
 		if err != nil || !found {
 			return err
 		}
-		txCtx = slogctx.With(txCtx, "taskID", task.ID, "etag", task.ETag)
+		txCtx = slogctx.With(txCtx, "externalID", resp.ExternalID, "taskID", task.ID, "etag", task.ETag)
 
 		if resp.ETag != task.ETag {
 			slogctx.Debug(txCtx, "discarding stale response")

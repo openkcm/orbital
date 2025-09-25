@@ -10,6 +10,7 @@ import (
 type TaskRequest struct {
 	TaskID       uuid.UUID `json:"taskId"`       // TaskID is used to identify the task.
 	Type         string    `json:"type"`         // Type is the type of the task.
+	ExternalID   string    `json:"externalId"`   // External ID serves as an identifier for a Job
 	Data         []byte    `json:"data"`         // Data is the static context for the task.
 	WorkingState []byte    `json:"workingState"` // WorkingState is the current state of the task that the operator works upon.
 	ETag         string    `json:"eTag"`         // ETag is used to identify the version of the TaskRequest.
@@ -19,6 +20,7 @@ type TaskRequest struct {
 type TaskResponse struct {
 	TaskID            uuid.UUID `json:"taskId"`                 // TaskID is used to identify the task.
 	Type              string    `json:"type"`                   // Type is the type of the task.
+	ExternalID        string    `json:"externalId"`             // External ID serves as an identifier for a Job
 	WorkingState      []byte    `json:"workingState"`           // WorkingState is the state of the task that the operator updates.
 	ETag              string    `json:"eTag"`                   // ETag is used to correlate the TaskResponse with the TaskRequest.
 	Status            string    `json:"status"`                 // Status is the status of the task.

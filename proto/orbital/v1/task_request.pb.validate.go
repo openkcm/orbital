@@ -61,6 +61,8 @@ func (m *TaskRequest) validate(all bool) error {
 
 	// no validation rules for Type
 
+	// no validation rules for ExternalId
+
 	// no validation rules for WorkingState
 
 	// no validation rules for Etag

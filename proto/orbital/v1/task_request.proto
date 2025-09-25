@@ -6,6 +6,7 @@ package orbital.v1;
 message TaskRequest {
   string taskId = 10; // UUID as string
   string type = 20; // Type of the task
+  string externalId = 25; // External ID serves as an identifier for a Job.
   optional bytes data = 30; // Static context for the task
   bytes workingState = 40; // Current state of the task
   string etag = 50; // Versioning tag

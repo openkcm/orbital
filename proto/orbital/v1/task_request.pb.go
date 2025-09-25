@@ -27,6 +27,7 @@ type TaskRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TaskId        string                 `protobuf:"bytes,10,opt,name=taskId,proto3" json:"taskId,omitempty"`             // UUID as string
 	Type          string                 `protobuf:"bytes,20,opt,name=type,proto3" json:"type,omitempty"`                 // Type of the task
+	ExternalId    string                 `protobuf:"bytes,25,opt,name=externalId,proto3" json:"externalId,omitempty"`     // External ID serves as an identifier for a Job.
 	Data          []byte                 `protobuf:"bytes,30,opt,name=data,proto3,oneof" json:"data,omitempty"`           // Static context for the task
 	WorkingState  []byte                 `protobuf:"bytes,40,opt,name=workingState,proto3" json:"workingState,omitempty"` // Current state of the task
 	Etag          string                 `protobuf:"bytes,50,opt,name=etag,proto3" json:"etag,omitempty"`                 // Versioning tag
@@ -78,6 +79,13 @@ func (x *TaskRequest) GetType() string {
 	return ""
 }
 
+func (x *TaskRequest) GetExternalId() string {
+	if x != nil {
+		return x.ExternalId
+	}
+	return ""
+}
+
 func (x *TaskRequest) GetData() []byte {
 	if x != nil {
 		return x.Data
@@ -104,11 +112,14 @@ var File_orbital_v1_task_request_proto protoreflect.FileDescriptor
 const file_orbital_v1_task_request_proto_rawDesc = "" +
 	"\n" +
 	"\x1dorbital/v1/task_request.proto\x12\n" +
-	"orbital.v1\"\x93\x01\n" +
+	"orbital.v1\"\xb3\x01\n" +
 	"\vTaskRequest\x12\x16\n" +
 	"\x06taskId\x18\n" +
 	" \x01(\tR\x06taskId\x12\x12\n" +
-	"\x04type\x18\x14 \x01(\tR\x04type\x12\x17\n" +
+	"\x04type\x18\x14 \x01(\tR\x04type\x12\x1e\n" +
+	"\n" +
+	"externalId\x18\x19 \x01(\tR\n" +
+	"externalId\x12\x17\n" +
 	"\x04data\x18\x1e \x01(\fH\x00R\x04data\x88\x01\x01\x12\"\n" +
 	"\fworkingState\x18( \x01(\fR\fworkingState\x12\x12\n" +
 	"\x04etag\x182 \x01(\tR\x04etagB\a\n" +

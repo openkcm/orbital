@@ -63,10 +63,11 @@ func sendAndReceive() {
 	handleErr("initializing initiator", err)
 
 	req := orbital.TaskRequest{
-		TaskID: uuid.New(),
-		ETag:   "example-etag",
-		Type:   "example",
-		Data:   []byte("example data"),
+		TaskID:     uuid.New(),
+		ETag:       "example-etag",
+		Type:       "example",
+		ExternalID: "example-external-id",
+		Data:       []byte("example data"),
 	}
 
 	reqJSON, err := json.MarshalIndent(req, "", "  ") // will base64 encode the data field
