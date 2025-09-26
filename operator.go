@@ -164,7 +164,7 @@ func (o *Operator) startResponding(ctx context.Context) {
 					return
 				case req := <-o.requests:
 					logCtx := slogctx.With(ctx, "externalID", req.ExternalID, "taskID", req.TaskID, "etag", req.ETag)
-					slogctx.Debug(logCtx, "received task requests")
+					slogctx.Debug(logCtx, "received task request")
 					resp := TaskResponse{
 						TaskID:     req.TaskID,
 						Type:       req.Type,
