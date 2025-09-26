@@ -6,9 +6,9 @@ import (
 	"log"
 	"sync"
 
-	slogctx "github.com/veqryn/slog-context"
-
 	"github.com/google/uuid"
+
+	slogctx "github.com/veqryn/slog-context"
 )
 
 const (
