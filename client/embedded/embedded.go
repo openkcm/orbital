@@ -75,6 +75,7 @@ func (c *Client) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse,
 		resp.TaskID = req.TaskID
 		resp.ETag = req.ETag
 		resp.Type = req.Type
+		resp.ExternalID = req.ExternalID
 		return resp, err
 	}
 }

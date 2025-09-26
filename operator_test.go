@@ -158,6 +158,7 @@ func TestListenAndRespond(t *testing.T) {
 	taskReq := orbital.TaskRequest{
 		TaskID:       uuid.New(),
 		Type:         "success",
+		ExternalID:   "external-id",
 		ETag:         "etag",
 		Data:         []byte("test data"),
 		WorkingState: []byte("prev working state"),
@@ -188,6 +189,7 @@ func TestListenAndRespond(t *testing.T) {
 
 	assert.Equal(t, taskReq.TaskID, resp.TaskID)
 	assert.Equal(t, taskReq.Type, resp.Type)
+	assert.Equal(t, taskReq.ExternalID, resp.ExternalID)
 	assert.Equal(t, taskReq.ETag, resp.ETag)
 	assert.Equal(t, expWorkingState, resp.WorkingState)
 	assert.Equal(t, string(expState), resp.Status)

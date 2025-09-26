@@ -77,6 +77,7 @@ type TaskResponse struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	TaskId            string                 `protobuf:"bytes,10,opt,name=taskId,proto3" json:"taskId,omitempty"`                             // UUID as string
 	Type              string                 `protobuf:"bytes,20,opt,name=type,proto3" json:"type,omitempty"`                                 // Type of the task
+	ExternalId        string                 `protobuf:"bytes,25,opt,name=externalId,proto3" json:"externalId,omitempty"`                     // External ID serves as an identifier for a Job.
 	WorkingState      []byte                 `protobuf:"bytes,30,opt,name=workingState,proto3,oneof" json:"workingState,omitempty"`           // Updated state of the task
 	Etag              string                 `protobuf:"bytes,40,opt,name=etag,proto3" json:"etag,omitempty"`                                 // Correlates with TaskRequest
 	Status            TaskStatus             `protobuf:"varint,50,opt,name=status,proto3,enum=orbital.v1.TaskStatus" json:"status,omitempty"` // Status of the task
@@ -130,6 +131,13 @@ func (x *TaskResponse) GetType() string {
 	return ""
 }
 
+func (x *TaskResponse) GetExternalId() string {
+	if x != nil {
+		return x.ExternalId
+	}
+	return ""
+}
+
 func (x *TaskResponse) GetWorkingState() []byte {
 	if x != nil {
 		return x.WorkingState
@@ -170,11 +178,14 @@ var File_orbital_v1_task_response_proto protoreflect.FileDescriptor
 const file_orbital_v1_task_response_proto_rawDesc = "" +
 	"\n" +
 	"\x1eorbital/v1/task_response.proto\x12\n" +
-	"orbital.v1\"\xa0\x02\n" +
+	"orbital.v1\"\xc0\x02\n" +
 	"\fTaskResponse\x12\x16\n" +
 	"\x06taskId\x18\n" +
 	" \x01(\tR\x06taskId\x12\x12\n" +
-	"\x04type\x18\x14 \x01(\tR\x04type\x12'\n" +
+	"\x04type\x18\x14 \x01(\tR\x04type\x12\x1e\n" +
+	"\n" +
+	"externalId\x18\x19 \x01(\tR\n" +
+	"externalId\x12'\n" +
 	"\fworkingState\x18\x1e \x01(\fH\x00R\fworkingState\x88\x01\x01\x12\x12\n" +
 	"\x04etag\x18( \x01(\tR\x04etag\x12.\n" +
 	"\x06status\x182 \x01(\x0e2\x16.orbital.v1.TaskStatusR\x06status\x12'\n" +

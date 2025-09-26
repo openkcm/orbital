@@ -13,6 +13,7 @@ enum TaskStatus {
 message TaskResponse {
   string taskId = 10; // UUID as string
   string type = 20; // Type of the task
+  string externalId = 25; // External ID serves as an identifier for a Job.
   optional bytes workingState = 30; // Updated state of the task
   string etag = 40; // Correlates with TaskRequest
   TaskStatus status = 50; // Status of the task

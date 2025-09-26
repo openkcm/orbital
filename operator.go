@@ -162,9 +162,10 @@ func (o *Operator) startResponding(ctx context.Context) {
 					return
 				case req := <-o.requests:
 					resp := TaskResponse{
-						TaskID: req.TaskID,
-						Type:   req.Type,
-						ETag:   req.ETag,
+						TaskID:     req.TaskID,
+						Type:       req.Type,
+						ExternalID: req.ExternalID,
+						ETag:       req.ETag,
 					}
 
 					h, ok := o.handlerRegistry.r[req.Type]

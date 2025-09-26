@@ -28,6 +28,7 @@ func (p Proto) DecodeTaskRequest(bytes []byte) (orbital.TaskRequest, error) {
 	return orbital.TaskRequest{
 		TaskID:       id,
 		Type:         pReq.GetType(),
+		ExternalID:   pReq.GetExternalId(),
 		WorkingState: pReq.GetWorkingState(),
 		ETag:         pReq.GetEtag(),
 		Data:         pReq.GetData(),
@@ -39,6 +40,7 @@ func (p Proto) EncodeTaskRequest(request orbital.TaskRequest) ([]byte, error) {
 	return proto.Marshal(&orbitalpb.TaskRequest{
 		TaskId:       request.TaskID.String(),
 		Type:         request.Type,
+		ExternalId:   request.ExternalID,
 		WorkingState: request.WorkingState,
 		Etag:         request.ETag,
 		Data:         request.Data,
@@ -60,6 +62,7 @@ func (p Proto) DecodeTaskResponse(bytes []byte) (orbital.TaskResponse, error) {
 	return orbital.TaskResponse{
 		TaskID:            id,
 		Type:              pRes.GetType(),
+		ExternalID:        pRes.GetExternalId(),
 		WorkingState:      pRes.GetWorkingState(),
 		ETag:              pRes.GetEtag(),
 		Status:            pRes.GetStatus().String(),
@@ -73,6 +76,7 @@ func (p Proto) EncodeTaskResponse(response orbital.TaskResponse) ([]byte, error)
 	return proto.Marshal(&orbitalpb.TaskResponse{
 		TaskId:            response.TaskID.String(),
 		Type:              response.Type,
+		ExternalId:        response.ExternalID,
 		WorkingState:      response.WorkingState,
 		Etag:              response.ETag,
 		Status:            orbitalpb.TaskStatus(orbitalpb.TaskStatus_value[response.Status]),
