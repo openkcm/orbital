@@ -120,6 +120,7 @@ var (
 	ErrNoClientForTarget  = errors.New("no client for task target")
 	ErrLoadingJob         = errors.New("failed to load job")
 	ErrUpdatingJob        = errors.New("failed to update job")
+	ErrTaskNotFound       = errors.New("task not found")
 )
 
 // NewManager creates a new Manager instance.
@@ -702,6 +703,14 @@ func (m *Manager) handleResponses(ctx context.Context, client Initiator, target 
 func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error {
 	return m.repo.transaction(ctx, func(txCtx context.Context, repo Repository) error {
 		task, found, err := repo.getTaskForUpdate(txCtx, resp.TaskID)
+		if err != nil {
+			return err
+		}
+
+		if !found {
+			return fmt.Errorf("%w, taskID: %s", ErrTaskNotFound, resp.TaskID)
+		}
+
 		if err != nil || !found {
 			return err
 		}

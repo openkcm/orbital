@@ -732,18 +732,6 @@ func TestProcessResponse(t *testing.T) {
 				isLastReconcileAtEqual: true,
 			},
 			{
-				name:              "task not found",
-				initialStoredTask: nil,
-				taskResponse: func(taskID uuid.UUID) orbital.TaskResponse {
-					return orbital.TaskResponse{
-						TaskID: taskID,
-						Type:   "task-type",
-						ETag:   "etag-123",
-						Status: string(orbital.ResultDone),
-					}
-				},
-			},
-			{
 				name: "error status response",
 				initialStoredTask: &orbital.Task{
 					JobID:              uuid.New(),
@@ -992,6 +980,20 @@ func TestProcessResponse(t *testing.T) {
 			assert.True(t, found)
 			assert.Equal(t, int64(0), task.TotalReceivedCount)
 		})
+	})
+	t.Run("task not found", func(t *testing.T) {
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		mgr, err := orbital.NewManager(repo, mockTaskResolveFunc())
+		assert.NoError(t, err)
+
+		err = orbital.ProcessResponse(mgr)(ctx, orbital.TaskResponse{})
+
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, orbital.ErrTaskNotFound)
 	})
 }
 
