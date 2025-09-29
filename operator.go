@@ -7,6 +7,8 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+
+	slogctx "github.com/veqryn/slog-context"
 )
 
 const (
@@ -161,6 +163,8 @@ func (o *Operator) startResponding(ctx context.Context) {
 				case <-ctx.Done():
 					return
 				case req := <-o.requests:
+					logCtx := slogctx.With(ctx, "externalID", req.ExternalID, "taskID", req.TaskID, "etag", req.ETag)
+					slogctx.Debug(logCtx, "received task request")
 					resp := TaskResponse{
 						TaskID:     req.TaskID,
 						Type:       req.Type,
@@ -170,26 +174,26 @@ func (o *Operator) startResponding(ctx context.Context) {
 
 					h, ok := o.handlerRegistry.r[req.Type]
 					if !ok {
-						o.sendErrorResponse(ctx, resp, ErrMsgUnknownTaskType)
+						o.sendErrorResponse(logCtx, resp, ErrMsgUnknownTaskType)
 						continue
 					}
 
-					hResp, err := h(ctx, HandlerRequest{
+					hResp, err := h(logCtx, HandlerRequest{
 						TaskID:       req.TaskID,
 						Type:         req.Type,
 						Data:         req.Data,
 						WorkingState: req.WorkingState,
 					})
 					if err != nil {
-						o.sendErrorResponse(ctx, resp, err.Error())
+						o.sendErrorResponse(logCtx, resp, err.Error())
 						continue
 					}
 
 					resp.WorkingState = hResp.WorkingState
 					resp.Status = string(hResp.Result)
 					resp.ReconcileAfterSec = hResp.ReconcileAfterSec
-					err = o.responder.SendTaskResponse(ctx, resp)
-					handleError("sending task response", err)
+					err = o.responder.SendTaskResponse(logCtx, resp)
+					handleError(logCtx, "sending task response", err)
 				}
 			}
 		}()
@@ -200,11 +204,13 @@ func (o *Operator) sendErrorResponse(ctx context.Context, resp TaskResponse, err
 	resp.Status = string(ResultFailed)
 	resp.ErrorMessage = errMsg
 	err := o.responder.SendTaskResponse(ctx, resp)
-	handleError("sending task response", err)
+	handleError(ctx, "sending task response", err)
 }
 
-func handleError(msg string, err error) {
+func handleError(ctx context.Context, msg string, err error) {
 	if err != nil {
-		log.Printf("ERROR: %s, %v", msg, err)
+		slogctx.Error(ctx, "ERROR: %s, %v", msg, err)
+		return
 	}
+	slogctx.Debug(ctx, msg)
 }
