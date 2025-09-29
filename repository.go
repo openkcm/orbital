@@ -83,11 +83,16 @@ func (r *Repository) createJob(ctx context.Context, job Job) (Job, error) {
 // It takes a context and a UUID as input and returns the Job entity,
 // a boolean indicating if the job was found, and an error if the operation fails.
 func (r *Repository) getJob(ctx context.Context, id uuid.UUID) (Job, bool, error) {
-	return getEntity[Job](ctx, r,
+	job, err := getEntity[Job](ctx, r,
 		query.Query{
 			EntityName: query.EntityNameJobs,
 			Clauses:    []query.Clause{query.ClauseWithID(id)},
 		})
+	if err != nil || job == nil {
+		return Job{}, false, err
+	}
+
+	return *job, true, nil
 }
 
 // updateJob updates an existing job entity in the repository.
@@ -168,20 +173,30 @@ func (r *Repository) createTasks(ctx context.Context, tasks []Task) ([]uuid.UUID
 // It takes a context and a UUID as input and returns the Task entity,
 // a boolean indicating if the task was found, and an error if the operation fails.
 func (r *Repository) getTask(ctx context.Context, id uuid.UUID) (Task, bool, error) {
-	return getEntity[Task](ctx, r, query.Query{
+	task, err := getEntity[Task](ctx, r, query.Query{
 		EntityName: query.EntityNameTasks,
 		Clauses:    []query.Clause{query.ClauseWithID(id)},
 	})
+	if err != nil || task == nil {
+		return Task{}, false, err
+	}
+
+	return *task, true, nil
 }
 
 // getTaskForUpdate retrieves a Task entity by its ID with a lock for update.
 // Returns the Task, a boolean indicating if it was found, and an error if any occurred.
 func (r *Repository) getTaskForUpdate(ctx context.Context, id uuid.UUID) (Task, bool, error) {
-	return getEntity[Task](ctx, r, query.Query{
+	task, err := getEntity[Task](ctx, r, query.Query{
 		EntityName:    query.EntityNameTasks,
 		Clauses:       []query.Clause{query.ClauseWithID(id)},
 		RetrievalMode: query.RetrievalModeForUpdate,
 	})
+	if err != nil || task == nil {
+		return Task{}, false, err
+	}
+
+	return *task, true, nil
 }
 
 // updateTask updates an existing task entity in the repository.
@@ -260,10 +275,16 @@ func (r *Repository) createJobCursor(ctx context.Context, cursor JobCursor) (Job
 // It takes a context and a UUID as input and returns the JobCursor entity,
 // a boolean indicating if the job cursor was found, and an error if the operation fails.
 func (r *Repository) getJobCursor(ctx context.Context, id uuid.UUID) (JobCursor, bool, error) {
-	return getEntity[JobCursor](ctx, r, query.Query{
+	jobCursor, err := getEntity[JobCursor](ctx, r, query.Query{
 		EntityName: query.EntityNameJobCursor,
 		Clauses:    []query.Clause{query.ClauseWithID(id)},
 	})
+
+	if err != nil || jobCursor == nil {
+		return JobCursor{}, false, err
+	}
+
+	return *jobCursor, true, nil
 }
 
 // updateJobCursor updates an existing job cursor entity in the repository.
@@ -304,7 +325,13 @@ func (r *Repository) getJobEvent(ctx context.Context, eventQuery JobEventQuery) 
 	if eventQuery.OrderByUpdatedAt {
 		q.OrderBy = append(q.OrderBy, query.OrderByUpdatedAtAscending())
 	}
-	return getEntity[JobEvent](ctx, r, q)
+
+	jobEvent, err := getEntity[JobEvent](ctx, r, q)
+	if err != nil || jobEvent == nil {
+		return JobEvent{}, false, err
+	}
+
+	return *jobEvent, true, nil
 }
 
 // updateJobEvent updates an existing JobEvent entity in the repository.
@@ -323,17 +350,23 @@ func (r *Repository) transaction(ctx context.Context, txFunc TransactionFunc) er
 // getEntity retrieves an entity of type T from the repository using the provided
 // query. It returns the entity, a boolean indicating if the entity exists, and
 // an error if the retrieval or decoding fails.
-func getEntity[T EntityTypes](ctx context.Context, r *Repository, q query.Query) (T, bool, error) {
+func getEntity[T EntityTypes](ctx context.Context, r *Repository, q query.Query) (*T, error) {
 	var entity T
 	result, err := r.Store.Find(ctx, q)
 	if err != nil {
-		return entity, false, err
+		return nil, err
 	}
+
 	if !result.Exists {
-		return entity, false, nil
+		return nil, nil //nolint:nilnil
 	}
+
 	entity, err = Decode[T](result.Entity)
-	return entity, err == nil, err
+	if err != nil {
+		return nil, err
+	}
+
+	return &entity, err
 }
 
 // updateEntity encodes the given entity of type T and updates it in the
@@ -392,5 +425,10 @@ func (r *Repository) getJobForUpdate(ctx context.Context, id uuid.UUID) (Job, bo
 		RetrievalMode: query.RetrievalModeForUpdate,
 	}
 
-	return getEntity[Job](ctx, r, q)
+	job, err := getEntity[Job](ctx, r, q)
+	if err != nil || job == nil {
+		return Job{}, false, err
+	}
+
+	return *job, true, nil
 }
