@@ -6,6 +6,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// HeaderMessageSignature is the header key used to store the message signature for hash verification.
+const HeaderMessageSignature = "X-Message-Signature"
+
 // TaskRequest is the request object that will be sent to the operator.
 type TaskRequest struct {
 	TaskID       uuid.UUID `json:"taskId"`       // TaskID is used to identify the task.
@@ -46,4 +49,35 @@ type Codec interface {
 	DecodeTaskRequest(bytes []byte) (TaskRequest, error)
 	EncodeTaskResponse(response TaskResponse) ([]byte, error)
 	DecodeTaskResponse(bytes []byte) (TaskResponse, error)
+}
+
+// Crypto defines cryptographic operations.
+type Crypto interface {
+	// Signature generates a signature the given message.
+	// For eg:
+	// Returns the signed token as a string, or an error if signing fails.
+	// 1. create a hash of the message content
+	// 2. create a JSON Web Token (JWT) as below.
+	// Header:
+	// 		alg: S256
+	// 		typ: JWT
+	// Payload:
+	// 		iss: clusterUrl of the issuer that exposes the .well-known endpoint.
+	// 		kid: key id of the signing key
+	// 		hash: the calculated hash value
+	//    hash-alg: SHA256
+	// JWS Serialization Mode: [Compact]: https://datatracker.ietf.org/doc/html/rfc7515#section-3.1
+	Signature(message []byte) (string, error)
+
+	// VerifySignature verifies a signature.
+	// For eg:
+	// 1. validate the token
+	// 		* check if issuer (iss) is trusted
+	// 		* read kid (signing key id)
+	// 		* get public key of the signing key from issuer's .well-known endpoint (cache key by kid)
+	// 		* verify signature
+	// 		* read hash-alg and hash
+	// 2. hash the received message
+	// 3. compare message hash value with extracted hash value
+	VerifySignature(signature string, message []byte) error
 }

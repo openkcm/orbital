@@ -282,7 +282,7 @@ func TestWithMessageBroker(t *testing.T) {
 
 	t.Run("RabbitMQ-Plain", func(t *testing.T) {
 		t.Parallel()
-		var protocol, port = "amqp", "5672"
+		protocol, port := "amqp", "5672"
 
 		ctx := t.Context()
 		container, err := startRabbitMQ(ctx)
@@ -321,7 +321,7 @@ func TestWithMessageBroker(t *testing.T) {
 
 	t.Run("RabbitMQ-mTLS", func(t *testing.T) {
 		t.Parallel()
-		var protocol, port = "amqps", "5671"
+		protocol, port := "amqps", "5671"
 
 		ctx := t.Context()
 		files := createTLSFiles(t)
@@ -355,7 +355,7 @@ func TestWithMessageBroker(t *testing.T) {
 
 	t.Run("Reconnection", func(t *testing.T) {
 		t.Parallel()
-		var protocol, port = "amqp", "5672"
+		protocol, port := "amqp", "5672"
 
 		ctx := t.Context()
 		// Start the container with a fixed port binding to be able to restart the container on the same port.
@@ -406,7 +406,7 @@ func TestWithMessageBroker(t *testing.T) {
 
 	t.Run("Solace", func(t *testing.T) {
 		t.Parallel()
-		var protocol, port = "amqp", "5672"
+		protocol, port := "amqp", "5672"
 
 		ctx := t.Context()
 		container, err := startSolace(ctx)
@@ -449,10 +449,202 @@ func TestWithMessageBroker(t *testing.T) {
 	})
 }
 
+func TestCrypto(t *testing.T) {
+	protocol, port := "amqp", "5672"
+
+	ctx := t.Context()
+	container, err := startRabbitMQ(ctx)
+	assert.NoError(t, err)
+	defer func() {
+		err := container.Terminate(ctx)
+		assert.NoError(t, err)
+	}()
+
+	url, err := getURL(ctx, container, protocol, port)
+	assert.NoError(t, err)
+
+	t.Run("SendTaskRequest should not sent TaskRequest to the amqp channel if Signature fails", func(t *testing.T) {
+		// given
+		queue := uuid.New().String()
+		cli, err := amqp.NewClient(ctx, &codec.JSON{}, amqp.ConnectionInfo{
+			URL: url, Target: queue, Source: queue,
+		})
+		assert.NoError(t, err)
+		defer closeClient(ctx, t, cli)
+
+		actSignedJWTSignatureCalls := 0
+		mckrypto := &mockCrypto{}
+
+		mckrypto.FnSignature = func(_ []byte) (string, error) {
+			actSignedJWTSignatureCalls++
+			return "", assert.AnError
+		}
+
+		cli.WithCrypto(mckrypto)
+
+		assert.Equal(t, assert.AnError, cli.SendTaskRequest(ctx, orbital.TaskRequest{TaskID: uuid.New()}))
+		assert.Equal(t, 1, actSignedJWTSignatureCalls)
+	})
+
+	t.Run("ReceiveTaskRequest", func(t *testing.T) {
+		// given
+		queue := uuid.New().String()
+		cli, err := amqp.NewClient(ctx, &codec.JSON{}, amqp.ConnectionInfo{
+			URL: url, Target: queue, Source: queue,
+		})
+		assert.NoError(t, err)
+		defer closeClient(ctx, t, cli)
+
+		expValidTkn := "jwtToken"
+		tts := []struct {
+			name              string
+			taskID            uuid.UUID
+			verifyJWTTokenErr error
+		}{
+			{
+				name:              "should not return error VerifySignature return no error",
+				taskID:            uuid.New(),
+				verifyJWTTokenErr: nil,
+			},
+			{
+				name:              "should return error VerifySignature return an error",
+				taskID:            uuid.New(),
+				verifyJWTTokenErr: assert.AnError,
+			},
+		}
+
+		actSignedJWTSignatureCalls := 0
+		actVerifyJWTTokenCalls := 0
+		mckrypto := &mockCrypto{}
+		mckrypto.FnSignature = func(_ []byte) (string, error) {
+			actSignedJWTSignatureCalls++
+			return expValidTkn, nil
+		}
+
+		mckrypto.FnVerifySignature = func(token string, _ []byte) error {
+			assert.Equal(t, expValidTkn, token, "token should match")
+			err := tts[actVerifyJWTTokenCalls].verifyJWTTokenErr
+			actVerifyJWTTokenCalls++
+			return err
+		}
+
+		cli.WithCrypto(mckrypto)
+
+		for _, tt := range tts {
+			t.Run(tt.name, func(t *testing.T) {
+				req := orbital.TaskRequest{TaskID: tt.taskID}
+				// when
+				assert.NoError(t, cli.SendTaskRequest(ctx, req))
+
+				got, err := cli.ReceiveTaskRequest(ctx)
+				// then
+				expTaskID := tt.taskID
+				if err != nil {
+					expTaskID = uuid.Nil
+				}
+				assert.Equal(t, expTaskID, got.TaskID)
+				assert.Equal(t, tt.verifyJWTTokenErr, err)
+			})
+		}
+		expNoOfCalls := len(tts)
+		assert.Equal(t, expNoOfCalls, actSignedJWTSignatureCalls)
+		assert.Equal(t, expNoOfCalls, actVerifyJWTTokenCalls)
+	})
+
+	t.Run("SendTaskResponse should not sent TaskResponse to the amqp channel if Signature fails", func(t *testing.T) {
+		// given
+		queue := uuid.New().String()
+		cli, err := amqp.NewClient(ctx, &codec.JSON{}, amqp.ConnectionInfo{
+			URL: url, Target: queue, Source: queue,
+		})
+		assert.NoError(t, err)
+		defer closeClient(ctx, t, cli)
+
+		actSignedJWTSignatureCalls := 0
+		mckrypto := &mockCrypto{}
+
+		mckrypto.FnSignature = func(_ []byte) (string, error) {
+			actSignedJWTSignatureCalls++
+			return "", assert.AnError
+		}
+
+		cli.WithCrypto(mckrypto)
+
+		assert.Equal(t, assert.AnError, cli.SendTaskResponse(ctx, orbital.TaskResponse{TaskID: uuid.New()}))
+		assert.Equal(t, 1, actSignedJWTSignatureCalls)
+	})
+
+	t.Run("ReceiveTaskResponse", func(t *testing.T) {
+		// given
+		queue := uuid.New().String()
+		cli, err := amqp.NewClient(ctx, &codec.JSON{}, amqp.ConnectionInfo{
+			URL: url, Target: queue, Source: queue,
+		})
+		assert.NoError(t, err)
+		defer closeClient(ctx, t, cli)
+
+		expValidTkn := "jwtToken"
+		tts := []struct {
+			name              string
+			taskID            uuid.UUID
+			verifyJWTTokenErr error
+		}{
+			{
+				name:              "should not return error VerifySignature return no error",
+				taskID:            uuid.New(),
+				verifyJWTTokenErr: nil,
+			},
+			{
+				name:              "should return error VerifySignature return an error",
+				taskID:            uuid.New(),
+				verifyJWTTokenErr: assert.AnError,
+			},
+		}
+
+		actSignedJWTSignatureCalls := 0
+		actVerifyJWTTokenCalls := 0
+		mckrypto := &mockCrypto{}
+		mckrypto.FnSignature = func(_ []byte) (string, error) {
+			actSignedJWTSignatureCalls++
+			return expValidTkn, nil
+		}
+
+		mckrypto.FnVerifySignature = func(token string, _ []byte) error {
+			assert.Equal(t, expValidTkn, token, "token should match")
+			err := tts[actVerifyJWTTokenCalls].verifyJWTTokenErr
+			actVerifyJWTTokenCalls++
+			return err
+		}
+
+		cli.WithCrypto(mckrypto)
+
+		for _, tt := range tts {
+			t.Run(tt.name, func(t *testing.T) {
+				req := orbital.TaskResponse{TaskID: tt.taskID}
+				// when
+				assert.NoError(t, cli.SendTaskResponse(ctx, req))
+
+				got, err := cli.ReceiveTaskResponse(ctx)
+
+				// then
+				expTaskID := tt.taskID
+				if err != nil {
+					expTaskID = uuid.Nil
+				}
+				assert.Equal(t, expTaskID, got.TaskID)
+				assert.Equal(t, tt.verifyJWTTokenErr, err)
+			})
+		}
+		expNoOfCalls := len(tts)
+		assert.Equal(t, expNoOfCalls, actSignedJWTSignatureCalls)
+		assert.Equal(t, expNoOfCalls, actVerifyJWTTokenCalls)
+	})
+}
+
 func TestReceiveTaskRequest(t *testing.T) {
 	t.Run("should accept/ack the queue message even if there is an error while decoding the task request", func(t *testing.T) {
 		// given
-		var protocol, port = "amqp", "5672"
+		protocol, port := "amqp", "5672"
 
 		ctx := t.Context()
 		container, err := startRabbitMQ(ctx)
@@ -510,7 +702,7 @@ func TestReceiveTaskRequest(t *testing.T) {
 func TestReceiveTaskResponse(t *testing.T) {
 	t.Run("should accept/ack the queue message even if there is an error while decoding the task response", func(t *testing.T) {
 		// given
-		var protocol, port = "amqp", "5672"
+		protocol, port := "amqp", "5672"
 
 		ctx := t.Context()
 		container, err := startRabbitMQ(ctx)
@@ -660,24 +852,24 @@ func withMTLSForRabbitMQ(files tlsFiles) containerOpts {
 
 func rabbitMQConfig(caCert, serverCert, serverKey string) string {
 	return fmt.Sprintf(`
-listeners.tcp.default = 5672
-listeners.ssl.default = 5671
+ listeners.tcp.default = 5672
+ listeners.ssl.default = 5671
 
-ssl_options.cacertfile = /certs/%s
-ssl_options.certfile   = /certs/%s
-ssl_options.keyfile    = /certs/%s
-ssl_options.verify     = verify_peer
-ssl_options.fail_if_no_peer_cert = true
+ ssl_options.cacertfile = /certs/%s
+ ssl_options.certfile   = /certs/%s
+ ssl_options.keyfile    = /certs/%s
+ ssl_options.verify     = verify_peer
+ ssl_options.fail_if_no_peer_cert = true
 
-auth_mechanisms.1 = PLAIN
-auth_mechanisms.2 = AMQPLAIN
-auth_mechanisms.3 = EXTERNAL
+ auth_mechanisms.1 = PLAIN
+ auth_mechanisms.2 = AMQPLAIN
+ auth_mechanisms.3 = EXTERNAL
 
-ssl_cert_login_from = common_name
-loopback_users = none
+ ssl_cert_login_from = common_name
+ loopback_users = none
 
-management.tcp.port = 15672
-`, caCert, serverCert, serverKey)
+ management.tcp.port = 15672
+ `, caCert, serverCert, serverKey)
 }
 
 func startSolace(ctx context.Context, opts ...containerOpts) (testcontainers.Container, error) {
@@ -797,3 +989,20 @@ func closeClient(ctx context.Context, t *testing.T, client *amqp.Client) {
 	err := client.Close(ctx)
 	assert.NoError(t, err)
 }
+
+type mockCrypto struct {
+	FnSignature       func(message []byte) (string, error)
+	FnVerifySignature func(token string, message []byte) error
+}
+
+// Signature implements orbital.Crypto.
+func (m *mockCrypto) Signature(message []byte) (string, error) {
+	return m.FnSignature(message)
+}
+
+// VerifySignature implements orbital.Crypto.
+func (m *mockCrypto) VerifySignature(token string, message []byte) error {
+	return m.FnVerifySignature(token, message)
+}
+
+var _ orbital.Crypto = &mockCrypto{}

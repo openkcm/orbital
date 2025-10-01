@@ -33,6 +33,8 @@ var (
 	ErrConnectInProgress = errors.New("amqp: connection already in progress")
 	// ErrReconnectFailed indicates that the reconnection attempt has failed.
 	ErrReconnectFailed = errors.New("amqp: reconnection failed")
+	// ErrUnknownSignatureType is returned when the signature type during verification is not a string.
+	ErrUnknownSignatureType = errors.New("signature type is unknown")
 )
 
 // dialTimeout is the maximum time to wait for the AMQP connection to be established.
@@ -41,6 +43,8 @@ const dialTimeout = 5 * time.Second
 type (
 	// Client sends and receives messages using the AMQP protocol.
 	Client struct {
+		// crypto is used to sign and verify signature.
+		crypto orbital.Crypto
 		// codec is used to encode and decode messages.
 		codec orbital.Codec
 		// connInfo holds the connection details in case for reconnection attempts.
@@ -157,6 +161,11 @@ func NewClient(ctx context.Context, codec orbital.Codec, connInfo ConnectionInfo
 	return client, nil
 }
 
+func (c *Client) WithCrypto(crypt orbital.Crypto) *Client {
+	c.crypto = crypt
+	return c
+}
+
 // SendTaskRequest sends an encoded TaskRequest message.
 func (c *Client) SendTaskRequest(ctx context.Context, req orbital.TaskRequest) error {
 	b, err := c.codec.EncodeTaskRequest(req)
@@ -164,8 +173,14 @@ func (c *Client) SendTaskRequest(ctx context.Context, req orbital.TaskRequest) e
 		return err
 	}
 
+	msg := amqp.NewMessage(b)
+	err = c.signSignature(b, msg)
+	if err != nil {
+		return err
+	}
+
 	return c.retryOnConnError(ctx, func() error {
-		return c.amqp.sender.Send(ctx, amqp.NewMessage(b), nil)
+		return c.amqp.sender.Send(ctx, msg, nil)
 	})
 }
 
@@ -176,6 +191,11 @@ func (c *Client) ReceiveTaskRequest(ctx context.Context) (orbital.TaskRequest, e
 
 	err := c.retryOnConnError(ctx, func() error {
 		msg, err := c.amqp.receiver.Receive(ctx, nil)
+		if err != nil {
+			return err
+		}
+
+		err = c.verifySignature(msg)
 		if err != nil {
 			return err
 		}
@@ -209,8 +229,14 @@ func (c *Client) SendTaskResponse(ctx context.Context, resp orbital.TaskResponse
 		return err
 	}
 
+	msg := amqp.NewMessage(b)
+	err = c.signSignature(b, msg)
+	if err != nil {
+		return err
+	}
+
 	return c.retryOnConnError(ctx, func() error {
-		return c.amqp.sender.Send(ctx, amqp.NewMessage(b), nil)
+		return c.amqp.sender.Send(ctx, msg, nil)
 	})
 }
 
@@ -221,6 +247,11 @@ func (c *Client) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse,
 
 	err := c.retryOnConnError(ctx, func() error {
 		msg, err := c.amqp.receiver.Receive(ctx, nil)
+		if err != nil {
+			return err
+		}
+
+		err = c.verifySignature(msg)
 		if err != nil {
 			return err
 		}
@@ -266,6 +297,42 @@ func (c *Client) Close(ctx context.Context) error {
 		if err := c.amqp.conn.Close(); err != nil {
 			return fmt.Errorf("failed to close connection: %w", err)
 		}
+	}
+	return nil
+}
+
+// signSignature generates a signature for the given byte using the configured crypto provider.
+// It adds the signature to the message's ApplicationProperties.
+// Returns an error if signature generation fails, otherwise returns nil.
+func (c *Client) signSignature(b []byte, msg *amqp.Message) error {
+	if c.crypto != nil {
+		signature, err := c.crypto.Signature(b)
+		if err != nil {
+			return err
+		}
+		if msg.ApplicationProperties == nil {
+			msg.ApplicationProperties = make(map[string]any)
+		}
+		msg.ApplicationProperties[orbital.HeaderMessageSignature] = signature
+	}
+	return nil
+}
+
+// verifySignature verifies the signature of message from the header using the configured crypto provider.
+// Returns an error if the signature type is unknown or if signature verification fails.
+// If no signature is present or crypto is not configured, it returns nil.
+func (c *Client) verifySignature(msg *amqp.Message) error {
+	if c.crypto != nil &&
+		msg.ApplicationProperties != nil {
+		signature, ok := msg.ApplicationProperties[orbital.HeaderMessageSignature]
+		if !ok {
+			return nil
+		}
+		signStr, ok := signature.(string)
+		if !ok {
+			return ErrUnknownSignatureType
+		}
+		return c.crypto.VerifySignature(signStr, msg.GetData())
 	}
 	return nil
 }
