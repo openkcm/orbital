@@ -525,12 +525,12 @@ func TestCreateTasks(t *testing.T) {
 					}, nil
 				}
 				initiatorMap := map[string]orbital.Initiator{
-					"target-1": nil,
+					"target-1": {Client: nil},
 				}
 				subj, _ := orbital.NewManager(
 					repo,
 					resolverFunc,
-					orbital.WithTargetClients(initiatorMap),
+					orbital.WithTargetInitiators(initiatorMap),
 				)
 
 				_, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
@@ -589,12 +589,12 @@ func TestCreateTasks(t *testing.T) {
 				}
 
 				initiatorMap := map[string]orbital.Initiator{
-					"target": nil,
+					"target": {Client: nil},
 				}
 				subj, _ := orbital.NewManager(
 					repo,
 					resolverFunc,
-					orbital.WithTargetClients(initiatorMap),
+					orbital.WithTargetInitiators(initiatorMap),
 				)
 
 				job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
@@ -657,12 +657,12 @@ func TestCreateTasks(t *testing.T) {
 			}, nil
 		}
 		initiatorMap := map[string]orbital.Initiator{
-			"target-1": nil,
+			"target-1": {Client: nil},
 		}
 		subj, _ := orbital.NewManager(
 			repo,
 			resolverFunc,
-			orbital.WithTargetClients(initiatorMap),
+			orbital.WithTargetInitiators(initiatorMap),
 		)
 
 		assert.NoError(t, err)
@@ -748,12 +748,12 @@ func TestCreateTasks(t *testing.T) {
 			}
 
 			initiatorMap := map[string]orbital.Initiator{
-				"target-1": nil,
+				"target-1": {Client: nil},
 			}
 			subj, _ := orbital.NewManager(
 				repo,
 				resolverFunc,
-				orbital.WithTargetClients(initiatorMap),
+				orbital.WithTargetInitiators(initiatorMap),
 			)
 
 			// when
@@ -912,12 +912,12 @@ func TestCreateTasks(t *testing.T) {
 		}
 
 		initiatorMap := map[string]orbital.Initiator{
-			"target": nil,
+			"target": {Client: nil},
 		}
 		subj, _ := orbital.NewManager(
 			repo,
 			resolverFunc,
-			orbital.WithTargetClients(initiatorMap),
+			orbital.WithTargetInitiators(initiatorMap),
 		)
 
 		for createTaskCalledTimes := range 2 {
@@ -972,13 +972,13 @@ func TestCreateTasks(t *testing.T) {
 		}
 
 		initiatorMap := map[string]orbital.Initiator{
-			"target-1": nil,
-			"target-2": nil,
+			"target-1": {Client: nil},
+			"target-2": {Client: nil},
 		}
 		subj, _ := orbital.NewManager(
 			repo,
 			resolverFunc,
-			orbital.WithTargetClients(initiatorMap),
+			orbital.WithTargetInitiators(initiatorMap),
 		)
 
 		for createTaskCalledTimes := range 2 {

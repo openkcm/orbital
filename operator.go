@@ -145,7 +145,7 @@ func (o *Operator) startListening(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			req, err := o.responder.ReceiveTaskRequest(ctx)
+			req, err := o.responder.Client.ReceiveTaskRequest(ctx)
 			if err != nil {
 				log.Printf("ERROR: receiving task request, %v", err)
 				continue
@@ -165,6 +165,12 @@ func (o *Operator) startResponding(ctx context.Context) {
 				case req := <-o.requests:
 					logCtx := slogctx.With(ctx, "externalID", req.ExternalID, "taskID", req.TaskID, "etag", req.ETag)
 					slogctx.Debug(logCtx, "received task request")
+
+					err := o.verifySignature(logCtx, req)
+					if err != nil {
+						continue
+					}
+
 					resp := TaskResponse{
 						TaskID:     req.TaskID,
 						Type:       req.Type,
@@ -192,7 +198,12 @@ func (o *Operator) startResponding(ctx context.Context) {
 					resp.WorkingState = hResp.WorkingState
 					resp.Status = string(hResp.Result)
 					resp.ReconcileAfterSec = hResp.ReconcileAfterSec
-					err = o.responder.SendTaskResponse(logCtx, resp)
+
+					resp.MetaData.Signature, err = o.createSignature(logCtx, resp)
+					if err != nil {
+						continue
+					}
+					err = o.responder.Client.SendTaskResponse(logCtx, resp)
 					handleError(logCtx, "sending task response", err)
 				}
 			}
@@ -200,10 +211,34 @@ func (o *Operator) startResponding(ctx context.Context) {
 	}
 }
 
+func (o *Operator) verifySignature(ctx context.Context, req TaskRequest) error {
+	crypto := o.responder.Crypto
+	if crypto != nil {
+		err := crypto.VerifyTaskRequest(ctx, req)
+		if err != nil {
+			slogctx.Error(ctx, "error while verifying task request signature", "error", err)
+		}
+		return err
+	}
+	return nil
+}
+
+func (o *Operator) createSignature(ctx context.Context, resp TaskResponse) (Signature, error) {
+	crypto := o.responder.Crypto
+	if crypto != nil {
+		signature, err := crypto.SignTaskResponse(ctx, resp)
+		if err != nil {
+			slogctx.Error(ctx, "ERROR: signing task response, %v", err)
+		}
+		return signature, err
+	}
+	return Signature{}, nil
+}
+
 func (o *Operator) sendErrorResponse(ctx context.Context, resp TaskResponse, errMsg string) {
 	resp.Status = string(ResultFailed)
 	resp.ErrorMessage = errMsg
-	err := o.responder.SendTaskResponse(ctx, resp)
+	err := o.responder.Client.SendTaskResponse(ctx, resp)
 	handleError(ctx, "sending task response", err)
 }
 

@@ -3,6 +3,8 @@ package orbital_test
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -181,8 +183,8 @@ func TestReconcile(t *testing.T) {
 
 		subj, err := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
-			orbital.WithTargetClients(map[string]orbital.Initiator{
-				expTarget: client,
+			orbital.WithTargetInitiators(map[string]orbital.Initiator{
+				expTarget: {Client: client},
 			}),
 		)
 		assert.NoError(t, err)
@@ -207,7 +209,7 @@ func TestReconcile(t *testing.T) {
 	t.Run("reconcile_after_sec", func(t *testing.T) {
 		tts := []struct {
 			name   string
-			client orbital.Initiator
+			client orbital.InitiatorClient
 		}{
 			{
 				name:   "should be incremented exponentially for each successful sent",
@@ -250,9 +252,9 @@ func TestReconcile(t *testing.T) {
 
 				subj, err := orbital.NewManager(repo,
 					mockTaskResolveFunc(),
-					orbital.WithTargetClients(
+					orbital.WithTargetInitiators(
 						map[string]orbital.Initiator{
-							expTarget: tc.client,
+							expTarget: {Client: tc.client},
 						},
 					),
 				)
@@ -315,8 +317,8 @@ func TestReconcile(t *testing.T) {
 
 		subj, err := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
-			orbital.WithTargetClients(map[string]orbital.Initiator{
-				expTarget: client,
+			orbital.WithTargetInitiators(map[string]orbital.Initiator{
+				expTarget: {Client: client},
 			}),
 		)
 		assert.NoError(t, err)
@@ -379,8 +381,8 @@ func TestReconcile(t *testing.T) {
 
 		subj, err := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
-			orbital.WithTargetClients(map[string]orbital.Initiator{
-				expTarget: initiator,
+			orbital.WithTargetInitiators(map[string]orbital.Initiator{
+				expTarget: {Client: initiator},
 			}),
 		)
 		assert.NoError(t, err)
@@ -441,8 +443,8 @@ func TestReconcile(t *testing.T) {
 
 		subj, err := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
-			orbital.WithTargetClients(map[string]orbital.Initiator{
-				target: failedClient(),
+			orbital.WithTargetInitiators(map[string]orbital.Initiator{
+				target: {Client: failedClient()},
 			}),
 		)
 		assert.NoError(t, err)
@@ -515,7 +517,7 @@ func TestReconcile(t *testing.T) {
 
 		tcs := []struct {
 			name                   string
-			client                 orbital.Initiator
+			client                 orbital.InitiatorClient
 			isSentCountIncremented bool
 		}{
 			{
@@ -554,8 +556,8 @@ func TestReconcile(t *testing.T) {
 
 				subj, err := orbital.NewManager(repo,
 					mockTaskResolveFunc(),
-					orbital.WithTargetClients(map[string]orbital.Initiator{
-						target: tc.client,
+					orbital.WithTargetInitiators(map[string]orbital.Initiator{
+						target: {Client: tc.client},
 					}),
 				)
 				assert.NoError(t, err)
@@ -607,7 +609,7 @@ func TestReconcile(t *testing.T) {
 
 		subj, err := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
-			orbital.WithTargetClients(map[string]orbital.Initiator{}),
+			orbital.WithTargetInitiators(map[string]orbital.Initiator{}),
 		)
 		assert.NoError(t, err)
 
@@ -1043,14 +1045,16 @@ func TestReconciliationRaceCondition(t *testing.T) {
 		responseStartChan := make(chan string)
 
 		mgr, err := orbital.NewManager(repo, mockTaskResolveFunc(),
-			orbital.WithTargetClients(map[string]orbital.Initiator{
-				target: &mockInitiatorClient{
-					FnSendTaskRequest: func(_ context.Context, _ orbital.TaskRequest) error {
-						// start the response processing
-						responseStartChan <- "start response processing"
-						// giving some time to ensure that the response processing waits for this send to finish
-						time.Sleep(1 * time.Second)
-						return nil
+			orbital.WithTargetInitiators(map[string]orbital.Initiator{
+				target: {
+					Client: &mockInitiatorClient{
+						FnSendTaskRequest: func(_ context.Context, _ orbital.TaskRequest) error {
+							// start the response processing
+							responseStartChan <- "start response processing"
+							// giving some time to ensure that the response processing waits for this send to finish
+							time.Sleep(1 * time.Second)
+							return nil
+						},
 					},
 				},
 			}),
@@ -1084,11 +1088,13 @@ func TestReconciliationRaceCondition(t *testing.T) {
 		jobID, taskID := createInitJobAndTask(ctx)
 
 		mgr, err := orbital.NewManager(repo, mockTaskResolveFunc(),
-			orbital.WithTargetClients(map[string]orbital.Initiator{
-				target: &mockInitiatorClient{
-					FnSendTaskRequest: func(_ context.Context, _ orbital.TaskRequest) error {
-						assert.Fail(t, "should not send task request while the task is locked for update")
-						return nil
+			orbital.WithTargetInitiators(map[string]orbital.Initiator{
+				target: {
+					Client: &mockInitiatorClient{
+						FnSendTaskRequest: func(_ context.Context, _ orbital.TaskRequest) error {
+							assert.Fail(t, "should not send task request while the task is locked for update")
+							return nil
+						},
 					},
 				},
 			}),
@@ -1113,6 +1119,240 @@ func TestReconciliationRaceCondition(t *testing.T) {
 	})
 }
 
+func TestManagerCrypto(t *testing.T) {
+	t.Run("SignTaskRequest", func(t *testing.T) {
+		// given
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		mockCrypto := &mockInitiatorCrypto{}
+		expSignature := orbital.Signature{Value: "signature", Type: "jwt"}
+		tts := []struct {
+			name              string
+			crypto            *mockInitiatorCrypto
+			fnSignTaskRequest func(ctx context.Context, request orbital.TaskRequest) (orbital.Signature, error)
+			expSignature      orbital.Signature
+			expClientCall     int
+		}{
+			{
+				name:   "should have signature if crypto is defined",
+				crypto: mockCrypto,
+				fnSignTaskRequest: func(_ context.Context, _ orbital.TaskRequest) (orbital.Signature, error) {
+					return expSignature, nil
+				},
+				expSignature:  expSignature,
+				expClientCall: 1,
+			},
+			{
+				name:              "should have no signature if crypto is not defined",
+				crypto:            nil,
+				fnSignTaskRequest: nil,
+				expSignature:      orbital.Signature{},
+				expClientCall:     1,
+			},
+			{
+				name:   "should not sent task request if signing fails",
+				crypto: mockCrypto,
+				fnSignTaskRequest: func(_ context.Context, _ orbital.TaskRequest) (orbital.Signature, error) {
+					return orbital.Signature{}, assert.AnError
+				},
+				expSignature:  orbital.Signature{},
+				expClientCall: 0,
+			},
+		}
+
+		for _, tt := range tts {
+			t.Run(tt.name, func(t *testing.T) {
+				expTarget := "target-1"
+				job := orbital.Job{
+					ID:         uuid.New(),
+					ExternalID: uuid.NewString(),
+				}
+
+				task := orbital.Task{
+					JobID:            job.ID,
+					Type:             "type",
+					Data:             []byte("data"),
+					WorkingState:     []byte("working state"),
+					ETag:             "etag",
+					Status:           orbital.TaskStatusCreated,
+					Target:           expTarget,
+					LastReconciledAt: 0,
+				}
+
+				ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
+					task,
+				})
+
+				assert.NoError(t, err)
+				assert.Len(t, ids, 1)
+				task.ID = ids[0]
+
+				mockClient := &mockInitiatorClient{}
+				actClientCall := 0
+				mockClient.FnSendTaskRequest = func(_ context.Context, req orbital.TaskRequest) error {
+					// when
+					assert.Equal(t, ids[0], req.TaskID)
+					assert.Equal(t, job.ExternalID, req.ExternalID)
+					assert.Equal(t, tt.expSignature, req.MetaData.Signature)
+					actClientCall++
+					return nil
+				}
+
+				var initiatorCrypto orbital.InitiatorCrypto
+				initiatorCrypto = nil
+				if tt.crypto != nil {
+					tt.crypto.FnSignTaskRequest = tt.fnSignTaskRequest
+					initiatorCrypto = tt.crypto
+				}
+
+				subj, err := orbital.NewManager(repo,
+					mockTaskResolveFunc(),
+					orbital.WithTargetInitiators(map[string]orbital.Initiator{
+						expTarget: {Client: mockClient, Crypto: initiatorCrypto},
+					}),
+				)
+				assert.NoError(t, err)
+
+				wg := &sync.WaitGroup{}
+				wg.Add(1)
+
+				// when
+				orbital.HandleTask(subj)(ctx, wg, *repo, job, task)
+
+				// then
+				assert.Equal(t, tt.expClientCall, actClientCall)
+			})
+		}
+	})
+	t.Run("VerifyTaskResponse", func(t *testing.T) {
+		// given
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		mockCrypto := &mockInitiatorCrypto{}
+		tts := []struct {
+			name                       string
+			crypto                     *mockInitiatorCrypto
+			fnVerifyTaskResponse       func(request orbital.TaskResponse) error
+			expVerifyTaskResponseCalls int32
+			expTaskStatus              orbital.TaskStatus
+		}{
+			{
+				name:   "should verify signature if crypto is defined",
+				crypto: mockCrypto,
+				fnVerifyTaskResponse: func(_ orbital.TaskResponse) error {
+					return nil
+				},
+				expVerifyTaskResponseCalls: 1,
+				expTaskStatus:              orbital.TaskStatusDone,
+			},
+			{
+				name:                       "should not verify the signature if the crypto is not defined",
+				crypto:                     nil,
+				fnVerifyTaskResponse:       nil,
+				expVerifyTaskResponseCalls: 0,
+				expTaskStatus:              orbital.TaskStatusDone,
+			},
+			{
+				name:   "should not update task if verify signature return an error",
+				crypto: mockCrypto,
+				fnVerifyTaskResponse: func(_ orbital.TaskResponse) error {
+					return assert.AnError
+				},
+				expVerifyTaskResponseCalls: 1,
+				expTaskStatus:              orbital.TaskStatusProcessing,
+			},
+		}
+
+		for _, tt := range tts {
+			t.Run(tt.name, func(t *testing.T) {
+				expTarget := "target-1"
+				task := orbital.Task{
+					JobID:            uuid.New(),
+					Type:             "type",
+					Data:             []byte("data"),
+					WorkingState:     []byte("working state"),
+					ETag:             "etag",
+					Status:           orbital.TaskStatusProcessing,
+					Target:           expTarget,
+					LastReconciledAt: 0,
+				}
+
+				ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
+					task,
+				})
+
+				assert.NoError(t, err)
+				assert.Len(t, ids, 1)
+				task.ID = ids[0]
+
+				mockClient := &mockInitiatorClient{}
+
+				taskResponseChan := make(chan orbital.TaskResponse, 1)
+				expTaskResponse := orbital.TaskResponse{
+					TaskID:     task.ID,
+					ExternalID: uuid.NewString(),
+					ETag:       task.ETag,
+					Status:     string(orbital.TaskStatusDone),
+					MetaData: orbital.MetaData{
+						Signature: orbital.Signature{Value: "signature", Type: "jwt"},
+					},
+				}
+				taskResponseChan <- expTaskResponse
+
+				taskResponseReceiveChan := make(chan bool)
+				mockClient.FnReceiveTaskResponse = func(_ context.Context) (orbital.TaskResponse, error) {
+					taskResponseReceiveChan <- true
+					return <-taskResponseChan, nil
+				}
+
+				var actVerifyTaskResponseCalls atomic.Int32
+				var actTaskResponse orbital.TaskResponse
+				var initiatorCrypto orbital.InitiatorCrypto
+				initiatorCrypto = nil
+				if tt.crypto != nil {
+					tt.crypto.FnVerifyTaskResponse = func(_ context.Context, response orbital.TaskResponse) error {
+						actVerifyTaskResponseCalls.Add(1)
+						actTaskResponse = response
+						return tt.fnVerifyTaskResponse(response)
+					}
+					initiatorCrypto = tt.crypto
+				}
+
+				initiator := orbital.Initiator{Client: mockClient, Crypto: initiatorCrypto}
+
+				subj, err := orbital.NewManager(repo,
+					mockTaskResolveFunc(),
+				)
+				assert.NoError(t, err)
+
+				// when
+				go orbital.HandleResponses(subj)(ctx, initiator, expTarget)
+
+				// making sure there we wait for 2 calls
+				<-taskResponseReceiveChan
+				<-taskResponseReceiveChan
+
+				// then
+				assert.Equal(t, tt.expVerifyTaskResponseCalls, actVerifyTaskResponseCalls.Load())
+				if actVerifyTaskResponseCalls.Load() > 1 {
+					assert.Equal(t, expTaskResponse, actTaskResponse)
+				}
+
+				actTask, ok, err := orbital.GetRepoTask(repo)(ctx, task.ID)
+				assert.NoError(t, err)
+				assert.True(t, ok)
+				assert.Equal(t, tt.expTaskStatus, actTask.Status)
+			})
+		}
+	})
+}
+
 var errSendFailed = errors.New("send failed")
 
 type mockInitiatorClient struct {
@@ -1130,9 +1370,9 @@ func (m *mockInitiatorClient) SendTaskRequest(ctx context.Context, request orbit
 	return m.FnSendTaskRequest(ctx, request)
 }
 
-var _ orbital.Initiator = &mockInitiatorClient{}
+var _ orbital.InitiatorClient = &mockInitiatorClient{}
 
-func failedClient() orbital.Initiator {
+func failedClient() orbital.InitiatorClient {
 	return &mockInitiatorClient{
 		FnSendTaskRequest: func(_ context.Context, _ orbital.TaskRequest) error {
 			return errSendFailed
@@ -1143,7 +1383,7 @@ func failedClient() orbital.Initiator {
 	}
 }
 
-func successfulClient() orbital.Initiator {
+func successfulClient() orbital.InitiatorClient {
 	return &mockInitiatorClient{
 		FnSendTaskRequest: func(_ context.Context, _ orbital.TaskRequest) error {
 			return nil
@@ -1152,4 +1392,21 @@ func successfulClient() orbital.Initiator {
 			return orbital.TaskResponse{}, nil
 		},
 	}
+}
+
+type mockInitiatorCrypto struct {
+	FnSignTaskRequest    func(ctx context.Context, request orbital.TaskRequest) (orbital.Signature, error)
+	FnVerifyTaskResponse func(ctx context.Context, response orbital.TaskResponse) error
+}
+
+var _ orbital.InitiatorCrypto = &mockInitiatorCrypto{}
+
+// SignTaskRequest implements orbital.InitiatorCrypto.
+func (m *mockInitiatorCrypto) SignTaskRequest(ctx context.Context, request orbital.TaskRequest) (orbital.Signature, error) {
+	return m.FnSignTaskRequest(ctx, request)
+}
+
+// VerifyTaskResponse implements orbital.InitiatorCrypto.
+func (m *mockInitiatorCrypto) VerifyTaskResponse(ctx context.Context, response orbital.TaskResponse) error {
+	return m.FnVerifyTaskResponse(ctx, response)
 }

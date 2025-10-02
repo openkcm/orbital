@@ -67,6 +67,35 @@ func (m *TaskRequest) validate(all bool) error {
 
 	// no validation rules for Etag
 
+	if all {
+		switch v := interface{}(m.GetMetaData()).(type) {
+		case interface{ ValidateAll() error }:
+			if err := v.ValidateAll(); err != nil {
+				errors = append(errors, TaskRequestValidationError{
+					field:  "MetaData",
+					reason: "embedded message failed validation",
+					cause:  err,
+				})
+			}
+		case interface{ Validate() error }:
+			if err := v.Validate(); err != nil {
+				errors = append(errors, TaskRequestValidationError{
+					field:  "MetaData",
+					reason: "embedded message failed validation",
+					cause:  err,
+				})
+			}
+		}
+	} else if v, ok := interface{}(m.GetMetaData()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return TaskRequestValidationError{
+				field:  "MetaData",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
 	if m.Data != nil {
 		// no validation rules for Data
 	}

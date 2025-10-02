@@ -178,8 +178,8 @@ func WithJobConfirmFunc(f JobConfirmFunc) ManagerOptsFunc {
 	}
 }
 
-// WithTargetClients set the map that maps the target string to its Initiator.
-func WithTargetClients(targetToInitiators map[string]Initiator) ManagerOptsFunc {
+// WithTargetInitiators set the map that maps the target string to its Initiator.
+func WithTargetInitiators(targetToInitiators map[string]Initiator) ManagerOptsFunc {
 	return func(m *Manager) {
 		m.targetToInitiator = targetToInitiators
 	}
@@ -618,10 +618,14 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 		return
 	}
 
-	client, ok := m.targetToInitiator[task.Target]
+	initiator, ok := m.targetToInitiator[task.Target]
 	// this is an additional safeguard, this should never happen as we check for the existence of targets while creating tasks.
-	if !ok {
-		slogctx.Warn(ctx, "no client found for task target, marking task as failed")
+	if !ok || initiator.Client == nil {
+		errLog := "no initiator found for task target, marking task as failed"
+		if initiator.Client == nil {
+			errLog = "no client found for task target, marking task as failed"
+		}
+		slogctx.Warn(ctx, errLog)
 		task.Status = TaskStatusFailed
 		repo.updateTask(ctx, task) //nolint:errcheck
 		return
@@ -645,9 +649,20 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 		ETag:         task.ETag,
 	}
 
+	if initiator.Crypto != nil {
+		signature, err := initiator.Crypto.SignTaskRequest(ctx, req)
+		if err != nil {
+			slogctx.Warn(ctx, "task request signing failed , marking task as failed")
+			task.Status = TaskStatusFailed
+			repo.updateTask(ctx, task) //nolint:errcheck
+			return
+		}
+		req.MetaData.Signature = signature
+	}
+
 	slogctx.Debug(ctx, "sending task request", slog.Any("request", req))
 
-	if err := client.SendTaskRequest(ctx, req); err != nil {
+	if err := initiator.Client.SendTaskRequest(ctx, req); err != nil {
 		slogctx.Error(ctx, "failed to send task request", "error", err)
 		repo.updateTask(ctx, task) //nolint:errcheck
 		return
@@ -677,13 +692,13 @@ func (m *Manager) startResponseReaders(ctx context.Context) {
 }
 
 // handleResponses continuously reads TaskResponse messages from a client.
-func (m *Manager) handleResponses(ctx context.Context, client Initiator, target string) {
+func (m *Manager) handleResponses(ctx context.Context, initiator Initiator, target string) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
-			resp, err := client.ReceiveTaskResponse(ctx)
+			resp, err := initiator.Client.ReceiveTaskResponse(ctx)
 			if err != nil {
 				slogctx.Error(ctx, "error receiving task response from target", "error", err, "target", target)
 				continue
@@ -691,6 +706,15 @@ func (m *Manager) handleResponses(ctx context.Context, client Initiator, target 
 
 			slogctx.Debug(ctx, "received task response", slog.String("target", target), slog.String("externalID", resp.ExternalID),
 				slog.String("taskID", resp.TaskID.String()), slog.String("etag", resp.ETag), slog.Any("response", resp))
+
+			if initiator.Crypto != nil {
+				err = initiator.Crypto.VerifyTaskResponse(ctx, resp)
+				if err != nil {
+					slogctx.Error(ctx, "error while verifying task response signature", slog.String("error", err.Error()),
+						slog.String("taskID", resp.TaskID.String()), slog.String("externalID", resp.ExternalID), slog.String("etag", resp.ETag))
+					continue
+				}
+			}
 
 			if err := m.processResponse(ctx, resp); err != nil {
 				slogctx.Error(ctx, "failed to process task response", "error", err, "taskID", resp.TaskID)
@@ -711,7 +735,7 @@ func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error 
 			return fmt.Errorf("%w, taskID: %s", ErrTaskNotFound, resp.TaskID)
 		}
 
-		if err != nil || !found {
+		if !found {
 			return err
 		}
 		txCtx = slogctx.With(txCtx, "externalID", resp.ExternalID, "taskID", task.ID, "etag", task.ETag)

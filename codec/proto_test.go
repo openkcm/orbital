@@ -9,44 +9,71 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/codec"
 	orbitalpb "github.com/openkcm/orbital/proto/orbital/v1"
 )
 
 func TestProto_TaskRequest(t *testing.T) {
+	tts := []struct {
+		name           string
+		expTaskRequest orbital.TaskRequest
+	}{
+		{name: "with full value", expTaskRequest: expTaskRequest},
+		{name: "without encrypt", expTaskRequest: expTaskRequestWithoutEncrypt},
+		{name: "without signature", expTaskRequest: expTaskRequestWithoutSig},
+		{name: "without signature type", expTaskRequest: expTaskRequestWithoutType},
+	}
 	// given
 	subj := codec.Proto{}
 
-	// when
-	b, err := subj.EncodeTaskRequest(expTaskRequest)
-	assert.NoError(t, err)
+	for _, tt := range tts {
+		t.Run(tt.name, func(t *testing.T) {
+			// when
+			b, err := subj.EncodeTaskRequest(tt.expTaskRequest)
+			assert.NoError(t, err)
 
-	_, err = subj.DecodeTaskRequest([]byte("not a taskrequest"))
-	assert.Error(t, err, "should return error for invalid data")
+			_, err = subj.DecodeTaskRequest([]byte("not a taskrequest"))
+			assert.Error(t, err, "should return error for invalid data")
 
-	decodedReq, err := subj.DecodeTaskRequest(b)
-	assert.NoError(t, err)
+			decodedReq, err := subj.DecodeTaskRequest(b)
+			assert.NoError(t, err)
 
-	// then
-	assertTaskRequest(t, decodedReq)
+			// then
+			assert.Equal(t, tt.expTaskRequest, decodedReq)
+		})
+	}
 }
 
 func TestProto_TaskResponse(t *testing.T) {
+	tts := []struct {
+		name            string
+		expTaskResponse orbital.TaskResponse
+	}{
+		{name: "with full value", expTaskResponse: expTaskResponse},
+		{name: "without encrypt", expTaskResponse: expTaskResponseWithoutEncrypt},
+		{name: "without signature", expTaskResponse: expTaskResponseWithoutSig},
+		{name: "without signature type", expTaskResponse: expTaskResponseWithoutType},
+	}
 	// given
 	subj := codec.Proto{}
 
-	// when
-	b, err := subj.EncodeTaskResponse(expTaskResponse)
-	assert.NoError(t, err)
+	for _, tt := range tts {
+		t.Run(tt.name, func(t *testing.T) {
+			// when
+			b, err := subj.EncodeTaskResponse(tt.expTaskResponse)
+			assert.NoError(t, err)
 
-	_, err = subj.DecodeTaskResponse([]byte("not a taskresponse"))
-	assert.Error(t, err, "should return error for invalid data")
+			_, err = subj.DecodeTaskResponse([]byte("not a taskresponse"))
+			assert.Error(t, err, "should return error for invalid data")
 
-	decodedResp, err := subj.DecodeTaskResponse(b)
-	assert.NoError(t, err)
+			decodedResp, err := subj.DecodeTaskResponse(b)
+			assert.NoError(t, err)
 
-	// then
-	assertTaskResponse(t, decodedResp)
+			// then
+			assert.Equal(t, tt.expTaskResponse, decodedResp)
+		})
+	}
 }
 
 func TestProto_Changes(t *testing.T) {
