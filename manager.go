@@ -711,9 +711,6 @@ func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error 
 			return fmt.Errorf("%w, taskID: %s", ErrTaskNotFound, resp.TaskID)
 		}
 
-		if err != nil || !found {
-			return err
-		}
 		txCtx = slogctx.With(txCtx, "externalID", resp.ExternalID, "taskID", task.ID, "etag", task.ETag)
 
 		if resp.ETag != task.ETag {
