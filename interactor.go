@@ -2,6 +2,7 @@ package orbital
 
 import (
 	"context"
+	"maps"
 
 	"github.com/google/uuid"
 )
@@ -30,6 +31,9 @@ type TaskResponse struct {
 	MetaData          MetaData  `json:"metaData"`
 }
 
+// MetaData represents a set of key-value pairs containing metadata
+// information. It is commonly used for storing additional attributes
+// related to requests, responses, or signatures.
 type MetaData map[string]string
 
 // ManagerTarget holds the client and cryptographic implementation for initiating
@@ -37,8 +41,8 @@ type MetaData map[string]string
 // Signer and Verifier for signing and verification operations.
 type ManagerTarget struct {
 	Client   Initiator
-	Signer   RequestSigner
-	Verifier ResponseVerifier
+	Signer   TaskRequestSigner
+	Verifier TaskResponseVerifier
 }
 
 // Initiator defines the methods for sending task requests and receiving task responses.
@@ -52,8 +56,8 @@ type Initiator interface {
 // Signer and Verifier for signing and verification operations.
 type OperatorTarget struct {
 	Client   Responder
-	Verifier RequestVerifier
-	Signer   ResponseSigner
+	Verifier TaskRequestVerifier
+	Signer   TaskResponseSigner
 }
 
 // Responder defines the methods for receiving task requests and sending task responses.
@@ -66,34 +70,34 @@ type Responder interface {
 // It typically contains cryptographic information such as signatures or tokens.
 type Signature MetaData
 
-// RequestSigner defines an interface for signing TaskRequest objects.
+// TaskRequestSigner defines an interface for signing TaskRequest objects.
 // Implementations of this interface are responsible for generating a Signature
 // for a given TaskRequest, typically for authentication or verification purposes.
-type RequestSigner interface {
+type TaskRequestSigner interface {
 	// Sign signs the given TaskRequest and returns a Signature.
 	Sign(ctx context.Context, response TaskRequest) (Signature, error)
 }
 
-// RequestVerifier defines an interface for verifying the authenticity of TaskRequest objects.
+// TaskRequestVerifier defines an interface for verifying the authenticity of TaskRequest objects.
 // Implementations of this interface are responsible for checking the validity and integrity
 // of a given TaskRequest, typically using cryptographic methods.
-type RequestVerifier interface {
+type TaskRequestVerifier interface {
 	// Verify verifies the authenticity of the given TaskRequest.
 	Verify(ctx context.Context, request TaskRequest) error
 }
 
-// ResponseSigner defines an interface for signing TaskResponse objects.
+// TaskResponseSigner defines an interface for signing TaskResponse objects.
 // Implementations of this interface are responsible for generating a Signature
 // for a given TaskResponse, typically for authentication or verification purposes.
-type ResponseSigner interface {
+type TaskResponseSigner interface {
 	// Sign signs the given TaskResponse and returns a Signature.
 	Sign(ctx context.Context, response TaskResponse) (Signature, error)
 }
 
-// ResponseVerifier defines an interface for verifying the authenticity of TaskResponse objects.
+// TaskResponseVerifier defines an interface for verifying the authenticity of TaskResponse objects.
 // Implementations of this interface are responsible for checking the validity and integrity
 // of a given TaskResponse, typically using cryptographic methods.
-type ResponseVerifier interface {
+type TaskResponseVerifier interface {
 	// Verify verifies the authenticity of the given TaskResponse.
 	Verify(ctx context.Context, request TaskResponse) error
 }
@@ -104,4 +108,18 @@ type Codec interface {
 	DecodeTaskRequest(bytes []byte) (TaskRequest, error)
 	EncodeTaskResponse(response TaskResponse) ([]byte, error)
 	DecodeTaskResponse(bytes []byte) (TaskResponse, error)
+}
+
+func (req *TaskRequest) addMeta(m map[string]string) {
+	if req.MetaData == nil {
+		req.MetaData = make(MetaData)
+	}
+	maps.Copy(req.MetaData, m)
+}
+
+func (res *TaskResponse) addMeta(m map[string]string) {
+	if res.MetaData == nil {
+		res.MetaData = make(MetaData)
+	}
+	maps.Copy(res.MetaData, m)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log"
-	"maps"
 	"sync"
 
 	"github.com/google/uuid"
@@ -204,10 +203,7 @@ func (o *Operator) startResponding(ctx context.Context) {
 					if err != nil {
 						continue
 					}
-					if resp.MetaData == nil {
-						resp.MetaData = make(MetaData)
-					}
-					maps.Copy(resp.MetaData, signature)
+					resp.addMeta(signature)
 					err = o.responder.Client.SendTaskResponse(logCtx, resp)
 					handleError(logCtx, "sending task response", err)
 				}

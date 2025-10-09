@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"sync"
 	"time"
 
@@ -658,10 +657,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 			repo.updateTask(ctx, task) //nolint:errcheck
 			return
 		}
-		if req.MetaData == nil {
-			req.MetaData = make(MetaData)
-		}
-		maps.Copy(req.MetaData, signature)
+		req.addMeta(signature)
 	}
 
 	slogctx.Debug(ctx, "sending task request", slog.Any("request", req))

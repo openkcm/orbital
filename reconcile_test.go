@@ -1130,7 +1130,7 @@ func TestManagerCrypto(t *testing.T) {
 		expSignature := map[string]string{"value": "signature", "type": "jwt"}
 		tts := []struct {
 			name          string
-			reqSigner     orbital.RequestSigner
+			reqSigner     orbital.TaskRequestSigner
 			expSignature  orbital.Signature
 			expClientCall int
 		}{
@@ -1229,7 +1229,7 @@ func TestManagerCrypto(t *testing.T) {
 		var actTaskResponse orbital.TaskResponse
 		tts := []struct {
 			name                       string
-			respVerifier               orbital.ResponseVerifier
+			respVerifier               orbital.TaskResponseVerifier
 			expVerifyTaskResponseCalls int32
 			expTaskStatus              orbital.TaskStatus
 		}{
@@ -1394,7 +1394,7 @@ type mockRequestSigner struct {
 	FnSign func(ctx context.Context, request orbital.TaskRequest) (orbital.Signature, error)
 }
 
-var _ orbital.RequestSigner = &mockRequestSigner{}
+var _ orbital.TaskRequestSigner = &mockRequestSigner{}
 
 func (m *mockRequestSigner) Sign(ctx context.Context, request orbital.TaskRequest) (orbital.Signature, error) {
 	return m.FnSign(ctx, request)
@@ -1404,7 +1404,7 @@ type mockResponseVerifier struct {
 	FnVerify func(ctx context.Context, response orbital.TaskResponse) error
 }
 
-var _ orbital.ResponseVerifier = &mockResponseVerifier{}
+var _ orbital.TaskResponseVerifier = &mockResponseVerifier{}
 
 func (m *mockResponseVerifier) Verify(ctx context.Context, response orbital.TaskResponse) error {
 	return m.FnVerify(ctx, response)

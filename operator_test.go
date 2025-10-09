@@ -220,7 +220,7 @@ func TestOperatorCrypto(t *testing.T) {
 
 		tts := []struct {
 			name                      string
-			reqVerifier               orbital.RequestVerifier
+			reqVerifier               orbital.TaskRequestVerifier
 			expVerifyTaskRequestCalls int32
 			expHandlerCalls           int32
 		}{
@@ -338,7 +338,7 @@ func TestOperatorCrypto(t *testing.T) {
 		var actSignTaskResponseCalls atomic.Int32
 		tts := []struct {
 			name                     string
-			respSigner               orbital.ResponseSigner
+			respSigner               orbital.TaskResponseSigner
 			expSendTaskResponseCalls int32
 			expSignCalls             int32
 			expSignature             orbital.Signature
@@ -436,7 +436,7 @@ type mockRequestVerifier struct {
 	FnVerify func(ctx context.Context, request orbital.TaskRequest) error
 }
 
-var _ orbital.RequestVerifier = &mockRequestVerifier{}
+var _ orbital.TaskRequestVerifier = &mockRequestVerifier{}
 
 func (m *mockRequestVerifier) Verify(ctx context.Context, request orbital.TaskRequest) error {
 	return m.FnVerify(ctx, request)
@@ -446,7 +446,7 @@ type mockResponseSigner struct {
 	FnSign func(ctx context.Context, response orbital.TaskResponse) (orbital.Signature, error)
 }
 
-var _ orbital.ResponseSigner = &mockResponseSigner{}
+var _ orbital.TaskResponseSigner = &mockResponseSigner{}
 
 func (m *mockResponseSigner) Sign(ctx context.Context, response orbital.TaskResponse) (orbital.Signature, error) {
 	return m.FnSign(ctx, response)
