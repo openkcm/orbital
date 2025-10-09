@@ -1132,6 +1132,7 @@ func TestManagerCrypto(t *testing.T) {
 			name          string
 			reqSigner     orbital.TaskRequestSigner
 			expSignature  orbital.Signature
+			expTaskStatus orbital.TaskStatus
 			expClientCall int
 		}{
 			{
@@ -1142,12 +1143,14 @@ func TestManagerCrypto(t *testing.T) {
 					},
 				},
 				expSignature:  expSignature,
+				expTaskStatus: orbital.TaskStatusProcessing,
 				expClientCall: 1,
 			},
 			{
 				name:          "should have no signature if crypto is not defined",
 				reqSigner:     nil,
 				expClientCall: 1,
+				expTaskStatus: orbital.TaskStatusProcessing,
 			},
 			{
 				name: "should not sent task request if signing fails",
@@ -1157,6 +1160,7 @@ func TestManagerCrypto(t *testing.T) {
 					},
 				},
 				expSignature:  orbital.Signature{},
+				expTaskStatus: orbital.TaskStatusFailed,
 				expClientCall: 0,
 			},
 		}
@@ -1175,7 +1179,7 @@ func TestManagerCrypto(t *testing.T) {
 					Data:             []byte("data"),
 					WorkingState:     []byte("working state"),
 					ETag:             "etag",
-					Status:           orbital.TaskStatusCreated,
+					Status:           orbital.TaskStatusProcessing,
 					Target:           expTarget,
 					LastReconciledAt: 0,
 				}
@@ -1215,6 +1219,10 @@ func TestManagerCrypto(t *testing.T) {
 
 				// then
 				assert.Equal(t, tt.expClientCall, actClientCall)
+				actTask, ok, err := orbital.GetRepoTask(repo)(ctx, task.ID)
+				assert.NoError(t, err)
+				assert.True(t, ok)
+				assert.Equal(t, tt.expTaskStatus, actTask.Status)
 			})
 		}
 	})
