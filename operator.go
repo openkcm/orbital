@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"maps"
 	"sync"
 
 	"github.com/google/uuid"
@@ -20,7 +21,7 @@ const (
 type (
 	// Operator handles task requests and responses.
 	Operator struct {
-		responder       Responder
+		responder       OperatorTarget
 		handlerRegistry handlerRegistry
 		requests        chan TaskRequest
 		numberOfWorkers int
@@ -74,7 +75,7 @@ var (
 var ErrMsgUnknownTaskType = "unknown task type"
 
 // NewOperator creates a new Operator instance with the given Responder and options.
-func NewOperator(r Responder, opts ...Option) (*Operator, error) {
+func NewOperator(r OperatorTarget, opts ...Option) (*Operator, error) {
 	c := config{
 		bufferSize:      100,
 		numberOfWorkers: 10,
@@ -199,10 +200,14 @@ func (o *Operator) startResponding(ctx context.Context) {
 					resp.Status = string(hResp.Result)
 					resp.ReconcileAfterSec = hResp.ReconcileAfterSec
 
-					resp.MetaData.Signature, err = o.createSignature(logCtx, resp)
+					signature, err := o.createSignature(logCtx, resp)
 					if err != nil {
 						continue
 					}
+					if resp.MetaData == nil {
+						resp.MetaData = make(MetaData)
+					}
+					maps.Copy(resp.MetaData, signature)
 					err = o.responder.Client.SendTaskResponse(logCtx, resp)
 					handleError(logCtx, "sending task response", err)
 				}
@@ -212,9 +217,9 @@ func (o *Operator) startResponding(ctx context.Context) {
 }
 
 func (o *Operator) verifySignature(ctx context.Context, req TaskRequest) error {
-	crypto := o.responder.Crypto
-	if crypto != nil {
-		err := crypto.VerifyTaskRequest(ctx, req)
+	verifier := o.responder.Verifier
+	if verifier != nil {
+		err := verifier.Verify(ctx, req)
 		if err != nil {
 			slogctx.Error(ctx, "error while verifying task request signature", "error", err)
 		}
@@ -224,9 +229,9 @@ func (o *Operator) verifySignature(ctx context.Context, req TaskRequest) error {
 }
 
 func (o *Operator) createSignature(ctx context.Context, resp TaskResponse) (Signature, error) {
-	crypto := o.responder.Crypto
-	if crypto != nil {
-		signature, err := crypto.SignTaskResponse(ctx, resp)
+	signer := o.responder.Signer
+	if signer != nil {
+		signature, err := signer.Sign(ctx, resp)
 		if err != nil {
 			slogctx.Error(ctx, "ERROR: signing task response, %v", err)
 		}

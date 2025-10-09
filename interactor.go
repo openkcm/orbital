@@ -30,60 +30,72 @@ type TaskResponse struct {
 	MetaData          MetaData  `json:"metaData"`
 }
 
-type MetaData struct {
-	Signature   Signature `json:"signature"`
-	IsEncrypted bool      `json:"isEncrypted,omitempty"`
+type MetaData map[string]string
+
+// ManagerTarget holds the client and cryptographic implementation for initiating
+// tasks. It provides access to the Initiator for communication,
+// Signer and Verifier for signing and verification operations.
+type ManagerTarget struct {
+	Client   Initiator
+	Signer   RequestSigner
+	Verifier ResponseVerifier
 }
 
-// Signature represents a cryptographic signature with its value and type.
-// Value contains the signature string, and Type specifies the signature type.
-type Signature struct {
-	Value string `json:"value"`
-	Type  string `json:"type"`
-}
-
-// Initiator holds the client and cryptographic implementation for initiating
-// tasks. It provides access to the InitiatorClient for communication and
-// InitiatorCrypto for cryptographic operations.
-type Initiator struct {
-	Client InitiatorClient
-	Crypto InitiatorCrypto
-}
-
-// InitiatorClient defines the methods for sending task requests and receiving task responses.
-type InitiatorClient interface {
+// Initiator defines the methods for sending task requests and receiving task responses.
+type Initiator interface {
 	SendTaskRequest(ctx context.Context, request TaskRequest) error
 	ReceiveTaskResponse(ctx context.Context) (TaskResponse, error)
 }
 
-// InitiatorCrypto defines cryptographic operations for initiators.
-type InitiatorCrypto interface {
-	// SignTaskRequest signs the given TaskRequest and returns a Signature.
-	SignTaskRequest(ctx context.Context, request TaskRequest) (Signature, error)
-	// VerifyTaskResponse verifies the authenticity of the given TaskResponse.
-	VerifyTaskResponse(ctx context.Context, response TaskResponse) error
+// OperatorTarget holds the client and cryptographic implementation for responding
+// to tasks. It provides access to the Responder for communication,
+// Signer and Verifier for signing and verification operations.
+type OperatorTarget struct {
+	Client   Responder
+	Verifier RequestVerifier
+	Signer   ResponseSigner
 }
 
-// Responder holds the client and cryptographic implementation for responding
-// to tasks. It provides access to the ResponderClient for communication and
-// ResponderCrypto for cryptographic operations.
-type Responder struct {
-	Client ResponderClient
-	Crypto ResponderCrypto
-}
-
-// ResponderClient defines the methods for receiving task requests and sending task responses.
-type ResponderClient interface {
+// Responder defines the methods for receiving task requests and sending task responses.
+type Responder interface {
 	ReceiveTaskRequest(ctx context.Context) (TaskRequest, error)
 	SendTaskResponse(ctx context.Context, response TaskResponse) error
 }
 
-// ResponderCrypto defines cryptographic operations for responders.
-type ResponderCrypto interface {
-	// SignTaskResponse signs the given TaskResponse and returns a Signature.
-	SignTaskResponse(ctx context.Context, response TaskResponse) (Signature, error)
-	// VerifyTaskRequest verifies the authenticity of the given TaskRequest.
-	VerifyTaskRequest(ctx context.Context, request TaskRequest) error
+// Signature represents the metadata used for signing and verifying requests.
+// It typically contains cryptographic information such as signatures or tokens.
+type Signature MetaData
+
+// RequestSigner defines an interface for signing TaskRequest objects.
+// Implementations of this interface are responsible for generating a Signature
+// for a given TaskRequest, typically for authentication or verification purposes.
+type RequestSigner interface {
+	// Sign signs the given TaskRequest and returns a Signature.
+	Sign(ctx context.Context, response TaskRequest) (Signature, error)
+}
+
+// RequestVerifier defines an interface for verifying the authenticity of TaskRequest objects.
+// Implementations of this interface are responsible for checking the validity and integrity
+// of a given TaskRequest, typically using cryptographic methods.
+type RequestVerifier interface {
+	// Verify verifies the authenticity of the given TaskRequest.
+	Verify(ctx context.Context, request TaskRequest) error
+}
+
+// ResponseSigner defines an interface for signing TaskResponse objects.
+// Implementations of this interface are responsible for generating a Signature
+// for a given TaskResponse, typically for authentication or verification purposes.
+type ResponseSigner interface {
+	// Sign signs the given TaskResponse and returns a Signature.
+	Sign(ctx context.Context, response TaskResponse) (Signature, error)
+}
+
+// ResponseVerifier defines an interface for verifying the authenticity of TaskResponse objects.
+// Implementations of this interface are responsible for checking the validity and integrity
+// of a given TaskResponse, typically using cryptographic methods.
+type ResponseVerifier interface {
+	// Verify verifies the authenticity of the given TaskResponse.
+	Verify(ctx context.Context, request TaskResponse) error
 }
 
 // Codec defines the methods for encoding and decoding task requests and responses.

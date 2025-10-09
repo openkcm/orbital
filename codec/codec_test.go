@@ -13,55 +13,17 @@ var expTaskRequest = orbital.TaskRequest{
 	Data:         []byte("test data"),
 	WorkingState: []byte("prev state"),
 	ETag:         "etag",
-	MetaData: orbital.MetaData{
-		Signature: orbital.Signature{
-			Value: "value",
-			Type:  "type",
-		},
-		IsEncrypted: true,
-	},
+	MetaData:     orbital.MetaData{"key1": "value1", "key2": "value"},
 }
 
-var expTaskRequestWithoutSig = orbital.TaskRequest{
+var expTaskRequestWithoutMeta = orbital.TaskRequest{
 	TaskID:       uuid.New(),
 	Type:         "test",
 	ExternalID:   "external-id",
 	Data:         []byte("test data"),
 	WorkingState: []byte("prev state"),
 	ETag:         "etag",
-	MetaData: orbital.MetaData{
-		IsEncrypted: true,
-	},
-}
-
-var expTaskRequestWithoutType = orbital.TaskRequest{
-	TaskID:       uuid.New(),
-	Type:         "test",
-	ExternalID:   "external-id",
-	Data:         []byte("test data"),
-	WorkingState: []byte("prev state"),
-	ETag:         "etag",
-	MetaData: orbital.MetaData{
-		Signature: orbital.Signature{
-			Value: "value",
-		},
-		IsEncrypted: true,
-	},
-}
-
-var expTaskRequestWithoutEncrypt = orbital.TaskRequest{
-	TaskID:       uuid.New(),
-	Type:         "test",
-	ExternalID:   "external-id",
-	Data:         []byte("test data"),
-	WorkingState: []byte("prev state"),
-	ETag:         "etag",
-	MetaData: orbital.MetaData{
-		Signature: orbital.Signature{
-			Value: "value",
-			Type:  "type",
-		},
-	},
+	MetaData:     nil,
 }
 
 var expTaskResponse = orbital.TaskResponse{
@@ -73,16 +35,10 @@ var expTaskResponse = orbital.TaskResponse{
 	ETag:              "etag",
 	ReconcileAfterSec: 10,
 	ErrorMessage:      "no error",
-	MetaData: orbital.MetaData{
-		Signature: orbital.Signature{
-			Value: "value",
-			Type:  "type",
-		},
-		IsEncrypted: true,
-	},
+	MetaData:          orbital.MetaData{"key1": "value1", "key2": "value2"},
 }
 
-var expTaskResponseWithoutSig = orbital.TaskResponse{
+var expTaskResponseWithoutMeta = orbital.TaskResponse{
 	TaskID:            uuid.New(),
 	Type:              "test",
 	ExternalID:        "external-id",
@@ -91,41 +47,5 @@ var expTaskResponseWithoutSig = orbital.TaskResponse{
 	ETag:              "etag",
 	ReconcileAfterSec: 10,
 	ErrorMessage:      "no error",
-	MetaData: orbital.MetaData{
-		IsEncrypted: false,
-	},
-}
-
-var expTaskResponseWithoutEncrypt = orbital.TaskResponse{
-	TaskID:            uuid.New(),
-	Type:              "test",
-	ExternalID:        "external-id",
-	Status:            string(orbital.ResultDone),
-	WorkingState:      []byte("after state"),
-	ETag:              "etag",
-	ReconcileAfterSec: 10,
-	ErrorMessage:      "no error",
-	MetaData: orbital.MetaData{
-		Signature: orbital.Signature{
-			Value: "value",
-			Type:  "type",
-		},
-	},
-}
-
-var expTaskResponseWithoutType = orbital.TaskResponse{
-	TaskID:            uuid.New(),
-	Type:              "test",
-	ExternalID:        "external-id",
-	Status:            string(orbital.ResultDone),
-	WorkingState:      []byte("after state"),
-	ETag:              "etag",
-	ReconcileAfterSec: 10,
-	ErrorMessage:      "no error",
-	MetaData: orbital.MetaData{
-		Signature: orbital.Signature{
-			Value: "value",
-		},
-		IsEncrypted: true,
-	},
+	MetaData:          nil,
 }

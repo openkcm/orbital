@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package orbital.v1;
 
-import "orbital/v1/meta_data.proto";
 
 // TaskRequest is the request object that will be sent to the operator.
 message TaskRequest {
@@ -12,5 +11,5 @@ message TaskRequest {
   optional bytes data = 30; // Static context for the task
   bytes workingState = 40; // Current state of the task
   string etag = 50; // Versioning tag
-  MetaData metaData = 60; // MetaData contains additional information about the message
+  map<string, string> metaData = 60; // MetaData contains additional information about the message
 }

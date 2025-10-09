@@ -32,20 +32,8 @@ func (p Proto) DecodeTaskRequest(bytes []byte) (orbital.TaskRequest, error) {
 		WorkingState: pReq.GetWorkingState(),
 		ETag:         pReq.GetEtag(),
 		Data:         pReq.GetData(),
+		MetaData:     pReq.GetMetaData(),
 	}
-	meta := pReq.GetMetaData()
-	if meta == nil {
-		return req, nil
-	}
-	req.MetaData.IsEncrypted = meta.GetIsEncrypted()
-
-	sig := meta.GetSignature()
-	if sig == nil {
-		return req, nil
-	}
-
-	req.MetaData.Signature.Value = sig.GetValue()
-	req.MetaData.Signature.Type = sig.GetType()
 	return req, nil
 }
 
@@ -58,13 +46,7 @@ func (p Proto) EncodeTaskRequest(request orbital.TaskRequest) ([]byte, error) {
 		WorkingState: request.WorkingState,
 		Etag:         request.ETag,
 		Data:         request.Data,
-		MetaData: &orbitalpb.MetaData{
-			Signature: &orbitalpb.Signature{
-				Value: request.MetaData.Signature.Value,
-				Type:  request.MetaData.Signature.Type,
-			},
-			IsEncrypted: request.MetaData.IsEncrypted,
-		},
+		MetaData:     request.MetaData,
 	})
 }
 
@@ -89,19 +71,8 @@ func (p Proto) DecodeTaskResponse(bytes []byte) (orbital.TaskResponse, error) {
 		Status:            pRes.GetStatus().String(),
 		ErrorMessage:      pRes.GetErrorMessage(),
 		ReconcileAfterSec: pRes.GetReconcileAfterSec(),
+		MetaData:          pRes.GetMetaData(),
 	}
-	meta := pRes.GetMetaData()
-	if meta == nil {
-		return resp, nil
-	}
-	resp.MetaData.IsEncrypted = meta.GetIsEncrypted()
-
-	sig := meta.GetSignature()
-	if sig == nil {
-		return resp, nil
-	}
-	resp.MetaData.Signature.Value = sig.GetValue()
-	resp.MetaData.Signature.Type = sig.GetType()
 	return resp, nil
 }
 
@@ -116,12 +87,6 @@ func (p Proto) EncodeTaskResponse(response orbital.TaskResponse) ([]byte, error)
 		Status:            orbitalpb.TaskStatus(orbitalpb.TaskStatus_value[response.Status]),
 		ErrorMessage:      &response.ErrorMessage,
 		ReconcileAfterSec: response.ReconcileAfterSec,
-		MetaData: &orbitalpb.MetaData{
-			Signature: &orbitalpb.Signature{
-				Value: response.MetaData.Signature.Value,
-				Type:  response.MetaData.Signature.Type,
-			},
-			IsEncrypted: response.MetaData.IsEncrypted,
-		},
+		MetaData:          response.MetaData,
 	})
 }

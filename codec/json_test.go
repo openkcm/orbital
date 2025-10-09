@@ -15,9 +15,7 @@ func TestJSON_TaskRequest(t *testing.T) {
 		expTaskRequest orbital.TaskRequest
 	}{
 		{name: "with full value", expTaskRequest: expTaskRequest},
-		{name: "without encrypt", expTaskRequest: expTaskRequestWithoutEncrypt},
-		{name: "without signature", expTaskRequest: expTaskRequestWithoutSig},
-		{name: "without signature type", expTaskRequest: expTaskRequestWithoutType},
+		{name: "without meta", expTaskRequest: expTaskRequestWithoutMeta},
 	}
 	// given
 	codec := codec.JSON{}
@@ -46,9 +44,7 @@ func TestJSON_TaskResponse(t *testing.T) {
 		expTaskResponse orbital.TaskResponse
 	}{
 		{name: "with full value", expTaskResponse: expTaskResponse},
-		{name: "without encrypt", expTaskResponse: expTaskResponseWithoutEncrypt},
-		{name: "without signature", expTaskResponse: expTaskResponseWithoutSig},
-		{name: "without signature type", expTaskResponse: expTaskResponseWithoutType},
+		{name: "without meta", expTaskResponse: expTaskResponseWithoutMeta},
 	}
 	// given
 	codec := codec.JSON{}

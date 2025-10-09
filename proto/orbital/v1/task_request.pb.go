@@ -25,13 +25,13 @@ const (
 // TaskRequest is the request object that will be sent to the operator.
 type TaskRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskId        string                 `protobuf:"bytes,10,opt,name=taskId,proto3" json:"taskId,omitempty"`             // UUID as string
-	Type          string                 `protobuf:"bytes,20,opt,name=type,proto3" json:"type,omitempty"`                 // Type of the task
-	ExternalId    string                 `protobuf:"bytes,25,opt,name=externalId,proto3" json:"externalId,omitempty"`     // External ID serves as an identifier for a Job.
-	Data          []byte                 `protobuf:"bytes,30,opt,name=data,proto3,oneof" json:"data,omitempty"`           // Static context for the task
-	WorkingState  []byte                 `protobuf:"bytes,40,opt,name=workingState,proto3" json:"workingState,omitempty"` // Current state of the task
-	Etag          string                 `protobuf:"bytes,50,opt,name=etag,proto3" json:"etag,omitempty"`                 // Versioning tag
-	MetaData      *MetaData              `protobuf:"bytes,60,opt,name=metaData,proto3" json:"metaData,omitempty"`         // MetaData contains additional information about the message
+	TaskId        string                 `protobuf:"bytes,10,opt,name=taskId,proto3" json:"taskId,omitempty"`                                                                               // UUID as string
+	Type          string                 `protobuf:"bytes,20,opt,name=type,proto3" json:"type,omitempty"`                                                                                   // Type of the task
+	ExternalId    string                 `protobuf:"bytes,25,opt,name=externalId,proto3" json:"externalId,omitempty"`                                                                       // External ID serves as an identifier for a Job.
+	Data          []byte                 `protobuf:"bytes,30,opt,name=data,proto3,oneof" json:"data,omitempty"`                                                                             // Static context for the task
+	WorkingState  []byte                 `protobuf:"bytes,40,opt,name=workingState,proto3" json:"workingState,omitempty"`                                                                   // Current state of the task
+	Etag          string                 `protobuf:"bytes,50,opt,name=etag,proto3" json:"etag,omitempty"`                                                                                   // Versioning tag
+	MetaData      map[string]string      `protobuf:"bytes,60,rep,name=metaData,proto3" json:"metaData,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // MetaData contains additional information about the message
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -108,7 +108,7 @@ func (x *TaskRequest) GetEtag() string {
 	return ""
 }
 
-func (x *TaskRequest) GetMetaData() *MetaData {
+func (x *TaskRequest) GetMetaData() map[string]string {
 	if x != nil {
 		return x.MetaData
 	}
@@ -120,7 +120,7 @@ var File_orbital_v1_task_request_proto protoreflect.FileDescriptor
 const file_orbital_v1_task_request_proto_rawDesc = "" +
 	"\n" +
 	"\x1dorbital/v1/task_request.proto\x12\n" +
-	"orbital.v1\x1a\x1aorbital/v1/meta_data.proto\"\xe5\x01\n" +
+	"orbital.v1\"\xb3\x02\n" +
 	"\vTaskRequest\x12\x16\n" +
 	"\x06taskId\x18\n" +
 	" \x01(\tR\x06taskId\x12\x12\n" +
@@ -130,8 +130,11 @@ const file_orbital_v1_task_request_proto_rawDesc = "" +
 	"externalId\x12\x17\n" +
 	"\x04data\x18\x1e \x01(\fH\x00R\x04data\x88\x01\x01\x12\"\n" +
 	"\fworkingState\x18( \x01(\fR\fworkingState\x12\x12\n" +
-	"\x04etag\x182 \x01(\tR\x04etag\x120\n" +
-	"\bmetaData\x18< \x01(\v2\x14.orbital.v1.MetaDataR\bmetaDataB\a\n" +
+	"\x04etag\x182 \x01(\tR\x04etag\x12A\n" +
+	"\bmetaData\x18< \x03(\v2%.orbital.v1.TaskRequest.MetaDataEntryR\bmetaData\x1a;\n" +
+	"\rMetaDataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\a\n" +
 	"\x05_dataB\xa2\x01\n" +
 	"\x0ecom.orbital.v1B\x10TaskRequestProtoP\x01Z5github.com/openkcm/orbital/proto/orbital/v1;orbitalv1\xa2\x02\x03OXX\xaa\x02\n" +
 	"Orbital.V1\xca\x02\n" +
@@ -149,13 +152,13 @@ func file_orbital_v1_task_request_proto_rawDescGZIP() []byte {
 	return file_orbital_v1_task_request_proto_rawDescData
 }
 
-var file_orbital_v1_task_request_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_orbital_v1_task_request_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_orbital_v1_task_request_proto_goTypes = []any{
 	(*TaskRequest)(nil), // 0: orbital.v1.TaskRequest
-	(*MetaData)(nil),    // 1: orbital.v1.MetaData
+	nil,                 // 1: orbital.v1.TaskRequest.MetaDataEntry
 }
 var file_orbital_v1_task_request_proto_depIdxs = []int32{
-	1, // 0: orbital.v1.TaskRequest.metaData:type_name -> orbital.v1.MetaData
+	1, // 0: orbital.v1.TaskRequest.metaData:type_name -> orbital.v1.TaskRequest.MetaDataEntry
 	1, // [1:1] is the sub-list for method output_type
 	1, // [1:1] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
@@ -168,7 +171,6 @@ func file_orbital_v1_task_request_proto_init() {
 	if File_orbital_v1_task_request_proto != nil {
 		return
 	}
-	file_orbital_v1_meta_data_proto_init()
 	file_orbital_v1_task_request_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -176,7 +178,7 @@ func file_orbital_v1_task_request_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_orbital_v1_task_request_proto_rawDesc), len(file_orbital_v1_task_request_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

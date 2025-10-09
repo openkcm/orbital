@@ -42,16 +42,16 @@ var (
 var errUnknownJobType = errors.New("unknown job type")
 
 func main() {
-	initiators := map[string]orbital.Initiator{}
+	targets := map[string]orbital.ManagerTarget{}
 	var err error
 
 	// Create embedded clients with operator functions
 	client1, err := embedded.NewClient(operatorFunc1)
 	handleErr("Failed to create client1", err)
-	initiators[target1] = orbital.Initiator{Client: client1}
+	targets[target1] = orbital.ManagerTarget{Client: client1}
 	client2, err := embedded.NewClient(operatorFunc2)
 	handleErr("Failed to create client2", err)
-	initiators[target2] = orbital.Initiator{Client: client2}
+	targets[target2] = orbital.ManagerTarget{Client: client2}
 
 	// Create PostgreSQL database handle
 	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
@@ -76,7 +76,7 @@ func main() {
 	// Create a manager with the repository, embedded clients and termination function
 	manager, err := orbital.NewManager(repo,
 		resolveTask,
-		orbital.WithTargetInitiators(initiators),
+		orbital.WithTargets(targets),
 		orbital.WithJobDoneEventFunc(terminateFunc),
 		orbital.WithJobFailedEventFunc(terminateFunc),
 		orbital.WithJobCanceledEventFunc(terminateFunc),

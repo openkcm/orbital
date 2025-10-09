@@ -7,8 +7,8 @@ import (
 )
 
 type (
-	// ResponderClient is a mock implementation of the operator.ResponderClient interface.
-	ResponderClient struct {
+	// Responder is a mock implementation of the operator.Responder interface.
+	Responder struct {
 		input  chan orbital.TaskRequest
 		output chan orbital.TaskResponse
 	}
@@ -21,11 +21,11 @@ type (
 	}
 )
 
-var _ orbital.ResponderClient = &ResponderClient{}
+var _ orbital.Responder = &Responder{}
 
 // NewResponder creates a new Responder instance.
 // It allows options to configure the buffer size of the input and output channel.
-func NewResponder(opts ...Option) *ResponderClient {
+func NewResponder(opts ...Option) *Responder {
 	c := config{
 		inputBufferSize:  10,
 		outputBufferSize: 10,
@@ -35,7 +35,7 @@ func NewResponder(opts ...Option) *ResponderClient {
 		opt(&c)
 	}
 
-	return &ResponderClient{
+	return &Responder{
 		input:  make(chan orbital.TaskRequest, c.inputBufferSize),
 		output: make(chan orbital.TaskResponse, c.outputBufferSize),
 	}
@@ -56,17 +56,17 @@ func WithOutputBufferSize(size int) Option {
 }
 
 // NewRequest sends the task request to the input channel.
-func (r *ResponderClient) NewRequest(req orbital.TaskRequest) {
+func (r *Responder) NewRequest(req orbital.TaskRequest) {
 	r.input <- req
 }
 
 // NewResponse receives the task response from the output channel.
-func (r *ResponderClient) NewResponse() orbital.TaskResponse {
+func (r *Responder) NewResponse() orbital.TaskResponse {
 	return <-r.output
 }
 
 // ReceiveTaskRequest receives a task request from the input channel.
-func (r *ResponderClient) ReceiveTaskRequest(ctx context.Context) (orbital.TaskRequest, error) {
+func (r *Responder) ReceiveTaskRequest(ctx context.Context) (orbital.TaskRequest, error) {
 	select {
 	case <-ctx.Done():
 		return orbital.TaskRequest{}, ctx.Err()
@@ -76,7 +76,7 @@ func (r *ResponderClient) ReceiveTaskRequest(ctx context.Context) (orbital.TaskR
 }
 
 // SendTaskResponse sends a task response to the output channel.
-func (r *ResponderClient) SendTaskResponse(ctx context.Context, resp orbital.TaskResponse) error {
+func (r *Responder) SendTaskResponse(ctx context.Context, resp orbital.TaskResponse) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

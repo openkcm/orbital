@@ -24,7 +24,7 @@ type (
 	}
 )
 
-var _ orbital.InitiatorClient = &Client{}
+var _ orbital.Initiator = &Client{}
 
 var ErrMissingOperatorFunc = errors.New("missing operator function")
 
