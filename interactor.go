@@ -15,7 +15,7 @@ type TaskRequest struct {
 	Data         []byte    `json:"data"`         // Data is the static context for the task.
 	WorkingState []byte    `json:"workingState"` // WorkingState is the current state of the task that the operator works upon.
 	ETag         string    `json:"eTag"`         // ETag is used to identify the version of the TaskRequest.
-	MetaData     MetaData  `json:"metaData"`
+	MetaData     MetaData  `json:"metaData"`     // MetaData contains additional information about the TaskRequest.
 }
 
 // TaskResponse is the response object received from the operator.
@@ -28,7 +28,7 @@ type TaskResponse struct {
 	Status            string    `json:"status"`                 // Status is the status of the task.
 	ErrorMessage      string    `json:"errorMessage,omitempty"` // ErrorMessage contains the error message if the task fails.
 	ReconcileAfterSec int64     `json:"reconcileAfterSec"`      // ReconcileAfterSec is the time in seconds after which the next TaskRequest should be queued again.
-	MetaData          MetaData  `json:"metaData"`
+	MetaData          MetaData  `json:"metaData"`               // MetaData contains additional information about the TaskResponse.
 }
 
 // MetaData represents a set of key-value pairs containing metadata
