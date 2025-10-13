@@ -1075,12 +1075,12 @@ func TestTransaction(t *testing.T) {
 func validateColumnsAndEntity[T orbital.EntityTypes](t *testing.T, db *stdsql.DB, entity T) {
 	t.Helper()
 	ctx := t.Context()
-	// checking if it can encoded
+	// checking if it can be encoded
 	encodedEntity, err := orbital.Encode(entity)
 	assert.NoError(t, err)
 
 	// fetching columns from database
-	rows, err := db.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s WHERE false", encodedEntity.Name))
+	rows, err := db.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s WHERE false", encodedEntity.Name)) //nolint: unqueryvet
 	assert.NoError(t, err)
 	assert.NoError(t, rows.Err())
 	defer rows.Close()

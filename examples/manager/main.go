@@ -26,7 +26,7 @@ var (
 	sslmode  = "disable"
 )
 
-// This is a simple resource struct.
+// Resource is a simple struct.
 type Resource struct {
 	ID   string
 	Data []byte
