@@ -1080,7 +1080,6 @@ func validateColumnsAndEntity[T orbital.EntityTypes](t *testing.T, db *stdsql.DB
 	assert.NoError(t, err)
 
 	// fetching columns from database
-	//nolint:unqueryvet
 	rows, err := db.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s WHERE false", encodedEntity.Name)) //nolint: unqueryvet
 	assert.NoError(t, err)
 	assert.NoError(t, rows.Err())
