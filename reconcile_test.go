@@ -1345,6 +1345,29 @@ func TestManagerCrypto(t *testing.T) {
 	})
 }
 
+func TestHandleResponse(t *testing.T) {
+	t.Run("should not fail if the initiator is nil for a target", func(t *testing.T) {
+		// given
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		initiator := orbital.ManagerTarget{Client: nil}
+
+		subj, err := orbital.NewManager(repo,
+			mockTaskResolveFunc(),
+		)
+		assert.NoError(t, err)
+
+		// when then
+
+		assert.NotPanics(t, func() {
+			orbital.HandleResponses(subj)(ctx, initiator, "target")
+		}, "should not panic if the initiator is nil for a target")
+	})
+}
+
 var errSendFailed = errors.New("send failed")
 
 type mockInitiator struct {

@@ -698,7 +698,12 @@ func (m *Manager) handleResponses(ctx context.Context, mgrTarget ManagerTarget, 
 		case <-ctx.Done():
 			return
 		default:
-			resp, err := mgrTarget.Client.ReceiveTaskResponse(ctx)
+			cli := mgrTarget.Client
+			if cli == nil {
+				slogctx.Warn(ctx, "initiator client is nil", "target", target)
+				return
+			}
+			resp, err := cli.ReceiveTaskResponse(ctx)
 			if err != nil {
 				slogctx.Error(ctx, "error receiving task response from target", "error", err, "target", target)
 				continue
