@@ -20,7 +20,7 @@ const (
 type (
 	// Operator handles task requests and responses.
 	Operator struct {
-		responder       OperatorTarget
+		target          OperatorTarget
 		handlerRegistry handlerRegistry
 		requests        chan TaskRequest
 		numberOfWorkers int
@@ -74,7 +74,7 @@ var (
 var ErrMsgUnknownTaskType = "unknown task type"
 
 // NewOperator creates a new Operator instance with the given Responder and options.
-func NewOperator(r OperatorTarget, opts ...Option) (*Operator, error) {
+func NewOperator(target OperatorTarget, opts ...Option) (*Operator, error) {
 	c := config{
 		bufferSize:      100,
 		numberOfWorkers: 10,
@@ -88,7 +88,7 @@ func NewOperator(r OperatorTarget, opts ...Option) (*Operator, error) {
 	}
 
 	return &Operator{
-		responder:       r,
+		target:          target,
 		handlerRegistry: handlerRegistry{r: make(map[string]Handler)},
 		requests:        make(chan TaskRequest, c.bufferSize),
 		numberOfWorkers: c.numberOfWorkers,
@@ -145,7 +145,7 @@ func (o *Operator) startListening(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			req, err := o.responder.Client.ReceiveTaskRequest(ctx)
+			req, err := o.target.Client.ReceiveTaskRequest(ctx)
 			if err != nil {
 				log.Printf("ERROR: receiving task request, %v", err)
 				continue
@@ -204,7 +204,7 @@ func (o *Operator) startResponding(ctx context.Context) {
 						continue
 					}
 					resp.addMeta(signature)
-					err = o.responder.Client.SendTaskResponse(logCtx, resp)
+					err = o.target.Client.SendTaskResponse(logCtx, resp)
 					handleError(logCtx, "sending task response", err)
 				}
 			}
@@ -213,7 +213,7 @@ func (o *Operator) startResponding(ctx context.Context) {
 }
 
 func (o *Operator) verifySignature(ctx context.Context, req TaskRequest) error {
-	verifier := o.responder.Verifier
+	verifier := o.target.Verifier
 	if verifier != nil {
 		err := verifier.Verify(ctx, req)
 		if err != nil {
@@ -225,7 +225,7 @@ func (o *Operator) verifySignature(ctx context.Context, req TaskRequest) error {
 }
 
 func (o *Operator) createSignature(ctx context.Context, resp TaskResponse) (Signature, error) {
-	signer := o.responder.Signer
+	signer := o.target.Signer
 	if signer != nil {
 		signature, err := signer.Sign(ctx, resp)
 		if err != nil {
@@ -239,7 +239,7 @@ func (o *Operator) createSignature(ctx context.Context, resp TaskResponse) (Sign
 func (o *Operator) sendErrorResponse(ctx context.Context, resp TaskResponse, errMsg string) {
 	resp.Status = string(ResultFailed)
 	resp.ErrorMessage = errMsg
-	err := o.responder.Client.SendTaskResponse(ctx, resp)
+	err := o.target.Client.SendTaskResponse(ctx, resp)
 	handleError(ctx, "sending task response", err)
 }
 
