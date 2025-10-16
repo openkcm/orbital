@@ -1,4 +1,4 @@
-package interactortest
+package respondertest
 
 import (
 	"context"

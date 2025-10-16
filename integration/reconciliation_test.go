@@ -124,8 +124,8 @@ func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, stor
 			t.Logf("JobConfirmFunc called for job %s", job.ID)
 			return orbital.JobConfirmResult{Done: true}, nil
 		},
-		targetClients: map[string]orbital.Initiator{
-			taskTarget: managerClient,
+		managerTargets: map[string]orbital.ManagerTarget{
+			taskTarget: {Client: managerClient},
 		},
 		jobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobDoneCalls, 1)
@@ -287,9 +287,9 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 			return orbital.JobConfirmResult{Done: true}, nil
 		},
-		targetClients: map[string]orbital.Initiator{
-			taskTarget1: managerClient1,
-			taskTarget2: managerClient2,
+		managerTargets: map[string]orbital.ManagerTarget{
+			taskTarget1: {Client: managerClient1},
+			taskTarget2: {Client: managerClient2},
 		},
 		jobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobDoneCalls, 1)
@@ -465,8 +465,8 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *testEnviron
 		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 			return orbital.JobConfirmResult{Done: true}, nil
 		},
-		targetClients: map[string]orbital.Initiator{
-			taskTarget: managerClient,
+		managerTargets: map[string]orbital.ManagerTarget{
+			taskTarget: {Client: managerClient},
 		},
 		jobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobDoneCalls, 1)
@@ -601,8 +601,8 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 			return orbital.JobConfirmResult{Done: true}, nil
 		},
-		targetClients: map[string]orbital.Initiator{
-			taskTarget: managerClient,
+		managerTargets: map[string]orbital.ManagerTarget{
+			taskTarget: {Client: managerClient},
 		},
 		jobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
 			calls := atomic.AddInt32(&jobDoneCalls, 1)

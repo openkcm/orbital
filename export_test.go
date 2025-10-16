@@ -2,6 +2,7 @@ package orbital
 
 import (
 	"context"
+	"sync"
 
 	"github.com/google/uuid"
 )
@@ -68,6 +69,14 @@ func Transaction(r *Repository) func(ctx context.Context, txFunc TransactionFunc
 
 func Reconcile(m *Manager) func(ctx context.Context) error {
 	return m.reconcile
+}
+
+func HandleTask(m *Manager) func(ctx context.Context, wg *sync.WaitGroup, repo Repository, job Job, task Task) {
+	return m.handleTask
+}
+
+func HandleResponses(m *Manager) func(ctx context.Context, initiator ManagerTarget, target string) {
+	return m.handleResponses
 }
 
 func ProcessResponse(m *Manager) func(ctx context.Context, resp TaskResponse) error {

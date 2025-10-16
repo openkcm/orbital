@@ -67,6 +67,8 @@ func (m *TaskRequest) validate(all bool) error {
 
 	// no validation rules for Etag
 
+	// no validation rules for MetaData
+
 	if m.Data != nil {
 		// no validation rules for Data
 	}

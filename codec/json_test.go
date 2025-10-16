@@ -5,41 +5,64 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/codec"
 )
 
 func TestJSON_TaskRequest(t *testing.T) {
+	tts := []struct {
+		name           string
+		expTaskRequest orbital.TaskRequest
+	}{
+		{name: "with full value", expTaskRequest: expTaskRequest},
+		{name: "without meta", expTaskRequest: expTaskRequestWithoutMeta},
+	}
 	// given
-	codec := codec.JSON{}
+	subj := codec.JSON{}
 
-	// when
-	b, err := codec.EncodeTaskRequest(expTaskRequest)
-	assert.NoError(t, err)
+	for _, tt := range tts {
+		t.Run(tt.name, func(t *testing.T) {
+			// when
+			b, err := subj.EncodeTaskRequest(tt.expTaskRequest)
+			assert.NoError(t, err)
 
-	_, err = codec.DecodeTaskRequest([]byte("not a taskrequest"))
-	assert.Error(t, err, "should return error for invalid data")
+			_, err = subj.DecodeTaskRequest([]byte("not a taskrequest"))
+			assert.Error(t, err, "should return error for invalid data")
 
-	actTaskRequest, err := codec.DecodeTaskRequest(b)
-	assert.NoError(t, err)
+			actTaskRequest, err := subj.DecodeTaskRequest(b)
+			assert.NoError(t, err)
 
-	// then
-	assertTaskRequest(t, actTaskRequest)
+			// then
+			assert.Equal(t, tt.expTaskRequest, actTaskRequest)
+		})
+	}
 }
 
 func TestJSON_TaskResponse(t *testing.T) {
+	tts := []struct {
+		name            string
+		expTaskResponse orbital.TaskResponse
+	}{
+		{name: "with full value", expTaskResponse: expTaskResponse},
+		{name: "without meta", expTaskResponse: expTaskResponseWithoutMeta},
+	}
 	// given
-	codec := codec.JSON{}
+	subj := codec.JSON{}
 
-	// when
-	b, err := codec.EncodeTaskResponse(expTaskResponse)
-	assert.NoError(t, err)
+	for _, tt := range tts {
+		t.Run(tt.name, func(t *testing.T) {
+			// when
+			b, err := subj.EncodeTaskResponse(tt.expTaskResponse)
+			assert.NoError(t, err)
 
-	_, err = codec.DecodeTaskResponse([]byte("not a taskresponse"))
-	assert.Error(t, err, "should return error for invalid data")
+			_, err = subj.DecodeTaskResponse([]byte("not a taskresponse"))
+			assert.Error(t, err, "should return error for invalid data")
 
-	actTaskResponse, err := codec.DecodeTaskResponse(b)
-	assert.NoError(t, err)
+			actTaskResponse, err := subj.DecodeTaskResponse(b)
+			assert.NoError(t, err)
 
-	// then
-	assertTaskResponse(t, actTaskResponse)
+			// then
+			assert.Equal(t, tt.expTaskResponse, actTaskResponse)
+		})
+	}
 }
