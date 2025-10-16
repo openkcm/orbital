@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/openkcm/orbital"
-	"github.com/openkcm/orbital/interactortest"
+	"github.com/openkcm/orbital/respondertest"
 )
 
 func TestNew(t *testing.T) {
-	client := interactortest.NewResponder()
+	client := respondertest.NewResponder()
 
 	tests := []struct {
 		name   string
@@ -58,7 +58,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestRegisterHandler(t *testing.T) {
-	client := interactortest.NewResponder()
+	client := respondertest.NewResponder()
 
 	o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client})
 	assert.NoError(t, err)
@@ -103,7 +103,7 @@ func TestRegisterHandler(t *testing.T) {
 }
 
 func TestListenAndRespond_ErrorResponse(t *testing.T) {
-	client := interactortest.NewResponder()
+	client := respondertest.NewResponder()
 
 	o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client})
 	assert.NoError(t, err)
@@ -149,7 +149,7 @@ func TestListenAndRespond_ErrorResponse(t *testing.T) {
 }
 
 func TestListenAndRespond(t *testing.T) {
-	client := interactortest.NewResponder()
+	client := respondertest.NewResponder()
 
 	o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client})
 	assert.NoError(t, err)
@@ -261,7 +261,7 @@ func TestOperatorCrypto(t *testing.T) {
 				// given
 				actVerifyTaskRequestCalls.Store(0)
 
-				client := interactortest.NewResponder()
+				client := respondertest.NewResponder()
 				o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client, Signer: respSigner, Verifier: tt.reqVerifier})
 				assert.NoError(t, err)
 				assert.NotNil(t, o)
