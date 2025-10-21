@@ -25,13 +25,13 @@ var connInfo = amqp.ConnectionInfo{
 func main() {
 	ctx := context.Background()
 
-	// Initialize an AMQP client as the responder for handling task requests
-	responder, err := amqp.NewClient(ctx, codec.JSON{}, connInfo)
+	// Initialize an AMQP client as the client for handling task requests
+	client, err := amqp.NewClient(ctx, codec.JSON{}, connInfo)
 	handleErr("initializing responder", err)
-	defer responder.Close(ctx)
+	defer client.Close(ctx)
 
 	// Initialize an orbital operator that uses the responder
-	operator, err := orbital.NewOperator(responder)
+	operator, err := orbital.NewOperator(orbital.OperatorTarget{Client: client})
 	handleErr("initializing operator", err)
 
 	// Register a handler for the "example" task type

@@ -25,14 +25,16 @@ func (p Proto) DecodeTaskRequest(bytes []byte) (orbital.TaskRequest, error) {
 	if err != nil {
 		return empty, err
 	}
-	return orbital.TaskRequest{
+	req := orbital.TaskRequest{
 		TaskID:       id,
 		Type:         pReq.GetType(),
 		ExternalID:   pReq.GetExternalId(),
 		WorkingState: pReq.GetWorkingState(),
 		ETag:         pReq.GetEtag(),
 		Data:         pReq.GetData(),
-	}, nil
+		MetaData:     pReq.GetMetaData(),
+	}
+	return req, nil
 }
 
 // EncodeTaskRequest encodes a TaskRequest into Protobuf format.
@@ -44,6 +46,7 @@ func (p Proto) EncodeTaskRequest(request orbital.TaskRequest) ([]byte, error) {
 		WorkingState: request.WorkingState,
 		Etag:         request.ETag,
 		Data:         request.Data,
+		MetaData:     request.MetaData,
 	})
 }
 
@@ -59,7 +62,7 @@ func (p Proto) DecodeTaskResponse(bytes []byte) (orbital.TaskResponse, error) {
 	if err != nil {
 		return empty, err
 	}
-	return orbital.TaskResponse{
+	resp := orbital.TaskResponse{
 		TaskID:            id,
 		Type:              pRes.GetType(),
 		ExternalID:        pRes.GetExternalId(),
@@ -68,7 +71,9 @@ func (p Proto) DecodeTaskResponse(bytes []byte) (orbital.TaskResponse, error) {
 		Status:            pRes.GetStatus().String(),
 		ErrorMessage:      pRes.GetErrorMessage(),
 		ReconcileAfterSec: pRes.GetReconcileAfterSec(),
-	}, nil
+		MetaData:          pRes.GetMetaData(),
+	}
+	return resp, nil
 }
 
 // EncodeTaskResponse encodes a TaskResponse into Protobuf format.
@@ -82,5 +87,6 @@ func (p Proto) EncodeTaskResponse(response orbital.TaskResponse) ([]byte, error)
 		Status:            orbitalpb.TaskStatus(orbitalpb.TaskStatus_value[response.Status]),
 		ErrorMessage:      &response.ErrorMessage,
 		ReconcileAfterSec: response.ReconcileAfterSec,
+		MetaData:          response.MetaData,
 	})
 }

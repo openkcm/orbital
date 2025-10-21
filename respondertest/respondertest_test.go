@@ -1,4 +1,4 @@
-package interactortest_test
+package respondertest_test
 
 import (
 	"testing"
@@ -7,37 +7,37 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/openkcm/orbital"
-	"github.com/openkcm/orbital/interactortest"
+	"github.com/openkcm/orbital/respondertest"
 )
 
 func TestNewResponder(t *testing.T) {
 	tests := []struct {
 		name string
-		opts []interactortest.Option
+		opts []respondertest.Option
 	}{
 		{
 			name: "without options",
-			opts: []interactortest.Option{},
+			opts: []respondertest.Option{},
 		},
 		{
 			name: "with options",
-			opts: []interactortest.Option{
-				interactortest.WithInputBufferSize(10),
-				interactortest.WithOutputBufferSize(10),
+			opts: []respondertest.Option{
+				respondertest.WithInputBufferSize(10),
+				respondertest.WithOutputBufferSize(10),
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			responder := interactortest.NewResponder(tt.opts...)
+			responder := respondertest.NewResponder(tt.opts...)
 			assert.NotNil(t, responder)
 		})
 	}
 }
 
 func TestReceiveTaskRequest(t *testing.T) {
-	responder := interactortest.NewResponder()
+	responder := respondertest.NewResponder()
 
 	expReq := orbital.TaskRequest{
 		TaskID: uuid.New(),
@@ -51,7 +51,7 @@ func TestReceiveTaskRequest(t *testing.T) {
 }
 
 func TestSendTaskResponse(t *testing.T) {
-	responder := interactortest.NewResponder()
+	responder := respondertest.NewResponder()
 
 	expResp := orbital.TaskResponse{
 		TaskID: uuid.New(),

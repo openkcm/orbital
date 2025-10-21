@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package orbital.v1;
 
+
 // TaskStatus defines the possible statuses of a task.
 enum TaskStatus {
   PROCESSING = 0; // operator is still working on the task
@@ -19,4 +20,5 @@ message TaskResponse {
   TaskStatus status = 50; // Status of the task
   optional string errorMessage = 60; // Optional error message
   int64 reconcileAfterSec = 70; // Time in seconds to delay next retry
+  map<string, string> metaData = 80; // MetaData contains additional information about the message
 }

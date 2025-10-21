@@ -69,6 +69,8 @@ func (m *TaskResponse) validate(all bool) error {
 
 	// no validation rules for ReconcileAfterSec
 
+	// no validation rules for MetaData
+
 	if m.WorkingState != nil {
 		// no validation rules for WorkingState
 	}

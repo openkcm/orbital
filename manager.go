@@ -29,7 +29,7 @@ type (
 		jobDoneEventFunc     JobTerminatedEventFunc
 		jobCanceledEventFunc JobTerminatedEventFunc
 		jobFailedEventFunc   JobTerminatedEventFunc
-		targetToInitiator    map[string]Initiator
+		targets              map[string]ManagerTarget
 	}
 
 	// JobTerminatedEventFunc defines a callback function type for sending job events.
@@ -178,10 +178,10 @@ func WithJobConfirmFunc(f JobConfirmFunc) ManagerOptsFunc {
 	}
 }
 
-// WithTargetClients set the map that maps the target string to its Initiator.
-func WithTargetClients(targetToInitiators map[string]Initiator) ManagerOptsFunc {
+// WithTargets set the map that maps the target string to its ManagerTarget.
+func WithTargets(targets map[string]ManagerTarget) ManagerOptsFunc {
 	return func(m *Manager) {
-		m.targetToInitiator = targetToInitiators
+		m.targets = targets
 	}
 }
 
@@ -433,7 +433,7 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 // It returns an error if any target does not have a corresponding client.
 func (m *Manager) targetsExist(infos []TaskInfo) error {
 	for _, info := range infos {
-		if _, ok := m.targetToInitiator[info.Target]; !ok {
+		if _, ok := m.targets[info.Target]; !ok {
 			return fmt.Errorf("%w target: %s", ErrNoClientForTarget, info.Target)
 		}
 	}
@@ -618,10 +618,14 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 		return
 	}
 
-	client, ok := m.targetToInitiator[task.Target]
+	mgrTarget, ok := m.targets[task.Target]
 	// this is an additional safeguard, this should never happen as we check for the existence of targets while creating tasks.
-	if !ok {
-		slogctx.Warn(ctx, "no client found for task target, marking task as failed")
+	if !ok || mgrTarget.Client == nil {
+		errLog := "no managerTarget found for task target, marking task as failed"
+		if mgrTarget.Client == nil {
+			errLog = "no initiator client found for task target, marking task as failed"
+		}
+		slogctx.Warn(ctx, errLog)
 		task.Status = TaskStatusFailed
 		repo.updateTask(ctx, task) //nolint:errcheck
 		return
@@ -645,9 +649,20 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 		ETag:         task.ETag,
 	}
 
+	if mgrTarget.Signer != nil {
+		signature, err := mgrTarget.Signer.Sign(ctx, req)
+		if err != nil {
+			slogctx.Warn(ctx, "task request signing failed , marking task as failed")
+			task.Status = TaskStatusFailed
+			repo.updateTask(ctx, task) //nolint:errcheck
+			return
+		}
+		req.addMeta(signature)
+	}
+
 	slogctx.Debug(ctx, "sending task request", slog.Any("request", req))
 
-	if err := client.SendTaskRequest(ctx, req); err != nil {
+	if err := mgrTarget.Client.SendTaskRequest(ctx, req); err != nil {
 		slogctx.Error(ctx, "failed to send task request", "error", err)
 		repo.updateTask(ctx, task) //nolint:errcheck
 		return
@@ -671,29 +686,42 @@ func (m *Manager) updateJobAndCreateJobEvent(ctx context.Context, repo Repositor
 
 // startResponseReaders starts goroutines to handle responses from each target Initiator.
 func (m *Manager) startResponseReaders(ctx context.Context) {
-	for target, initiator := range m.targetToInitiator {
-		go m.handleResponses(ctx, initiator, target)
+	for target, mgrTarget := range m.targets {
+		go m.handleResponses(ctx, mgrTarget, target)
 	}
 }
 
 // handleResponses continuously reads TaskResponse messages from a client.
-func (m *Manager) handleResponses(ctx context.Context, client Initiator, target string) {
+func (m *Manager) handleResponses(ctx context.Context, mgrTarget ManagerTarget, target string) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
-			resp, err := client.ReceiveTaskResponse(ctx)
+			cli := mgrTarget.Client
+			if cli == nil {
+				slogctx.Warn(ctx, "initiator client is nil", "target", target)
+				return
+			}
+			resp, err := cli.ReceiveTaskResponse(ctx)
 			if err != nil {
 				slogctx.Error(ctx, "error receiving task response from target", "error", err, "target", target)
 				continue
 			}
 
-			slogctx.Debug(ctx, "received task response", slog.String("target", target), slog.String("externalID", resp.ExternalID),
-				slog.String("taskID", resp.TaskID.String()), slog.String("etag", resp.ETag), slog.Any("response", resp))
+			newCtx := slogctx.With(ctx, "target", target, "externalID", resp.ExternalID, "taskID", resp.TaskID.String(), "etag", resp.ETag)
+			slogctx.Debug(newCtx, "received task response")
 
-			if err := m.processResponse(ctx, resp); err != nil {
-				slogctx.Error(ctx, "failed to process task response", "error", err, "taskID", resp.TaskID)
+			if mgrTarget.Verifier != nil {
+				err = mgrTarget.Verifier.Verify(newCtx, resp)
+				if err != nil {
+					slogctx.Error(newCtx, "failed while verifying task response signature", "error", err)
+					continue
+				}
+			}
+
+			if err := m.processResponse(newCtx, resp); err != nil {
+				slogctx.Error(newCtx, "failed to process task response", "error", err)
 			}
 		}
 	}
@@ -711,9 +739,6 @@ func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error 
 			return fmt.Errorf("%w, taskID: %s", ErrTaskNotFound, resp.TaskID)
 		}
 
-		if err != nil || !found {
-			return err
-		}
 		txCtx = slogctx.With(txCtx, "externalID", resp.ExternalID, "taskID", task.ID, "etag", task.ETag)
 
 		if resp.ETag != task.ETag {

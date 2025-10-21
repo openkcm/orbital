@@ -48,7 +48,7 @@ type rabbitMQContainer struct {
 type managerConfig struct {
 	taskResolveFunc      orbital.TaskResolveFunc
 	jobConfirmFunc       orbital.JobConfirmFunc
-	targetClients        map[string]orbital.Initiator
+	managerTargets       map[string]orbital.ManagerTarget
 	jobDoneEventFunc     orbital.JobTerminatedEventFunc
 	jobCanceledEventFunc orbital.JobTerminatedEventFunc
 	jobFailedEventFunc   orbital.JobTerminatedEventFunc
@@ -200,7 +200,7 @@ func createAndStartManager(ctx context.Context, t *testing.T, store *sql.SQL, co
 
 	managerOpts := []orbital.ManagerOptsFunc{
 		orbital.WithJobConfirmFunc(config.jobConfirmFunc),
-		orbital.WithTargetClients(config.targetClients),
+		orbital.WithTargets(config.managerTargets),
 		orbital.WithJobDoneEventFunc(config.jobDoneEventFunc),
 		orbital.WithJobCanceledEventFunc(config.jobCanceledEventFunc),
 		orbital.WithJobFailedEventFunc(config.jobFailedEventFunc),
@@ -226,10 +226,10 @@ func createAndStartManager(ctx context.Context, t *testing.T, store *sql.SQL, co
 }
 
 // createAndStartOperator creates and starts an operator instance.
-func createAndStartOperator(ctx context.Context, t *testing.T, responder orbital.Responder, config operatorConfig) error {
+func createAndStartOperator(ctx context.Context, t *testing.T, client orbital.Responder, config operatorConfig) error {
 	t.Helper()
 
-	operator, err := orbital.NewOperator(responder)
+	operator, err := orbital.NewOperator(orbital.OperatorTarget{Client: client})
 	if err != nil {
 		return fmt.Errorf("failed to create operator: %w", err)
 	}
