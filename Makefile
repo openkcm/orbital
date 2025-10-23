@@ -29,6 +29,10 @@ test-single: proto-generate
 test-integration:
 	go test -p 10 -count=1 ./integration/... -v
 
+# run regression tests
+test-regression:
+	REGRESSION_NO_JOBS=100 REGRESSION_NO_MANAGERS=10 REGRESSION_NO_OPERATORS=10 REGRESSION_TIMEOUT_MINUTES=3 REGRESSION_ACTIVE=true go test -race -count=1 ./regression/... -v
+
 clean:
 	rm -rf $(CERTS_DIR) cover.out cover.html
 
