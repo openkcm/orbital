@@ -426,6 +426,7 @@ func TestWithMessageBroker(t *testing.T) {
 			{
 				name: "should unblock while receiving task requests",
 				blockReceive: func(ctx context.Context, t *testing.T, client *amqp.Client) {
+					t.Helper()
 					_, err = client.ReceiveTaskRequest(ctx)
 					assert.ErrorIs(t, err, context.Canceled)
 				},
@@ -433,6 +434,7 @@ func TestWithMessageBroker(t *testing.T) {
 			{
 				name: "should unblock while receiving task responses",
 				blockReceive: func(ctx context.Context, t *testing.T, client *amqp.Client) {
+					t.Helper()
 					_, err = client.ReceiveTaskResponse(ctx)
 					assert.ErrorIs(t, err, context.Canceled)
 				},
