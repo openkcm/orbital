@@ -421,22 +421,20 @@ func TestWithMessageBroker(t *testing.T) {
 
 		tests := []struct {
 			name         string
-			blockReceive func(context.Context, *testing.T, *amqp.Client)
+			blockReceive func(context.Context, *amqp.Client) error
 		}{
 			{
 				name: "should unlock while receiving task requests",
-				blockReceive: func(ctx context.Context, t *testing.T, client *amqp.Client) {
-					t.Helper()
-					_, err = client.ReceiveTaskRequest(ctx)
-					assert.ErrorIs(t, err, context.Canceled)
+				blockReceive: func(ctx context.Context, client *amqp.Client) error {
+					_, err := client.ReceiveTaskRequest(ctx)
+					return err
 				},
 			},
 			{
 				name: "should unlock while receiving task responses",
-				blockReceive: func(ctx context.Context, t *testing.T, client *amqp.Client) {
-					t.Helper()
-					_, err = client.ReceiveTaskResponse(ctx)
-					assert.ErrorIs(t, err, context.Canceled)
+				blockReceive: func(ctx context.Context, client *amqp.Client) error {
+					_, err := client.ReceiveTaskResponse(ctx)
+					return err
 				},
 			},
 		}
@@ -448,7 +446,10 @@ func TestWithMessageBroker(t *testing.T) {
 				})
 				assert.NoError(t, err)
 
-				go tt.blockReceive(ctx, t, client)
+				go func() {
+					err := tt.blockReceive(ctx, client)
+					assert.ErrorIs(t, err, context.Canceled)
+				}()
 
 				// let the client block on receive
 				time.Sleep(100 * time.Millisecond)
