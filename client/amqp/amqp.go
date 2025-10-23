@@ -49,6 +49,10 @@ type (
 		connOpts *amqp.ConnOptions
 		// amqp holds the underlying AMQP connection, sender, and receiver.
 		amqp *conn
+		// close is used to signal closure of the client.
+		close chan struct{}
+		// closeOnce ensures closure is only performed once to prevent panics.
+		closeOnce sync.Once
 	}
 
 	// ClientOption configures how the AMQP connection is established.
@@ -148,6 +152,7 @@ func NewClient(ctx context.Context, codec orbital.Codec, connInfo ConnectionInfo
 		connOpts: connOpts,
 		connInfo: connInfo,
 		amqp:     &conn{},
+		close:    make(chan struct{}),
 	}
 	err := client.connect(ctx, connInfo, connOpts)
 	if err != nil {
@@ -175,7 +180,7 @@ func (c *Client) ReceiveTaskRequest(ctx context.Context) (orbital.TaskRequest, e
 	var errDec error
 
 	err := c.retryOnConnError(ctx, func() error {
-		msg, err := c.amqp.receiver.Receive(ctx, nil)
+		msg, err := c.receive(ctx)
 		if err != nil {
 			return err
 		}
@@ -220,7 +225,7 @@ func (c *Client) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse,
 	var errDec error
 
 	err := c.retryOnConnError(ctx, func() error {
-		msg, err := c.amqp.receiver.Receive(ctx, nil)
+		msg, err := c.receive(ctx)
 		if err != nil {
 			return err
 		}
@@ -249,25 +254,30 @@ func (c *Client) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse,
 
 // Close closes the AMQP connection, sender, and receiver.
 func (c *Client) Close(ctx context.Context) error {
-	c.amqp.mu.Lock()
-	defer c.amqp.mu.Unlock()
+	var errClose error
+	c.closeOnce.Do(func() {
+		close(c.close)
 
-	if c.amqp.receiver != nil {
-		if err := c.amqp.receiver.Close(ctx); err != nil {
-			return fmt.Errorf("failed to close receiver: %w", err)
+		c.amqp.mu.Lock()
+		defer c.amqp.mu.Unlock()
+
+		if c.amqp.receiver != nil {
+			if err := c.amqp.receiver.Close(ctx); err != nil {
+				errClose = fmt.Errorf("failed to close receiver: %w", err)
+			}
 		}
-	}
-	if c.amqp.sender != nil {
-		if err := c.amqp.sender.Close(ctx); err != nil {
-			return fmt.Errorf("failed to close sender: %w", err)
+		if c.amqp.sender != nil {
+			if err := c.amqp.sender.Close(ctx); err != nil {
+				errClose = fmt.Errorf("failed to close sender: %w", err)
+			}
 		}
-	}
-	if c.amqp.conn != nil {
-		if err := c.amqp.conn.Close(); err != nil {
-			return fmt.Errorf("failed to close connection: %w", err)
+		if c.amqp.conn != nil {
+			if err := c.amqp.conn.Close(); err != nil {
+				errClose = fmt.Errorf("failed to close connection: %w", err)
+			}
 		}
-	}
-	return nil
+	})
+	return errClose
 }
 
 // connect establishes the AMQP connection, session, sender, and receiver.
@@ -335,4 +345,20 @@ func (c *Client) withRLock(f func() error) error {
 	c.amqp.mu.RLock()
 	defer c.amqp.mu.RUnlock()
 	return f()
+}
+
+// receive receives an AMQP message, respecting client closure.
+func (c *Client) receive(ctx context.Context) (*amqp.Message, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go func() {
+		select {
+		case <-c.close:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	return c.amqp.receiver.Receive(ctx, nil)
 }

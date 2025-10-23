@@ -404,6 +404,62 @@ func TestWithMessageBroker(t *testing.T) {
 		}
 	})
 
+	t.Run("Close", func(t *testing.T) {
+		t.Parallel()
+		var protocol, port = "amqp", "5672"
+
+		ctx := t.Context()
+		container, err := startRabbitMQ(ctx)
+		assert.NoError(t, err)
+		defer func() {
+			err := container.Terminate(ctx)
+			assert.NoError(t, err)
+		}()
+
+		url, err := getURL(ctx, container, protocol, port)
+		assert.NoError(t, err)
+
+		tests := []struct {
+			name         string
+			blockReceive func(context.Context, *amqp.Client) error
+		}{
+			{
+				name: "should unlock while receiving task requests",
+				blockReceive: func(ctx context.Context, client *amqp.Client) error {
+					_, err := client.ReceiveTaskRequest(ctx)
+					return err
+				},
+			},
+			{
+				name: "should unlock while receiving task responses",
+				blockReceive: func(ctx context.Context, client *amqp.Client) error {
+					_, err := client.ReceiveTaskResponse(ctx)
+					return err
+				},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				client, err := amqp.NewClient(ctx, codec.JSON{}, amqp.ConnectionInfo{
+					URL: url, Target: "test", Source: "test",
+				})
+				assert.NoError(t, err)
+
+				go func() {
+					err := tt.blockReceive(ctx, client)
+					assert.ErrorIs(t, err, context.Canceled)
+				}()
+
+				// let the client block on receive
+				time.Sleep(100 * time.Millisecond)
+
+				err = client.Close(ctx)
+				assert.NoError(t, err)
+			})
+		}
+	})
+
 	t.Run("Solace", func(t *testing.T) {
 		t.Parallel()
 		var protocol, port = "amqp", "5672"
