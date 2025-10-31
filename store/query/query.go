@@ -11,7 +11,9 @@ const (
 	operatorLessThanEqual                     Operator   = "<="
 	operatorIn                                Operator   = "IN"
 	fieldID                                   Field      = "id"
+	fieldType                                 Field      = "type"
 	fieldJobID                                Field      = "job_id"
+	fieldExternalID                           Field      = "external_id"
 	fieldStatus                               Field      = "status"
 	fieldCreatedAt                            Field      = "created_at"
 	fieldUpdatedAt                            Field      = "updated_at"
@@ -86,6 +88,12 @@ func ClauseWithJobID(jobID uuid.UUID) Clause {
 	return Clause{Field: fieldJobID, Operator: operatorEqual, Value: jobID}
 }
 
+// ClauseWithExternalID creates a Clause that filters by the externalID field using
+// the equality operator and the provided externalID value.
+func ClauseWithExternalID(externalID string) Clause {
+	return Clause{Field: fieldExternalID, Operator: operatorEqual, Value: externalID}
+}
+
 // ClauseWithStatus creates a Clause that filters by the status field using
 // the equality operator and the provided status value.
 func ClauseWithStatus(status string) Clause {
@@ -96,6 +104,10 @@ func ClauseWithStatus(status string) Clause {
 // the in operator and the provided status values.
 func ClauseWithStatuses(statuses ...string) Clause {
 	return Clause{Field: fieldStatus, Operator: operatorIn, Value: statuses}
+}
+
+func ClauseWithTypes(types ...string) Clause {
+	return Clause{Field: fieldType, Operator: operatorIn, Value: types}
 }
 
 // ClauseWithCreatedBefore creates a Clause that filters for entities with a

@@ -145,9 +145,11 @@ func TestRepoListJobs(t *testing.T) {
 			jobs[i].Status = orbital.JobStatusCreated
 			jobs[i].CreatedAt = now
 			jobs[i].Data = []byte("data")
+			jobs[i].Type = fmt.Sprintf("type-%d", i)
+			jobs[i].ExternalID = fmt.Sprintf("id-%d", i)
 			job, err := orbital.CreateRepoJob(repo)(ctx, jobs[i])
-			assert.NoError(t, err)
 			jobs[i].ID = job.ID
+			assert.NoError(t, err)
 		}
 		// mirrors the order of jobs when queried
 		sort.Slice(jobs, func(i, j int) bool {
@@ -178,6 +180,16 @@ func TestRepoListJobs(t *testing.T) {
 				name:    "List jobs with delayed createdAt",
 				query:   orbital.ListJobsQuery{Status: orbital.JobStatusCreated, CreatedAt: now - int64(30*time.Second), Limit: 10},
 				expJobs: []orbital.Job{},
+			},
+			{
+				name:    "List jobs with TypeIn",
+				query:   orbital.ListJobsQuery{Status: orbital.JobStatusCreated, CreatedAt: now, TypeIn: []string{"type-1"}, Limit: 10},
+				expJobs: []orbital.Job{jobs[1]},
+			},
+			{
+				name:    "List jobs with ExternalID",
+				query:   orbital.ListJobsQuery{Status: orbital.JobStatusCreated, CreatedAt: now, ExternalID: "id-1", Limit: 10},
+				expJobs: []orbital.Job{jobs[1]},
 			},
 		}
 

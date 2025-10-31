@@ -43,6 +43,8 @@ type (
 		StatusIn           []JobStatus // Filter jobs by a list of statuses.
 		UpdatedAt          int64       // Filter jobs updated at or after this timestamp.
 		CreatedAt          int64       // Filter jobs created at or after this timestamp.
+		ExternalID         string      // Filter by externalID
+		TypeIn             []string    // Filter by a list of types
 		Limit              int         // Maximum number of jobs to return.
 		RetrievalModeQueue bool        // If true, enables queue-like retrieval mode.
 		OrderByUpdatedAt   bool        // If true, orders jobs by updated_at in descending order.
@@ -120,12 +122,20 @@ func (r *Repository) listJobs(ctx context.Context, jobsQuery ListJobsQuery) ([]J
 		q.Clauses = append(q.Clauses, query.ClauseWithStatus(string(jobsQuery.Status)))
 	}
 
+	if jobsQuery.ExternalID != "" {
+		q.Clauses = append(q.Clauses, query.ClauseWithExternalID(jobsQuery.ExternalID))
+	}
+
 	if len(jobsQuery.StatusIn) > 0 {
 		statuses := make([]string, 0, len(jobsQuery.StatusIn))
 		for _, status := range jobsQuery.StatusIn {
 			statuses = append(statuses, string(status))
 		}
 		q.Clauses = append(q.Clauses, query.ClauseWithStatuses(statuses...))
+	}
+
+	if len(jobsQuery.TypeIn) > 0 {
+		q.Clauses = append(q.Clauses, query.ClauseWithTypes(jobsQuery.TypeIn...))
 	}
 
 	if jobsQuery.UpdatedAt > 0 {

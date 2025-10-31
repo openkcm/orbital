@@ -261,6 +261,10 @@ func (m *Manager) PrepareJob(ctx context.Context, job Job) (Job, error) {
 	return job, nil
 }
 
+func (m *Manager) ListJobs(ctx context.Context, query ListJobsQuery) ([]Job, error) {
+	return m.repo.listJobs(ctx, query)
+}
+
 // GetJob retrieves a job by its ID from the repository.
 func (m *Manager) GetJob(ctx context.Context, jobID uuid.UUID) (Job, bool, error) {
 	return m.repo.getJob(ctx, jobID)
