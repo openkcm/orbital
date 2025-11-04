@@ -963,7 +963,7 @@ func TestCreateTasks(t *testing.T) {
 				TaskInfos: []orbital.TaskInfo{
 					{
 						Target: fmt.Sprintf("target-%d", resolverCalled),
-						Data:   []byte(fmt.Sprintf("data-%d", resolverCalled)),
+						Data:   fmt.Appendf(nil, "data-%d", resolverCalled),
 						Type:   fmt.Sprintf("type-%d", resolverCalled),
 					},
 				},
@@ -1000,7 +1000,7 @@ func TestCreateTasks(t *testing.T) {
 			totalTargetCreated := createTaskCalledTimes + 1
 
 			for targetIndex := range totalTargetCreated {
-				assert.Equal(t, []byte(fmt.Sprintf("data-%d", targetIndex+1)), actTasks[targetIndex].Data)
+				assert.Equal(t, fmt.Appendf(nil, "data-%d", targetIndex+1), actTasks[targetIndex].Data)
 				assert.Equal(t, fmt.Sprintf("target-%d", targetIndex+1), actTasks[targetIndex].Target)
 				assert.Equal(t, fmt.Sprintf("type-%d", targetIndex+1), actTasks[targetIndex].Type)
 				// check if eTag is created
