@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"log"
+	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -163,7 +165,7 @@ func (o *Operator) startResponding(ctx context.Context) {
 				case <-ctx.Done():
 					return
 				case req := <-o.requests:
-					logCtx := slogctx.With(ctx, "externalID", req.ExternalID, "taskID", req.TaskID, "etag", req.ETag)
+					logCtx := slogctx.With(ctx, "externalID", req.ExternalID, "taskID", req.TaskID, "etag", req.ETag, "taskType", req.Type)
 					slogctx.Debug(logCtx, "received task request")
 
 					err := o.verifySignature(logCtx, req)
@@ -184,12 +186,15 @@ func (o *Operator) startResponding(ctx context.Context) {
 						continue
 					}
 
+					start := time.Now()
 					hResp, err := h(logCtx, HandlerRequest{
 						TaskID:       req.TaskID,
 						Type:         req.Type,
 						Data:         req.Data,
 						WorkingState: req.WorkingState,
 					})
+					elapsed := time.Since(start)
+					slogctx.Debug(logCtx, "task handler finished", "status", hResp.Result, "processingTime", elapsed)
 					if err != nil {
 						o.sendErrorResponse(logCtx, resp, err.Error())
 						continue
@@ -204,6 +209,8 @@ func (o *Operator) startResponding(ctx context.Context) {
 						continue
 					}
 					resp.addMeta(signature)
+
+					slogctx.Debug(logCtx, "sending task response", slog.Any("response", resp))
 					err = o.target.Client.SendTaskResponse(logCtx, resp)
 					handleError(logCtx, "sending task response", err)
 				}
