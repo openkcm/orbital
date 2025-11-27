@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/big"
 	"net"
 	"os"
@@ -470,7 +471,7 @@ func TestWithMessageBroker(t *testing.T) {
 		assert.NoError(t, err)
 		ior, _ := container.Logs(ctx)
 		if b, err := io.ReadAll(ior); err == nil {
-			fmt.Println(string(b))
+			log.Println(string(b))
 		}
 		defer func() {
 			err := container.Terminate(ctx)
