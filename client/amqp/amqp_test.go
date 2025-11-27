@@ -755,9 +755,9 @@ func startSolace(ctx context.Context, opts ...containerOpts) (testcontainers.Con
 			hc.ShmSize = 2 << 30
 			hc.Ulimits = []*container.Ulimit{
 				{
-					Name: "nofiles",
-					Hard: 4096,
-					Soft: 1048576,
+					Name: "nofile",
+					Soft: 4096,
+					Hard: 1048576,
 				},
 			}
 		},
