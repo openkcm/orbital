@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"os"
@@ -467,6 +468,10 @@ func TestWithMessageBroker(t *testing.T) {
 		ctx := t.Context()
 		container, err := startSolace(ctx)
 		assert.NoError(t, err)
+		ior, _ := container.Logs(ctx)
+		if b, err := io.ReadAll(ior); err == nil {
+			fmt.Println(string(b))
+		}
 		defer func() {
 			err := container.Terminate(ctx)
 			assert.NoError(t, err)
