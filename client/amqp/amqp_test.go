@@ -738,7 +738,7 @@ management.tcp.port = 15672
 
 func startSolace(ctx context.Context, opts ...containerOpts) (testcontainers.Container, error) {
 	req := testcontainers.ContainerRequest{
-		Image:        "solace/solace-pubsub-standard:latest",
+		Image:        "solace/solace-pubsub-standard:10.25.9",
 		ExposedPorts: []string{"5672/tcp"},
 		Env: map[string]string{
 			"username_admin_globalaccesslevel": "admin",
