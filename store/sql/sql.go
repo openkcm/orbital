@@ -29,8 +29,6 @@ var (
 )
 
 // New initializes a new SQL store and sets up required tables.
-//
-//nolint:funlen
 func New(ctx context.Context, db *sql.DB) (*SQL, error) {
 	s := &SQL{
 		db: db,
@@ -50,20 +48,7 @@ func New(ctx context.Context, db *sql.DB) (*SQL, error) {
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_job
 			ON jobs (external_id, type)
 			WHERE status IN ('` + strings.Join(orbital.TransientStatuses().StringSlice(), "', '") + `');
-		DO $$
-		BEGIN
-			IF EXISTS(
-				SELECT * FROM information_schema.columns 
-				WHERE table_schema = 'public'
-				AND table_name = 'jobs'
-				AND column_name = 'error_message'
-				AND data_type = 'character varying'
-				AND character_maximum_length = 250
-			) 
-			THEN
-				ALTER TABLE jobs ALTER COLUMN error_message TYPE TEXT;
-			END IF;
-		END $$;
+		ALTER TABLE jobs ALTER COLUMN error_message TYPE TEXT;
 		CREATE TABLE IF NOT EXISTS tasks(
    			id UUID PRIMARY KEY,
    			job_id UUID NOT NULL,
@@ -82,20 +67,7 @@ func New(ctx context.Context, db *sql.DB) (*SQL, error) {
    			updated_at BIGINT NOT NULL,
    			created_at BIGINT NOT NULL
    		);
-		DO $$
-		BEGIN
-			IF EXISTS(
-				SELECT * FROM information_schema.columns 
-				WHERE table_schema = 'public'
-				AND table_name = 'tasks'
-				AND column_name = 'error_message'
-				AND data_type = 'character varying'
-				AND character_maximum_length = 250
-			) 
-			THEN
-				ALTER TABLE tasks ALTER COLUMN error_message TYPE TEXT;
-			END IF;
-		END $$;
+			ALTER TABLE tasks ALTER COLUMN error_message TYPE TEXT;
    		CREATE TABLE IF NOT EXISTS job_cursor(
    			id UUID PRIMARY KEY,
    			cursor VARCHAR(100) NOT NULL,
