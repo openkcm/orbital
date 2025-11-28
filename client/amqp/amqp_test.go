@@ -745,8 +745,17 @@ func startSolace(ctx context.Context, opts ...containerOpts) (testcontainers.Con
 			"username_admin_password":          "admin",
 			"msgVpnName":                       "default",
 		},
-		HostConfigModifier: func(hc *container.HostConfig) { hc.ShmSize = 2 << 30 },
-		WaitingFor:         wait.ForListeningPort("5672/tcp").WithStartupTimeout(2 * time.Minute),
+		HostConfigModifier: func(hc *container.HostConfig) {
+			hc.ShmSize = 2 << 30
+			hc.Ulimits = []*container.Ulimit{
+				{
+					Name: "nofile",
+					Soft: 4096,
+					Hard: 1048576,
+				},
+			}
+		},
+		WaitingFor: wait.ForListeningPort("5672/tcp").WithStartupTimeout(2 * time.Minute),
 	}
 	for _, opt := range opts {
 		if err := opt(&req); err != nil {
