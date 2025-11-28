@@ -67,7 +67,7 @@ func New(ctx context.Context, db *sql.DB) (*SQL, error) {
    			updated_at BIGINT NOT NULL,
    			created_at BIGINT NOT NULL
    		);
-			ALTER TABLE tasks ALTER COLUMN error_message TYPE TEXT;
+		ALTER TABLE tasks ALTER COLUMN error_message TYPE TEXT;
    		CREATE TABLE IF NOT EXISTS job_cursor(
    			id UUID PRIMARY KEY,
    			cursor VARCHAR(100) NOT NULL,
