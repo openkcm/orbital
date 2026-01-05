@@ -11,7 +11,7 @@ require (
 	github.com/openkcm/common-sdk v1.5.2
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.40.0
-	github.com/testcontainers/testcontainers-go/modules/postgres v0.39.0
+	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
 	github.com/testcontainers/testcontainers-go/modules/rabbitmq v0.40.0
 	github.com/veqryn/slog-context v0.8.0
 	golang.org/x/sync v0.18.0
