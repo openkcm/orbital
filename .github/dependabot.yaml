@@ -9,8 +9,22 @@ updates:
     reviewers:
       - "openkcm/go-maintainers"
     schedule:
-      interval: daily
+      interval: weekly
+    groups:
+      gomod-group:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     open-pull-requests-limit: 5
+  - package-ecosystem: docker
+    directory: /
+    reviewers:
+      - "openkcm/go-maintainers"
+    schedule:
+      interval: daily
   - package-ecosystem: "github-actions"
     directory: "/"
     reviewers:
