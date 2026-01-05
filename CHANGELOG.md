@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/openkcm/orbital/compare/v0.3.0...v0.3.1) (2025-11-28)
+
+
+### Bug Fixes
+
+* change the job and tasks error message  ([503eab5](https://github.com/openkcm/orbital/commit/503eab51ad49d214e040d90aeb4ffa299c08cf26))
+* solace testcontainers  ([b7dc7db](https://github.com/openkcm/orbital/commit/b7dc7db4ce5f8d72dd6a9dcd332c3d00375d3975))
+
 ## [0.3.0](https://github.com/openkcm/orbital/compare/v0.2.0...v0.3.0) (2025-11-06)
 
 

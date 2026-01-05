@@ -48,6 +48,7 @@ func New(ctx context.Context, db *sql.DB) (*SQL, error) {
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_job
 			ON jobs (external_id, type)
 			WHERE status IN ('` + strings.Join(orbital.TransientStatuses().StringSlice(), "', '") + `');
+		ALTER TABLE jobs ALTER COLUMN error_message TYPE TEXT;
 		CREATE TABLE IF NOT EXISTS tasks(
    			id UUID PRIMARY KEY,
    			job_id UUID NOT NULL,
@@ -66,6 +67,7 @@ func New(ctx context.Context, db *sql.DB) (*SQL, error) {
    			updated_at BIGINT NOT NULL,
    			created_at BIGINT NOT NULL
    		);
+		ALTER TABLE tasks ALTER COLUMN error_message TYPE TEXT;
    		CREATE TABLE IF NOT EXISTS job_cursor(
    			id UUID PRIMARY KEY,
    			cursor VARCHAR(100) NOT NULL,

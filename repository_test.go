@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -42,26 +43,48 @@ func TestRepoPrepare(t *testing.T) {
 }
 
 func TestRepoCreateJob(t *testing.T) {
-	ctx := t.Context()
-	db, store := createSQLStore(t)
-	defer clearTables(t, db)
-	repo := orbital.NewRepository(store)
+	t.Run("should create job", func(t *testing.T) {
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
 
-	job := orbital.Job{
-		Type:   "job-type",
-		Data:   []byte("data"),
-		Status: "status",
-	}
-	createdJob, err := orbital.CreateRepoJob(repo)(ctx, job)
-	assert.NoError(t, err)
-	assert.NotEqual(t, uuid.Nil, createdJob.ID)
+		job := orbital.Job{
+			Type:   "job-type",
+			Data:   []byte("data"),
+			Status: "status",
+		}
+		createdJob, err := orbital.CreateRepoJob(repo)(ctx, job)
+		assert.NoError(t, err)
+		assert.NotEqual(t, uuid.Nil, createdJob.ID)
 
-	fetchedJob, ok, err := orbital.GetRepoJob(repo)(ctx, createdJob.ID)
-	assert.NoError(t, err)
-	assert.True(t, ok)
-	assert.Equal(t, job.Type, fetchedJob.Type)
-	assert.Equal(t, job.Status, fetchedJob.Status)
-	assert.Equal(t, job.Data, fetchedJob.Data)
+		fetchedJob, ok, err := orbital.GetRepoJob(repo)(ctx, createdJob.ID)
+		assert.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, job.Type, fetchedJob.Type)
+		assert.Equal(t, job.Status, fetchedJob.Status)
+		assert.Equal(t, job.Data, fetchedJob.Data)
+	})
+	t.Run("should create job even if error message is longer than 250 characters", func(t *testing.T) {
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+		errorMessage := strings.Repeat("1", 3000)
+		job := orbital.Job{
+			Type:         "job-type",
+			Data:         []byte("data"),
+			Status:       "status",
+			ErrorMessage: errorMessage,
+		}
+		createdJob, err := orbital.CreateRepoJob(repo)(ctx, job)
+		assert.NoError(t, err)
+
+		fetchedJob, ok, err := orbital.GetRepoJob(repo)(ctx, createdJob.ID)
+		assert.NoError(t, err)
+		assert.True(t, ok)
+		assert.Len(t, fetchedJob.ErrorMessage, len(errorMessage))
+	})
 }
 
 func TestRepoGetJob(t *testing.T) {
@@ -271,44 +294,66 @@ func TestRepoListJobs(t *testing.T) {
 }
 
 func TestRepoCreateTasks(t *testing.T) {
-	ctx := t.Context()
-	db, store := createSQLStore(t)
-	defer clearTables(t, db)
-	repo := orbital.NewRepository(store)
+	t.Run("should create tasks", func(t *testing.T) {
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
 
-	jobID := uuid.New()
-	taskType := "type"
+		jobID := uuid.New()
+		taskType := "type"
 
-	tasks := make([]orbital.Task, 0, 3)
-	for index := range 3 {
-		tasks = append(tasks, orbital.Task{
-			JobID:          jobID,
-			Type:           taskType,
-			WorkingState:   fmt.Append([]byte("working-state-"), index),
-			ReconcileCount: int64(index),
-			ETag:           fmt.Sprintf("etag-%v", index),
-			Status:         orbital.TaskStatusCreated,
-			Target:         fmt.Sprintf("target-%v", index),
-			ErrorMessage:   fmt.Sprintf("error-message-%v", index),
-		})
-	}
+		tasks := make([]orbital.Task, 0, 3)
+		for index := range 3 {
+			tasks = append(tasks, orbital.Task{
+				JobID:          jobID,
+				Type:           taskType,
+				WorkingState:   fmt.Append([]byte("working-state-"), index),
+				ReconcileCount: int64(index),
+				ETag:           fmt.Sprintf("etag-%v", index),
+				Status:         orbital.TaskStatusCreated,
+				Target:         fmt.Sprintf("target-%v", index),
+				ErrorMessage:   fmt.Sprintf("error-message-%v", index),
+			})
+		}
 
-	taskIDs, err := orbital.CreateRepoTasks(repo)(ctx, tasks)
-	assert.NoError(t, err)
-	assert.NotEqual(t, uuid.Nil, taskIDs)
+		taskIDs, err := orbital.CreateRepoTasks(repo)(ctx, tasks)
+		assert.NoError(t, err)
+		assert.NotEqual(t, uuid.Nil, taskIDs)
 
-	for index, taskID := range taskIDs {
-		fetchedTask, ok, err := orbital.GetRepoTask(repo)(t.Context(), taskID)
+		for index, taskID := range taskIDs {
+			fetchedTask, ok, err := orbital.GetRepoTask(repo)(t.Context(), taskID)
+			assert.NoError(t, err)
+			assert.True(t, ok)
+			assert.Equal(t, jobID, fetchedTask.JobID)
+			assert.Equal(t, taskType, fetchedTask.Type)
+			assert.Equal(t, fmt.Sprintf("working-state-%v", index), string(fetchedTask.WorkingState))
+			assert.Equal(t, int64(index), fetchedTask.ReconcileCount)
+			assert.Equal(t, fmt.Sprintf("etag-%v", index), fetchedTask.ETag)
+			assert.Equal(t, fmt.Sprintf("error-message-%v", index), fetchedTask.ErrorMessage)
+			assert.Equal(t, orbital.TaskStatusCreated, fetchedTask.Status)
+		}
+	})
+	t.Run("should create tasks even if error message is longer than 250 characters", func(t *testing.T) {
+		ctx := t.Context()
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		errorMessage := strings.Repeat("1", 3000)
+		taskIDs, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{{
+			JobID:        uuid.New(),
+			Type:         "type",
+			ErrorMessage: errorMessage,
+		}})
+		assert.NoError(t, err)
+		assert.NotEqual(t, uuid.Nil, taskIDs)
+
+		fetchedTask, ok, err := orbital.GetRepoTask(repo)(t.Context(), taskIDs[0])
 		assert.NoError(t, err)
 		assert.True(t, ok)
-		assert.Equal(t, jobID, fetchedTask.JobID)
-		assert.Equal(t, taskType, fetchedTask.Type)
-		assert.Equal(t, fmt.Sprintf("working-state-%v", index), string(fetchedTask.WorkingState))
-		assert.Equal(t, int64(index), fetchedTask.ReconcileCount)
-		assert.Equal(t, fmt.Sprintf("etag-%v", index), fetchedTask.ETag)
-		assert.Equal(t, fmt.Sprintf("error-message-%v", index), fetchedTask.ErrorMessage)
-		assert.Equal(t, orbital.TaskStatusCreated, fetchedTask.Status)
-	}
+		assert.Len(t, fetchedTask.ErrorMessage, len(errorMessage))
+	})
 }
 
 func TestRepoListTasks(t *testing.T) {
