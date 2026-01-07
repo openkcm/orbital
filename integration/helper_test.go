@@ -234,8 +234,25 @@ func createAndStartOperator(ctx context.Context, t *testing.T, client orbital.Re
 		return fmt.Errorf("failed to create operator: %w", err)
 	}
 
+	return addHandlerAndListen(ctx, t, config, operator)
+}
+
+func createAndStartOperatorWithTarget(ctx context.Context, t *testing.T, target orbital.OperatorTarget, config operatorConfig) error {
+	t.Helper()
+
+	operator, err := orbital.NewOperator(target)
+	if err != nil {
+		return fmt.Errorf("failed to create operator: %w", err)
+	}
+
+	return addHandlerAndListen(ctx, t, config, operator)
+}
+
+func addHandlerAndListen(ctx context.Context, t *testing.T, config operatorConfig, operator *orbital.Operator) error {
+	t.Helper()
+
 	for taskType, handler := range config.handlers {
-		err = operator.RegisterHandler(taskType, handler)
+		err := operator.RegisterHandler(taskType, handler)
 		if err != nil {
 			return fmt.Errorf("failed to register handler for %s: %w", taskType, err)
 		}
