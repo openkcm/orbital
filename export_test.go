@@ -106,3 +106,7 @@ func UpdateRepoJobEvent(r *Repository) func(ctx context.Context, event JobEvent)
 func GetRepoJobForUpdate(r *Repository) func(ctx context.Context, id uuid.UUID) (Job, bool, error) {
 	return r.getJobForUpdate
 }
+
+func ToCanonicalData[T TaskRequest | TaskResponse](in T) ([]byte, error) {
+	return toCanonicalData(in)
+}

@@ -75,7 +75,7 @@ type Signature MetaData
 // for a given TaskRequest, typically for authentication or verification purposes.
 type TaskRequestSigner interface {
 	// Sign signs the given TaskRequest and returns a Signature.
-	Sign(ctx context.Context, response TaskRequest) (Signature, error)
+	Sign(ctx context.Context, request TaskRequest) (Signature, error)
 }
 
 // TaskRequestVerifier defines an interface for verifying the authenticity of TaskRequest objects.
@@ -99,7 +99,7 @@ type TaskResponseSigner interface {
 // of a given TaskResponse, typically using cryptographic methods.
 type TaskResponseVerifier interface {
 	// Verify verifies the authenticity of the given TaskResponse.
-	Verify(ctx context.Context, request TaskResponse) error
+	Verify(ctx context.Context, response TaskResponse) error
 }
 
 // Codec defines the methods for encoding and decoding task requests and responses.
