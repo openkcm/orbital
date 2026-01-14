@@ -148,9 +148,12 @@ func tokenFromMetaData[T TaskRequest | TaskResponse](in T) (string, error) {
 
 // toCanonicalData serializes a TaskRequest or TaskResponse into a canonical byte slice representation.
 // The output is used for signing and verification purposes. Returns an error if the input type is unsupported.
+// This is deterministic  to ensure consistent signatures across systems.
+//
 // Example serialization format
 // For TaskRequest:
 // taskId:string,type:string,externalId:string,data:base64EnodedString,workingState:base64EnodedString,eTag:string
+//
 // For TaskResponse:
 // taskId:string,type:string,externalId:string,workingState:base64EnodedString,eTag:string,status:string,errorMessage:string,reconcileAfterSec:string .
 func toCanonicalData[T TaskRequest | TaskResponse](in T) ([]byte, error) {
