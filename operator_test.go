@@ -455,6 +455,7 @@ func (m *mockResponseSigner) Sign(ctx context.Context, response orbital.TaskResp
 type mockResponder struct {
 	FnReceiveTaskRequest func(ctx context.Context) (orbital.TaskRequest, error)
 	FnSendTaskResponse   func(ctx context.Context, response orbital.TaskResponse) error
+	FnClose              func(ctx context.Context) error
 }
 
 var _ orbital.Responder = &mockResponder{}
@@ -467,4 +468,12 @@ func (m *mockResponder) ReceiveTaskRequest(ctx context.Context) (orbital.TaskReq
 // SendTaskResponse implements orbital.Responder.
 func (m *mockResponder) SendTaskResponse(ctx context.Context, response orbital.TaskResponse) error {
 	return m.FnSendTaskResponse(ctx, response)
+}
+
+func (m *mockResponder) Close(ctx context.Context) error {
+	if m.FnClose == nil {
+		return nil
+	}
+
+	return m.FnClose(ctx)
 }

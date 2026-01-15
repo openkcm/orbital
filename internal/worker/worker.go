@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/openkcm/common-sdk/pkg/logger"
@@ -17,6 +18,7 @@ type (
 	Runner struct {
 		Works      []Work             // Works holds the list of work items to be executed.
 		cancelFunc context.CancelFunc // cancelFunc is used to cancel the execution of all work items.
+		wg         sync.WaitGroup     // wg is used to track all the goroutines spawned by the Runner.
 	}
 )
 
@@ -49,7 +51,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	for _, work := range r.Works {
 		workChan := make(chan struct{}, work.NoOfWorkers)
 		workChans[work.Name] = workChan
-		setupWorkers(ctxCancel, workChan, work)
+		setupWorkers(ctxCancel, &r.wg, workChan, work)
 	}
 	// start the workers for each work item.
 	for _, work := range r.Works {
@@ -57,7 +59,8 @@ func (r *Runner) Run(ctx context.Context) error {
 		if !ok {
 			return errWorkerChanIntialization
 		}
-		go startWorkers(ctxCancel, workChan, work)
+		r.wg.Add(1)
+		go startWorkers(ctxCancel, &r.wg, workChan, work)
 	}
 	return nil
 }
@@ -72,15 +75,21 @@ func (r *Runner) Stop(ctx context.Context) error {
 	slogctx.Debug(ctx, "stopping all works")
 	r.cancelFunc()
 	r.cancelFunc = nil
+
+	r.wg.Wait()
+
 	return nil
 }
 
 // setupWorkers starts the specified number of worker goroutines for the given Work item.
 // Each worker listens for signals on workChan to execute the associated function with a timeout.
 // Errors and timeouts are logged. The worker exits if the parent context is cancelled.
-func setupWorkers(ctxCancel context.Context, workChan <-chan struct{}, work Work) {
+func setupWorkers(ctxCancel context.Context, wg *sync.WaitGroup, workChan <-chan struct{}, work Work) {
 	for range work.NoOfWorkers {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
+
 			for {
 				select {
 				case _, ok := <-workChan:
@@ -122,9 +131,10 @@ func setupWorkers(ctxCancel context.Context, workChan <-chan struct{}, work Work
 // startWorkers periodically signals workers to execute the work function.
 // It sends a signal for each worker at the specified execution interval.
 // The function exits when the context is cancelled.
-func startWorkers(ctxCancel context.Context, workChan chan<- struct{}, work Work) {
+func startWorkers(ctxCancel context.Context, wg *sync.WaitGroup, workChan chan<- struct{}, work Work) {
 	ticker := time.NewTicker(work.ExecInterval)
 	defer ticker.Stop()
+	defer wg.Done()
 
 	for {
 		select {

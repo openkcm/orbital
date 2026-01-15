@@ -39,7 +39,7 @@ func TestClose(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 
-	client.Close()
+	client.Close(t.Context())
 
 	assert.Panics(t, func() {
 		client.SendTaskRequest(t.Context(), orbital.TaskRequest{}) //nolint:errcheck
@@ -53,7 +53,7 @@ func TestSendTask_ReceivedTaskResponse(t *testing.T) {
 	client, err := embedded.NewClient(f)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
-	defer client.Close()
+	defer client.Close(t.Context())
 
 	ctx := t.Context()
 	req := orbital.TaskRequest{
@@ -81,7 +81,7 @@ func TestOperatorFuncError(t *testing.T) {
 	client, err := embedded.NewClient(f)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
-	defer client.Close()
+	defer client.Close(t.Context())
 
 	ctx := t.Context()
 
@@ -100,7 +100,7 @@ func TestContextCancelled(t *testing.T) {
 	client, err := embedded.NewClient(f)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
-	defer client.Close()
+	defer client.Close(t.Context())
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()

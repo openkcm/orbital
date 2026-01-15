@@ -49,6 +49,7 @@ type ManagerTarget struct {
 type Initiator interface {
 	SendTaskRequest(ctx context.Context, request TaskRequest) error
 	ReceiveTaskResponse(ctx context.Context) (TaskResponse, error)
+	Close(ctx context.Context) error
 }
 
 // OperatorTarget holds the client and cryptographic implementation for responding
@@ -64,6 +65,7 @@ type OperatorTarget struct {
 type Responder interface {
 	ReceiveTaskRequest(ctx context.Context) (TaskRequest, error)
 	SendTaskResponse(ctx context.Context, response TaskResponse) error
+	Close(ctx context.Context) error
 }
 
 // Signature represents the metadata used for signing and verifying requests.
