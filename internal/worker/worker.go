@@ -32,9 +32,9 @@ type Work struct {
 }
 
 var (
-	errRunnerAlreadyRunning    = errors.New("runner is already running")
-	errWorkerChanIntialization = errors.New("runner channel initialization failed")
-	errRunnerNotRunning        = errors.New("runner is not running")
+	errRunnerAlreadyRunning     = errors.New("runner is already running")
+	errWorkerChanInitialization = errors.New("runner channel initialization failed")
+	errRunnerNotRunning         = errors.New("runner is not running")
 )
 
 // Run starts all configured Work items in the Runner. It returns an error if the Runner is already running.
@@ -47,7 +47,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	r.cancelFunc = cancel
 
 	// set up channels and workers for each work item based on the number of workers specified.
-	workChans := make(map[string](chan struct{}))
+	workChans := make(map[string]chan struct{})
 	for _, work := range r.Works {
 		workChan := make(chan struct{}, work.NoOfWorkers)
 		workChans[work.Name] = workChan
@@ -57,7 +57,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	for _, work := range r.Works {
 		workChan, ok := workChans[work.Name]
 		if !ok {
-			return errWorkerChanIntialization
+			return errWorkerChanInitialization
 		}
 		r.wg.Add(1)
 		go startWorkers(ctxCancel, &r.wg, workChan, work)
@@ -97,6 +97,7 @@ func setupWorkers(ctxCancel context.Context, wg *sync.WaitGroup, workChan <-chan
 						slogctx.Error(ctxCancel, "worker channel closed", "name", work.Name)
 						return
 					}
+
 					ctxTimeout, cancel := context.WithTimeout(ctxCancel, work.Timeout)
 					defer cancel()
 
@@ -136,13 +137,19 @@ func startWorkers(ctxCancel context.Context, wg *sync.WaitGroup, workChan chan<-
 	defer ticker.Stop()
 	defer wg.Done()
 
-	for {
+	running := true
+	for running {
 		select {
 		case <-ticker.C:
-			workChan <- struct{}{}
+			select {
+			case workChan <- struct{}{}:
+			case <-ctxCancel.Done():
+				running = false
+			}
 		case <-ctxCancel.Done():
-			close(workChan)
-			return
+			running = false
 		}
 	}
+
+	close(workChan)
 }
