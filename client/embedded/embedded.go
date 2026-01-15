@@ -3,6 +3,7 @@ package embedded
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/openkcm/orbital"
 )
@@ -12,6 +13,7 @@ type (
 	Client struct {
 		operatorFunc OperatorFunc
 		link         chan orbital.TaskRequest
+		closeOnce    sync.Once
 	}
 
 	// OperatorFunc is a function type that processes a TaskRequest and returns a TaskResponse.
@@ -70,7 +72,10 @@ func (c *Client) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse,
 	select {
 	case <-ctx.Done():
 		return orbital.TaskResponse{}, ctx.Err()
-	case req := <-c.link:
+	case req, closed := <-c.link:
+		if !closed {
+			return orbital.TaskResponse{}, ctx.Err()
+		}
 		resp, err := c.operatorFunc(ctx, req)
 		resp.TaskID = req.TaskID
 		resp.ETag = req.ETag
@@ -81,6 +86,9 @@ func (c *Client) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse,
 }
 
 // Close closes the link channel.
-func (c *Client) Close() {
-	close(c.link)
+func (c *Client) Close(_ context.Context) error {
+	c.closeOnce.Do(func() {
+		close(c.link)
+	})
+	return nil
 }

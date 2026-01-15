@@ -53,7 +53,6 @@ type ConnectionInfo struct {
 	Target    string     // Target is the topic to publish messages to
 	Source    string     // Source is the queue to receive messages from
 	QueueType *QueueType // QueueType specifies the type of queue to use, if nil it defaults to QueueTypeDurableNonExclusive.
-
 }
 
 type ClientOption func(solace.MessagingServiceBuilder)
@@ -121,7 +120,7 @@ func NewClient(codec orbital.Codec, connInfo ConnectionInfo, opts ...ClientOptio
 }
 
 // Close terminates the Solace client, including the receiver, publisher, and messaging service.
-func (s *Solace) Close() error {
+func (s *Solace) Close(_ context.Context) error {
 	var err error
 
 	s.close.Do(func() {

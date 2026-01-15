@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,6 +23,13 @@ type (
 	// Manager is the interface for managing jobs,
 	// including their creation, state transitions, and lifecycle handling.
 	Manager struct {
+		wg         sync.WaitGroup
+		started    atomic.Bool
+		closed     chan struct{}
+		cancelFunc context.CancelFunc
+		runner     *worker.Runner
+		closeOnce  sync.Once
+
 		Config               Config
 		repo                 *Repository
 		jobConfirmFunc       JobConfirmFunc
@@ -112,15 +120,17 @@ const (
 )
 
 var (
-	ErrTaskResolverNotSet = errors.New("taskResolver not set")
-	ErrMsgFailedTasks     = "job has failed tasks"
-	ErrJobUnCancelable    = errors.New("job cannot be canceled in its current state")
-	ErrJobNotFound        = errors.New("job not found")
-	ErrJobAlreadyExists   = errors.New("job already exists")
-	ErrNoClientForTarget  = errors.New("no client for task target")
-	ErrLoadingJob         = errors.New("failed to load job")
-	ErrUpdatingJob        = errors.New("failed to update job")
-	ErrTaskNotFound       = errors.New("task not found")
+	ErrManagerAlreadyStarted = errors.New("manager was already started")
+	ErrManagerNotStarted     = errors.New("manager was not started")
+	ErrTaskResolverNotSet    = errors.New("taskResolver not set")
+	ErrMsgFailedTasks        = "job has failed tasks"
+	ErrJobUnCancelable       = errors.New("job cannot be canceled in its current state")
+	ErrJobNotFound           = errors.New("job not found")
+	ErrJobAlreadyExists      = errors.New("job already exists")
+	ErrNoClientForTarget     = errors.New("no client for task target")
+	ErrLoadingJob            = errors.New("failed to load job")
+	ErrUpdatingJob           = errors.New("failed to update job")
+	ErrTaskNotFound          = errors.New("task not found")
 )
 
 // NewManager creates a new Manager instance.
@@ -163,6 +173,7 @@ func NewManager(repo *Repository, taskResolver TaskResolveFunc, optFuncs ...Mana
 				Done: true,
 			}, nil
 		},
+		closed: make(chan struct{}),
 	}
 	for _, optFunc := range optFuncs {
 		optFunc(mgr)
@@ -208,6 +219,10 @@ func WithJobFailedEventFunc(f JobTerminatedEventFunc) ManagerOptsFunc {
 
 // Start starts the job manager to process jobs.
 func (m *Manager) Start(ctx context.Context) error {
+	if m.started.Load() {
+		return ErrManagerAlreadyStarted
+	}
+
 	runner := worker.Runner{
 		Works: []worker.Work{
 			{
@@ -240,9 +255,56 @@ func (m *Manager) Start(ctx context.Context) error {
 			},
 		},
 	}
+	m.runner = &runner
+	ctx, cancel := context.WithCancel(ctx)
+
+	m.cancelFunc = cancel
+	m.started.Store(true)
+
 	m.startResponseReaders(ctx)
 
 	return runner.Run(ctx)
+}
+
+func (m *Manager) Stop(ctx context.Context) error {
+	var closeErr error
+
+	m.closeOnce.Do(func() {
+		if !m.started.Load() {
+			closeErr = ErrManagerNotStarted
+			return
+		}
+
+		close(m.closed)
+
+		if m.runner != nil {
+			if err := m.runner.Stop(ctx); err != nil {
+				closeErr = err
+				return
+			}
+		}
+
+		// Cancel runner context (stops response readers)
+		if m.cancelFunc != nil {
+			m.cancelFunc()
+		}
+
+		done := make(chan struct{})
+		go func() {
+			m.wg.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+		case <-ctx.Done():
+			closeErr = ctx.Err()
+		}
+
+		closeErr = errors.Join(closeErr, m.closeClients(ctx))
+	})
+
+	return closeErr
 }
 
 // PrepareJob prepares a job by creating it in the repository with status CREATED.
@@ -687,7 +749,11 @@ func (m *Manager) updateJobAndCreateJobEvent(ctx context.Context, repo Repositor
 // startResponseReaders starts goroutines to handle responses from each target Initiator.
 func (m *Manager) startResponseReaders(ctx context.Context) {
 	for target, mgrTarget := range m.targets {
-		go m.handleResponses(ctx, mgrTarget, target)
+		m.wg.Add(1)
+		go func(ctx context.Context, target string, mgrTarget ManagerTarget) {
+			defer m.wg.Done()
+			m.handleResponses(ctx, mgrTarget, target)
+		}(ctx, target, mgrTarget)
 	}
 }
 
@@ -696,6 +762,8 @@ func (m *Manager) handleResponses(ctx context.Context, mgrTarget ManagerTarget, 
 	for {
 		select {
 		case <-ctx.Done():
+			return
+		case <-m.closed:
 			return
 		default:
 			cli := mgrTarget.Client
@@ -760,4 +828,18 @@ func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error 
 
 		return repo.updateTask(txCtx, task)
 	})
+}
+
+func (m *Manager) closeClients(ctx context.Context) error {
+	var errs []error
+	for target, mgrTarget := range m.targets {
+		if mgrTarget.Client == nil {
+			continue
+		}
+		if err := mgrTarget.Client.Close(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("target %s: %w", target, err))
+		}
+	}
+
+	return errors.Join(errs...)
 }
