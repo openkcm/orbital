@@ -128,27 +128,25 @@ func verifySignature[T TaskRequest | TaskResponse](ctx context.Context, verifier
 }
 
 func tokenFromMetaData[T TaskRequest | TaskResponse](in T) (string, error) {
+	var metaData MetaData
 	switch v := any(in).(type) {
 	case TaskRequest:
-		t, ok := v.MetaData[MessageSignatureKey]
-		if !ok {
-			return "", ErrMissingMessageSignature
-		}
-		return t, nil
+		metaData = v.MetaData
 	case TaskResponse:
-		t, ok := v.MetaData[MessageSignatureKey]
-		if !ok {
-			return "", ErrMissingMessageSignature
-		}
-		return t, nil
+		metaData = v.MetaData
 	default:
 		return "", ErrUnsupportedDataType
 	}
+	t, ok := metaData[MessageSignatureKey]
+	if !ok {
+		return "", ErrMissingMessageSignature
+	}
+	return t, nil
 }
 
 // toCanonicalData serializes a TaskRequest or TaskResponse into a canonical byte slice representation.
 // The output is used for signing and verification purposes. Returns an error if the input type is unsupported.
-// This is deterministic  to ensure consistent signatures across systems.
+// This is deterministic to ensure consistent signatures across systems.
 //
 // Example serialization format
 // For TaskRequest:
