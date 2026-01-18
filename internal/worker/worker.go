@@ -59,8 +59,9 @@ func (r *Runner) Run(ctx context.Context) error {
 		if !ok {
 			return errWorkerChanInitialization
 		}
-		r.wg.Add(1)
-		go startWorkers(ctxCancel, &r.wg, workChan, work)
+		r.wg.Go(func() {
+			startWorkers(ctxCancel, workChan, work)
+		})
 	}
 	return nil
 }
@@ -72,13 +73,24 @@ func (r *Runner) Stop(ctx context.Context) error {
 	if r.cancelFunc == nil {
 		return errRunnerNotRunning
 	}
-	slogctx.Debug(ctx, "stopping all works")
+
 	r.cancelFunc()
 	r.cancelFunc = nil
 
-	r.wg.Wait()
+	done := make(chan struct{})
+	go func() {
+		r.wg.Wait()
+		close(done)
+	}()
 
-	return nil
+	select {
+	case <-done:
+		slogctx.Info(ctx, "runner stopped gracefully")
+		return nil
+	case <-ctx.Done():
+		slogctx.Error(ctx, "runner shutdown timed out")
+		return ctx.Err()
+	}
 }
 
 // setupWorkers starts the specified number of worker goroutines for the given Work item.
@@ -86,10 +98,7 @@ func (r *Runner) Stop(ctx context.Context) error {
 // Errors and timeouts are logged. The worker exits if the parent context is cancelled.
 func setupWorkers(ctxCancel context.Context, wg *sync.WaitGroup, workChan <-chan struct{}, work Work) {
 	for range work.NoOfWorkers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			for {
 				select {
 				case _, ok := <-workChan:
@@ -99,17 +108,13 @@ func setupWorkers(ctxCancel context.Context, wg *sync.WaitGroup, workChan <-chan
 					}
 
 					ctxTimeout, cancel := context.WithTimeout(ctxCancel, work.Timeout)
-					defer cancel()
+					errChan := make(chan error, 1)
 
-					errChan := make(chan error)
-
-					go func(ctxTimeout context.Context, errChan chan<- error) {
-						slogctx.Log(ctxCancel, logger.LevelTrace, "worker started", "name", work.Name)
-
-						errChan <- work.Fn(ctxTimeout)
+					wg.Go(func() {
 						defer close(errChan)
-					}(ctxTimeout, errChan)
-
+						slogctx.Log(ctxCancel, logger.LevelTrace, "worker started", "name", work.Name)
+						errChan <- work.Fn(ctxTimeout)
+					})
 					select {
 					case err := <-errChan:
 						if err != nil {
@@ -117,25 +122,26 @@ func setupWorkers(ctxCancel context.Context, wg *sync.WaitGroup, workChan <-chan
 						}
 					case <-ctxTimeout.Done():
 						slogctx.Error(ctxCancel, "worker timeout", "name", work.Name)
-						continue
 					}
 
+					cancel()
 				case <-ctxCancel.Done():
 					slogctx.Info(ctxCancel, "worker canceled", "name", work.Name)
 					return
 				}
 			}
-		}()
+		})
 	}
 }
 
 // startWorkers periodically signals workers to execute the work function.
 // It sends a signal for each worker at the specified execution interval.
 // The function exits when the context is cancelled.
-func startWorkers(ctxCancel context.Context, wg *sync.WaitGroup, workChan chan<- struct{}, work Work) {
+func startWorkers(ctxCancel context.Context, workChan chan<- struct{}, work Work) {
 	ticker := time.NewTicker(work.ExecInterval)
 	defer ticker.Stop()
-	defer wg.Done()
+
+	defer close(workChan)
 
 	running := true
 	for running {
@@ -150,6 +156,4 @@ func startWorkers(ctxCancel context.Context, wg *sync.WaitGroup, workChan chan<-
 			running = false
 		}
 	}
-
-	close(workChan)
 }

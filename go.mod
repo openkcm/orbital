@@ -1,6 +1,6 @@
 module github.com/openkcm/orbital
 
-go 1.24.3
+go 1.25.6
 
 require (
 	github.com/Azure/go-amqp v1.5.1

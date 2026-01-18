@@ -66,7 +66,9 @@ func TestStart(t *testing.T) {
 				err := w.Run(ctxTimeOut)
 				assert.NoError(t, err)
 				defer func() {
-					err := w.Stop(ctxTimeOut)
+					stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer stopCancel()
+					err := w.Stop(stopCtx)
 					assert.NoError(t, err)
 				}()
 
@@ -136,6 +138,10 @@ func TestStart(t *testing.T) {
 		// starting runner again
 		err = w.Run(t.Context())
 		assert.NoError(t, err)
+		defer func() {
+			err := w.Stop(t.Context())
+			assert.NoError(t, err)
+		}()
 	})
 
 	t.Run("should continue working if the worker timeout", func(t *testing.T) {
@@ -153,7 +159,7 @@ func TestStart(t *testing.T) {
 		w := worker.Runner{
 			Works: []worker.Work{
 				{
-					Name: "test-3",
+					Name: "test-4",
 					Fn: func(_ context.Context) error {
 						calledTimes.Add(1)
 						time.Sleep(2 * time.Second)
@@ -169,9 +175,149 @@ func TestStart(t *testing.T) {
 		// starting runner
 		err := w.Run(ctxTimeOut)
 		assert.NoError(t, err)
+		defer func() {
+			stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer stopCancel()
+			_ = w.Stop(stopCtx)
+		}()
 
 		<-ctxTimeOut.Done()
 
 		assert.GreaterOrEqual(t, calledTimes.Load(), int32(2))
+	})
+}
+
+func TestStop(t *testing.T) {
+	t.Run("should return error if Stop is called without Run", func(t *testing.T) {
+		w := worker.Runner{
+			Works: []worker.Work{
+				{
+					Name: "test-stop-1",
+					Fn: func(_ context.Context) error {
+						return nil
+					},
+					NoOfWorkers:  1,
+					ExecInterval: 1 * time.Second,
+					Timeout:      100 * time.Millisecond,
+				},
+			},
+		}
+
+		// when: calling Stop without Run
+		err := w.Stop(t.Context())
+
+		// then: should return error
+		assert.Error(t, err)
+	})
+
+	t.Run("should wait for worker goroutines to exit before returning", func(t *testing.T) {
+		workerStarted := make(chan struct{})
+		allowWorkerToFinish := make(chan struct{})
+
+		w := worker.Runner{
+			Works: []worker.Work{
+				{
+					Name: "test-stop-2",
+					Fn: func(ctx context.Context) error {
+						close(workerStarted)
+						<-ctx.Done()
+						<-allowWorkerToFinish
+						return nil
+					},
+					NoOfWorkers:  1,
+					ExecInterval: 50 * time.Millisecond,
+					Timeout:      5 * time.Second,
+				},
+			},
+		}
+
+		err := w.Run(t.Context())
+		assert.NoError(t, err)
+
+		<-workerStarted
+
+		stopDone := make(chan error, 1)
+		go func() {
+			stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			stopDone <- w.Stop(stopCtx)
+		}()
+
+		select {
+		case <-stopDone:
+			t.Fatal("Stop() returned before worker finished - it should have waited")
+		default:
+		}
+
+		close(allowWorkerToFinish)
+
+		select {
+		case err := <-stopDone:
+			assert.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("Stop() did not return after worker finished")
+		}
+	})
+
+	t.Run("should respect context timeout during Stop", func(t *testing.T) {
+		workerStarted := make(chan struct{})
+
+		w := worker.Runner{
+			Works: []worker.Work{
+				{
+					Name: "test-stop-3",
+					Fn: func(_ context.Context) error {
+						close(workerStarted)
+						select {}
+					},
+					NoOfWorkers:  1,
+					ExecInterval: 10 * time.Millisecond,
+					Timeout:      10 * time.Second,
+				},
+			},
+		}
+
+		runCtx, runCancel := context.WithCancel(t.Context())
+		defer runCancel()
+
+		err := w.Run(runCtx)
+		assert.NoError(t, err)
+
+		select {
+		case <-workerStarted:
+		case <-time.After(1 * time.Second):
+			t.Fatal("worker did not start in time")
+		}
+
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer stopCancel()
+
+		err = w.Stop(stopCtx)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	})
+
+	t.Run("should handle zero workers without deadlock", func(t *testing.T) {
+		w := worker.Runner{
+			Works: []worker.Work{
+				{
+					Name:         "test-stop-4",
+					Fn:           func(_ context.Context) error { return nil },
+					NoOfWorkers:  0, // Zero workers
+					ExecInterval: 1 * time.Second,
+					Timeout:      100 * time.Millisecond,
+				},
+			},
+		}
+
+		ctx := t.Context()
+		err := w.Run(ctx)
+		assert.NoError(t, err)
+
+		stopCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+
+		err = w.Stop(stopCtx)
+		assert.NoError(t, err, "Stop should complete without deadlock for zero workers")
 	})
 }
