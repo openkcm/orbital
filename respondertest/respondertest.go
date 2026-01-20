@@ -84,3 +84,7 @@ func (r *Responder) SendTaskResponse(ctx context.Context, resp orbital.TaskRespo
 		return nil
 	}
 }
+
+func (r *Responder) Close(_ context.Context) error {
+	return nil
+}

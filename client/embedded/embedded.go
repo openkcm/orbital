@@ -3,6 +3,7 @@ package embedded
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/openkcm/orbital"
 )
@@ -12,6 +13,8 @@ type (
 	Client struct {
 		operatorFunc OperatorFunc
 		link         chan orbital.TaskRequest
+		close        chan struct{}
+		closeOnce    sync.Once
 	}
 
 	// OperatorFunc is a function type that processes a TaskRequest and returns a TaskResponse.
@@ -26,7 +29,10 @@ type (
 
 var _ orbital.Initiator = &Client{}
 
-var ErrMissingOperatorFunc = errors.New("missing operator function")
+var (
+	ErrMissingOperatorFunc = errors.New("missing operator function")
+	ErrClientClosed        = errors.New("client closed")
+)
 
 var defaultBufferSize = 10
 
@@ -49,6 +55,7 @@ func NewClient(f OperatorFunc, opts ...Option) (*Client, error) {
 	return &Client{
 		operatorFunc: f,
 		link:         make(chan orbital.TaskRequest, config.BufferSize),
+		close:        make(chan struct{}),
 	}, nil
 }
 
@@ -57,8 +64,9 @@ func (c *Client) SendTaskRequest(ctx context.Context, request orbital.TaskReques
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	default:
-		c.link <- request
+	case <-c.close:
+		return ErrClientClosed
+	case c.link <- request:
 		return nil
 	}
 }
@@ -70,6 +78,8 @@ func (c *Client) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse,
 	select {
 	case <-ctx.Done():
 		return orbital.TaskResponse{}, ctx.Err()
+	case <-c.close:
+		return orbital.TaskResponse{}, ErrClientClosed
 	case req := <-c.link:
 		resp, err := c.operatorFunc(ctx, req)
 		resp.TaskID = req.TaskID
@@ -81,6 +91,9 @@ func (c *Client) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse,
 }
 
 // Close closes the link channel.
-func (c *Client) Close() {
-	close(c.link)
+func (c *Client) Close(_ context.Context) error {
+	c.closeOnce.Do(func() {
+		close(c.close)
+	})
+	return nil
 }

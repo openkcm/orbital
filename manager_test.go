@@ -1156,3 +1156,298 @@ func TestCancel(t *testing.T) {
 		assert.ErrorContains(t, err, "job not found")
 	})
 }
+
+func TestManagerStart_AlreadyStarted(t *testing.T) {
+	db, store := createSQLStore(t)
+	defer clearTables(t, db)
+	repo := orbital.NewRepository(store)
+
+	subj, err := orbital.NewManager(repo, mockTaskResolveFunc())
+	assert.NoError(t, err)
+
+	ctx := t.Context()
+
+	assert.NoError(t, subj.Start(ctx))
+	defer assert.NoError(t, subj.Stop(ctx))
+
+	err = subj.Start(ctx)
+	assert.ErrorIs(t, err, orbital.ErrManagerAlreadyStarted)
+}
+
+func TestManagerStop_Success(t *testing.T) {
+	db, store := createSQLStore(t)
+	defer clearTables(t, db)
+	repo := orbital.NewRepository(store)
+
+	subj, err := orbital.NewManager(repo, mockTaskResolveFunc())
+	assert.NoError(t, err)
+
+	ctx := t.Context()
+
+	assert.NoError(t, subj.Start(ctx))
+
+	assert.NoError(t, subj.Stop(ctx))
+}
+
+func TestManagerStop_NotStarted(t *testing.T) {
+	db, store := createSQLStore(t)
+	defer clearTables(t, db)
+	repo := orbital.NewRepository(store)
+
+	subj, err := orbital.NewManager(repo, mockTaskResolveFunc())
+	assert.NoError(t, err)
+
+	err = subj.Stop(t.Context())
+	assert.ErrorIs(t, err, orbital.ErrManagerNotStarted)
+}
+
+func TestManagerStop_Idempotent(t *testing.T) {
+	db, store := createSQLStore(t)
+	defer clearTables(t, db)
+	repo := orbital.NewRepository(store)
+
+	subj, err := orbital.NewManager(repo, mockTaskResolveFunc())
+	assert.NoError(t, err)
+
+	ctx := t.Context()
+
+	err = subj.Start(ctx)
+	assert.NoError(t, err)
+
+	err = subj.Stop(ctx)
+	assert.NoError(t, err)
+
+	err = subj.Stop(ctx)
+	assert.NoError(t, err)
+
+	err = subj.Stop(ctx)
+	assert.NoError(t, err)
+}
+
+func TestManagerStop_ClosesAllClients(t *testing.T) {
+	db, store := createSQLStore(t)
+	defer clearTables(t, db)
+	repo := orbital.NewRepository(store)
+
+	var closeCalled atomic.Int32
+	// Use buffered channel to avoid blocking
+	readerStarted := make(chan struct{}, 2)
+
+	mockClient := &testInitiator{
+		fnSendTaskRequest: func(_ context.Context, _ orbital.TaskRequest) error {
+			return nil
+		},
+		fnReceiveTaskResponse: func(ctx context.Context) (orbital.TaskResponse, error) {
+			select {
+			case readerStarted <- struct{}{}:
+			default:
+			}
+			<-ctx.Done()
+			return orbital.TaskResponse{}, ctx.Err()
+		},
+		fnClose: func(_ context.Context) error {
+			closeCalled.Add(1)
+			return nil
+		},
+	}
+
+	targets := map[string]orbital.ManagerTarget{
+		"target-1": {Client: mockClient},
+		"target-2": {Client: mockClient},
+	}
+
+	subj, err := orbital.NewManager(repo, mockTaskResolveFunc(), orbital.WithTargets(targets))
+	assert.NoError(t, err)
+
+	ctx := t.Context()
+
+	err = subj.Start(ctx)
+	assert.NoError(t, err)
+
+	<-readerStarted
+
+	err = subj.Stop(ctx)
+	assert.NoError(t, err)
+
+	assert.Equal(t, int32(2), closeCalled.Load())
+}
+
+type testInitiator struct {
+	fnSendTaskRequest     func(context.Context, orbital.TaskRequest) error
+	fnReceiveTaskResponse func(context.Context) (orbital.TaskResponse, error)
+	fnClose               func(context.Context) error
+}
+
+func (m *testInitiator) SendTaskRequest(ctx context.Context, request orbital.TaskRequest) error {
+	return m.fnSendTaskRequest(ctx, request)
+}
+
+func (m *testInitiator) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse, error) {
+	return m.fnReceiveTaskResponse(ctx)
+}
+
+func (m *testInitiator) Close(ctx context.Context) error {
+	if m.fnClose == nil {
+		return nil
+	}
+	return m.fnClose(ctx)
+}
+
+var _ orbital.Initiator = &testInitiator{}
+
+func TestManagerStop_GracefulShutdown(t *testing.T) {
+	t.Run("should wait for in-flight work to complete before returning", func(t *testing.T) {
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		jobID := uuid.New()
+		_, err := orbital.CreateRepoJob(repo)(t.Context(), orbital.Job{ID: jobID, Status: orbital.JobStatusCreated})
+		assert.NoError(t, err)
+
+		workStarted := make(chan struct{})
+		workCanComplete := make(chan struct{})
+		var workCompleted atomic.Bool
+
+		confirmFunc := func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
+			close(workStarted)
+			<-workCanComplete
+			workCompleted.Store(true)
+			return orbital.JobConfirmResult{Done: true}, nil
+		}
+
+		subj, err := orbital.NewManager(repo,
+			mockTaskResolveFunc(),
+			orbital.WithJobConfirmFunc(confirmFunc),
+		)
+		assert.NoError(t, err)
+
+		subj.Config.ConfirmJobWorkerConfig.ExecInterval = 10 * time.Millisecond
+		subj.Config.ConfirmJobWorkerConfig.Timeout = 5 * time.Second
+
+		ctx := t.Context()
+
+		err = subj.Start(ctx)
+		assert.NoError(t, err)
+
+		<-workStarted
+
+		stopDone := make(chan error)
+		go func() {
+			stopDone <- subj.Stop(ctx)
+		}()
+
+		select {
+		case <-stopDone:
+			t.Fatal("Stop returned before work completed")
+		default:
+		}
+
+		close(workCanComplete)
+
+		select {
+		case err := <-stopDone:
+			assert.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("Stop did not return within timeout")
+		}
+
+		assert.True(t, workCompleted.Load(), "work should have completed")
+	})
+
+	t.Run("should stop response readers gracefully", func(t *testing.T) {
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		readerActive := make(chan struct{}, 1)
+		var readerExited atomic.Bool
+
+		mockClient := &testInitiator{
+			fnSendTaskRequest: func(_ context.Context, _ orbital.TaskRequest) error {
+				return nil
+			},
+			fnReceiveTaskResponse: func(ctx context.Context) (orbital.TaskResponse, error) {
+				select {
+				case readerActive <- struct{}{}:
+				default:
+				}
+				<-ctx.Done()
+				readerExited.Store(true)
+				return orbital.TaskResponse{}, ctx.Err()
+			},
+			fnClose: func(_ context.Context) error {
+				return nil
+			},
+		}
+
+		targets := map[string]orbital.ManagerTarget{
+			"target": {Client: mockClient},
+		}
+
+		subj, err := orbital.NewManager(repo, mockTaskResolveFunc(), orbital.WithTargets(targets))
+		assert.NoError(t, err)
+
+		ctx := t.Context()
+
+		err = subj.Start(ctx)
+		assert.NoError(t, err)
+
+		<-readerActive
+
+		err = subj.Stop(ctx)
+		assert.NoError(t, err)
+
+		assert.True(t, readerExited.Load(), "response reader should have exited")
+	})
+
+	t.Run("should handle stop with multiple workers and targets", func(t *testing.T) {
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		var closeCallCount atomic.Int32
+		var readersStarted atomic.Int32
+		allReadersStarted := make(chan struct{})
+
+		createMockClient := func() *testInitiator {
+			return &testInitiator{
+				fnSendTaskRequest: func(_ context.Context, _ orbital.TaskRequest) error {
+					return nil
+				},
+				fnReceiveTaskResponse: func(ctx context.Context) (orbital.TaskResponse, error) {
+					if readersStarted.Add(1) == 3 {
+						close(allReadersStarted)
+					}
+					<-ctx.Done()
+					return orbital.TaskResponse{}, ctx.Err()
+				},
+				fnClose: func(_ context.Context) error {
+					closeCallCount.Add(1)
+					return nil
+				},
+			}
+		}
+
+		targets := map[string]orbital.ManagerTarget{
+			"target-1": {Client: createMockClient()},
+			"target-2": {Client: createMockClient()},
+			"target-3": {Client: createMockClient()},
+		}
+
+		subj, err := orbital.NewManager(repo, mockTaskResolveFunc(), orbital.WithTargets(targets))
+		assert.NoError(t, err)
+
+		ctx := t.Context()
+
+		err = subj.Start(ctx)
+		assert.NoError(t, err)
+
+		<-allReadersStarted
+
+		err = subj.Stop(ctx)
+		assert.NoError(t, err)
+
+		assert.Equal(t, int32(3), closeCallCount.Load())
+	})
+}

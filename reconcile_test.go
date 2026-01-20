@@ -1373,6 +1373,7 @@ var errSendFailed = errors.New("send failed")
 type mockInitiator struct {
 	FnSendTaskRequest     func(context.Context, orbital.TaskRequest) error
 	FnReceiveTaskResponse func(context.Context) (orbital.TaskResponse, error)
+	FnClose               func(context.Context) error
 }
 
 // ReceiveTaskResponse implements orbital.Initiator.
@@ -1385,6 +1386,14 @@ func (m *mockInitiator) SendTaskRequest(ctx context.Context, request orbital.Tas
 	return m.FnSendTaskRequest(ctx, request)
 }
 
+func (m *mockInitiator) Close(ctx context.Context) error {
+	if m.FnClose == nil {
+		return nil
+	}
+
+	return m.FnClose(ctx)
+}
+
 var _ orbital.Initiator = &mockInitiator{}
 
 func failedClient() orbital.Initiator {
@@ -1394,6 +1403,9 @@ func failedClient() orbital.Initiator {
 		},
 		FnReceiveTaskResponse: func(_ context.Context) (orbital.TaskResponse, error) {
 			return orbital.TaskResponse{}, nil
+		},
+		FnClose: func(_ context.Context) error {
+			return nil
 		},
 	}
 }
@@ -1405,6 +1417,10 @@ func successfulClient() orbital.Initiator {
 		},
 		FnReceiveTaskResponse: func(_ context.Context) (orbital.TaskResponse, error) {
 			return orbital.TaskResponse{}, nil
+		},
+
+		FnClose: func(_ context.Context) error {
+			return nil
 		},
 	}
 }

@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/openkcm/common-sdk/pkg/logger"
@@ -17,6 +18,7 @@ type (
 	Runner struct {
 		Works      []Work             // Works holds the list of work items to be executed.
 		cancelFunc context.CancelFunc // cancelFunc is used to cancel the execution of all work items.
+		wg         sync.WaitGroup     // wg is used to track all the goroutines spawned by the Runner.
 	}
 )
 
@@ -30,9 +32,9 @@ type Work struct {
 }
 
 var (
-	errRunnerAlreadyRunning    = errors.New("runner is already running")
-	errWorkerChanIntialization = errors.New("runner channel initialization failed")
-	errRunnerNotRunning        = errors.New("runner is not running")
+	errRunnerAlreadyRunning     = errors.New("runner is already running")
+	errWorkerChanInitialization = errors.New("runner channel initialization failed")
+	errRunnerNotRunning         = errors.New("runner is not running")
 )
 
 // Run starts all configured Work items in the Runner. It returns an error if the Runner is already running.
@@ -45,19 +47,21 @@ func (r *Runner) Run(ctx context.Context) error {
 	r.cancelFunc = cancel
 
 	// set up channels and workers for each work item based on the number of workers specified.
-	workChans := make(map[string](chan struct{}))
+	workChans := make(map[string]chan struct{})
 	for _, work := range r.Works {
 		workChan := make(chan struct{}, work.NoOfWorkers)
 		workChans[work.Name] = workChan
-		setupWorkers(ctxCancel, workChan, work)
+		setupWorkers(ctxCancel, &r.wg, workChan, work)
 	}
 	// start the workers for each work item.
 	for _, work := range r.Works {
 		workChan, ok := workChans[work.Name]
 		if !ok {
-			return errWorkerChanIntialization
+			return errWorkerChanInitialization
 		}
-		go startWorkers(ctxCancel, workChan, work)
+		r.wg.Go(func() {
+			startWorkers(ctxCancel, workChan, work)
+		})
 	}
 	return nil
 }
@@ -69,18 +73,32 @@ func (r *Runner) Stop(ctx context.Context) error {
 	if r.cancelFunc == nil {
 		return errRunnerNotRunning
 	}
-	slogctx.Debug(ctx, "stopping all works")
+
 	r.cancelFunc()
 	r.cancelFunc = nil
-	return nil
+
+	done := make(chan struct{})
+	go func() {
+		r.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		slogctx.Info(ctx, "runner stopped gracefully")
+		return nil
+	case <-ctx.Done():
+		slogctx.Error(ctx, "runner shutdown timed out")
+		return ctx.Err()
+	}
 }
 
 // setupWorkers starts the specified number of worker goroutines for the given Work item.
 // Each worker listens for signals on workChan to execute the associated function with a timeout.
 // Errors and timeouts are logged. The worker exits if the parent context is cancelled.
-func setupWorkers(ctxCancel context.Context, workChan <-chan struct{}, work Work) {
+func setupWorkers(ctxCancel context.Context, wg *sync.WaitGroup, workChan <-chan struct{}, work Work) {
 	for range work.NoOfWorkers {
-		go func() {
+		wg.Go(func() {
 			for {
 				select {
 				case _, ok := <-workChan:
@@ -88,18 +106,15 @@ func setupWorkers(ctxCancel context.Context, workChan <-chan struct{}, work Work
 						slogctx.Error(ctxCancel, "worker channel closed", "name", work.Name)
 						return
 					}
+
 					ctxTimeout, cancel := context.WithTimeout(ctxCancel, work.Timeout)
-					defer cancel()
+					errChan := make(chan error, 1)
 
-					errChan := make(chan error)
-
-					go func(ctxTimeout context.Context, errChan chan<- error) {
-						slogctx.Log(ctxCancel, logger.LevelTrace, "worker started", "name", work.Name)
-
-						errChan <- work.Fn(ctxTimeout)
+					wg.Go(func() {
 						defer close(errChan)
-					}(ctxTimeout, errChan)
-
+						slogctx.Log(ctxCancel, logger.LevelTrace, "worker started", "name", work.Name)
+						errChan <- work.Fn(ctxTimeout)
+					})
 					select {
 					case err := <-errChan:
 						if err != nil {
@@ -107,15 +122,15 @@ func setupWorkers(ctxCancel context.Context, workChan <-chan struct{}, work Work
 						}
 					case <-ctxTimeout.Done():
 						slogctx.Error(ctxCancel, "worker timeout", "name", work.Name)
-						continue
 					}
 
+					cancel()
 				case <-ctxCancel.Done():
 					slogctx.Info(ctxCancel, "worker canceled", "name", work.Name)
 					return
 				}
 			}
-		}()
+		})
 	}
 }
 
@@ -126,13 +141,19 @@ func startWorkers(ctxCancel context.Context, workChan chan<- struct{}, work Work
 	ticker := time.NewTicker(work.ExecInterval)
 	defer ticker.Stop()
 
-	for {
+	defer close(workChan)
+
+	running := true
+	for running {
 		select {
 		case <-ticker.C:
-			workChan <- struct{}{}
+			select {
+			case workChan <- struct{}{}:
+			case <-ctxCancel.Done():
+				running = false
+			}
 		case <-ctxCancel.Done():
-			close(workChan)
-			return
+			running = false
 		}
 	}
 }
