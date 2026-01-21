@@ -325,7 +325,7 @@ func (o *Operator) handleRequest(ctx context.Context, req TaskRequest) (TaskResp
 
 	workingState, err := decodeWorkingState(req.WorkingState)
 	if err != nil {
-		return resp, fmt.Errorf("%w: %w", ErrWorkingStateInvalid, err)
+		return resp, err
 	}
 
 	start := time.Now()
@@ -342,7 +342,7 @@ func (o *Operator) handleRequest(ctx context.Context, req TaskRequest) (TaskResp
 
 	bytes, err := workingState.encode()
 	if err != nil {
-		return resp, fmt.Errorf("%w: %w", ErrWorkingStateInvalid, err)
+		return resp, err
 	}
 
 	resp.WorkingState = bytes

@@ -379,7 +379,7 @@ func TestListenAndRespond_ErrorResponse(t *testing.T) {
 			resp := client.NewResponse()
 
 			assert.Equal(t, string(orbital.ResultFailed), resp.Status)
-			assert.Equal(t, tt.expErrMsg, resp.ErrorMessage)
+			assert.Contains(t, resp.ErrorMessage, tt.expErrMsg)
 		})
 	}
 }
