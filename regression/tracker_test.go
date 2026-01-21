@@ -189,8 +189,7 @@ func NewOperatorTracker(ctx context.Context, env *testEnvironment, name string) 
 		tracker.noOfTaskProcessed.Add(request.TaskID.String(), request)
 		slogctx.Info(ctx, "processing task", "operatorName", tracker.name, "data", string(request.Data))
 		return orbital.HandlerResponse{
-			WorkingState: []byte{},
-			Result:       orbital.ResultDone,
+			Result: orbital.ResultDone,
 		}, nil
 	}
 

@@ -13,6 +13,242 @@ import (
 	"github.com/openkcm/orbital/respondertest"
 )
 
+func TestWorkingState_Codec(t *testing.T) {
+	tests := []struct {
+		name     string
+		bytes    []byte
+		expBytes []byte
+		expErr   error
+	}{
+		{
+			name:     "nil working state",
+			bytes:    nil,
+			expBytes: []byte("{}"),
+		},
+		{
+			name:  "empty working state",
+			bytes: []byte("{}"),
+		},
+		{
+			name:  "valid working state bytes",
+			bytes: []byte(`{"key":"value","number":42}`),
+		},
+		{
+			name:   "invalid working state bytes",
+			bytes:  []byte("invalid"),
+			expErr: orbital.ErrWorkingStateInvalid,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ws, err := orbital.DecodeWorkingState(tt.bytes)
+			if tt.expErr != nil {
+				assert.ErrorIs(t, err, tt.expErr)
+				return
+			}
+			assert.NoError(t, err)
+
+			bytes, err := ws.Encode()
+			assert.NoError(t, err)
+			if tt.expBytes != nil {
+				assert.Equal(t, tt.expBytes, bytes)
+				return
+			}
+			assert.Equal(t, tt.bytes, bytes)
+		})
+	}
+}
+
+func TestWorkingState_SetAndValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      string
+		value    any
+		expValue any
+	}{
+		{
+			name:     "set and get string value",
+			key:      "key1",
+			value:    "value1",
+			expValue: "value1",
+		},
+		{
+			name:     "set and get integer value",
+			key:      "key2",
+			value:    42,
+			expValue: 42,
+		},
+		{
+			name:     "set and get struct value",
+			key:      "key3",
+			value:    struct{ Field string }{Field: "data"},
+			expValue: struct{ Field string }{Field: "data"},
+		},
+		{
+			name:     "set and get nil value",
+			key:      "key4",
+			value:    nil,
+			expValue: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ws := &orbital.WorkingState{}
+			ws.Set(tt.key, tt.value)
+
+			val, ok := ws.Value(tt.key)
+			assert.True(t, ok)
+			assert.Equal(t, tt.expValue, val)
+		})
+	}
+}
+
+func TestWorkingState_GaugeMethods(t *testing.T) {
+	incTests := []struct {
+		name      string
+		key       string
+		initValue int
+		expValue  int
+	}{
+		{
+			name:     "increment key",
+			key:      "gauge1",
+			expValue: 1,
+		},
+		{
+			name:      "increment key with existing value",
+			key:       "gauge2",
+			initValue: 2,
+			expValue:  3,
+		},
+	}
+
+	for _, tt := range incTests {
+		t.Run(tt.name, func(t *testing.T) {
+			ws := &orbital.WorkingState{}
+			if tt.initValue != 0 {
+				ws.Set(tt.key, tt.initValue)
+			}
+			value := ws.Inc(tt.key)
+			assert.Equal(t, tt.expValue, value)
+
+			val, ok := ws.Value(tt.key)
+			assert.True(t, ok)
+			assert.Equal(t, tt.expValue, val)
+		})
+	}
+
+	decTests := []struct {
+		name      string
+		key       string
+		initValue int
+		expValue  int
+	}{
+		{
+			name:     "decrement key",
+			key:      "gauge1",
+			expValue: -1,
+		},
+		{
+			name:      "decrement key with existing value",
+			key:       "gauge2",
+			initValue: 5,
+			expValue:  4,
+		},
+	}
+
+	for _, tt := range decTests {
+		t.Run(tt.name, func(t *testing.T) {
+			ws := &orbital.WorkingState{}
+			if tt.initValue != 0 {
+				ws.Set(tt.key, tt.initValue)
+			}
+			value := ws.Dec(tt.key)
+			assert.Equal(t, tt.expValue, value)
+
+			val, ok := ws.Value(tt.key)
+			assert.True(t, ok)
+			assert.Equal(t, tt.expValue, val)
+		})
+	}
+
+	addTests := []struct {
+		name      string
+		key       string
+		amount    int
+		initValue int
+		expValue  int
+	}{
+		{
+			name:     "add to key",
+			key:      "gauge1",
+			amount:   5,
+			expValue: 5,
+		},
+		{
+			name:      "add to key with existing value",
+			key:       "gauge2",
+			amount:    10,
+			initValue: 3,
+			expValue:  13,
+		},
+	}
+
+	for _, tt := range addTests {
+		t.Run(tt.name, func(t *testing.T) {
+			ws := &orbital.WorkingState{}
+			if tt.initValue != 0 {
+				ws.Set(tt.key, tt.initValue)
+			}
+			value := ws.Add(tt.key, tt.amount)
+			assert.Equal(t, tt.expValue, value)
+
+			val, ok := ws.Value(tt.key)
+			assert.True(t, ok)
+			assert.Equal(t, tt.expValue, val)
+		})
+	}
+
+	subTests := []struct {
+		name      string
+		key       string
+		amount    int
+		initValue int
+		expValue  int
+	}{
+		{
+			name:     "subtract from key",
+			key:      "gauge1",
+			amount:   4,
+			expValue: -4,
+		},
+		{
+			name:      "subtract from key with existing value",
+			key:       "gauge2",
+			amount:    2,
+			initValue: 7,
+			expValue:  5,
+		},
+	}
+
+	for _, tt := range subTests {
+		t.Run(tt.name, func(t *testing.T) {
+			ws := &orbital.WorkingState{}
+			if tt.initValue != 0 {
+				ws.Set(tt.key, tt.initValue)
+			}
+			value := ws.Sub(tt.key, tt.amount)
+			assert.Equal(t, tt.expValue, value)
+
+			val, ok := ws.Value(tt.key)
+			assert.True(t, ok)
+			assert.Equal(t, tt.expValue, val)
+		})
+	}
+}
+
 func TestNew(t *testing.T) {
 	client := respondertest.NewResponder()
 
@@ -119,7 +355,7 @@ func TestListenAndRespond_ErrorResponse(t *testing.T) {
 	}{
 		{
 			name:      "unknown task type",
-			expErrMsg: orbital.ErrMsgUnknownTaskType,
+			expErrMsg: orbital.ErrUnknownTaskType.Error(),
 		},
 		{
 			name:     "handler error",
@@ -157,16 +393,20 @@ func TestListenAndRespond(t *testing.T) {
 
 	o.ListenAndRespond(t.Context())
 
+	workingState := orbital.WorkingState{}
+	key := "key"
+	workingState.Set(key, "prevValue")
+	prevWorkingStateBytes, err := workingState.Encode()
+	assert.NoError(t, err)
 	taskReq := orbital.TaskRequest{
 		TaskID:       uuid.New(),
 		Type:         "success",
 		ExternalID:   "external-id",
 		ETag:         "etag",
 		Data:         []byte("test data"),
-		WorkingState: []byte("prev working state"),
+		WorkingState: prevWorkingStateBytes,
 	}
 
-	expWorkingState := []byte("after working state")
 	expState := orbital.ResultDone
 	expReconcileAfterSec := int64(10)
 
@@ -174,10 +414,13 @@ func TestListenAndRespond(t *testing.T) {
 		assert.Equal(t, taskReq.TaskID, req.TaskID)
 		assert.Equal(t, taskReq.Type, req.Type)
 		assert.Equal(t, taskReq.Data, req.Data)
-		assert.Equal(t, taskReq.WorkingState, req.WorkingState)
+
+		val, ok := req.WorkingState.Value(key)
+		assert.True(t, ok)
+		assert.Equal(t, "prevValue", val)
+		req.WorkingState.Set(key, "newValue")
 
 		return orbital.HandlerResponse{
-			WorkingState:      expWorkingState,
 			Result:            expState,
 			ReconcileAfterSec: expReconcileAfterSec,
 		}, nil
@@ -193,7 +436,11 @@ func TestListenAndRespond(t *testing.T) {
 	assert.Equal(t, taskReq.Type, resp.Type)
 	assert.Equal(t, taskReq.ExternalID, resp.ExternalID)
 	assert.Equal(t, taskReq.ETag, resp.ETag)
-	assert.Equal(t, expWorkingState, resp.WorkingState)
+	ws, err := orbital.DecodeWorkingState(resp.WorkingState)
+	assert.NoError(t, err)
+	val, ok := ws.Value(key)
+	assert.True(t, ok)
+	assert.Equal(t, "newValue", val)
 	assert.Equal(t, string(expState), resp.Status)
 	assert.Equal(t, expReconcileAfterSec, resp.ReconcileAfterSec)
 	assert.Empty(t, resp.ErrorMessage)
@@ -207,7 +454,7 @@ func TestOperatorCrypto(t *testing.T) {
 			ExternalID:   "external-id",
 			ETag:         "etag",
 			Data:         []byte("test data"),
-			WorkingState: []byte("prev working state"),
+			WorkingState: []byte("{}"),
 		}
 
 		var actVerifyTaskRequestCalls atomic.Int32
@@ -276,7 +523,6 @@ func TestOperatorCrypto(t *testing.T) {
 					actHandlerCalls.Add(1)
 					actHandlerCallChan <- struct{}{}
 					return orbital.HandlerResponse{
-						WorkingState:      []byte("after working state"),
 						Result:            orbital.ResultDone,
 						ReconcileAfterSec: int64(10),
 					}, nil
@@ -313,9 +559,9 @@ func TestOperatorCrypto(t *testing.T) {
 			"type":  "jwt",
 		}
 
-		expWorkingState := []byte("after working state")
 		expStatus := string(orbital.ResultDone)
 		expReconcileAfterSec := int64(19)
+		expWorkingState := []byte("{}")
 
 		taskReq := orbital.TaskRequest{
 			TaskID:       uuid.New(),
@@ -323,7 +569,7 @@ func TestOperatorCrypto(t *testing.T) {
 			ExternalID:   "external-id",
 			ETag:         "etag",
 			Data:         []byte("test data"),
-			WorkingState: []byte("prev working state"),
+			WorkingState: []byte("{}"),
 		}
 		expResponse := orbital.TaskResponse{
 			TaskID:            taskReq.TaskID,
@@ -405,7 +651,6 @@ func TestOperatorCrypto(t *testing.T) {
 				h := func(_ context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
 					assert.Equal(t, taskReq.TaskID, req.TaskID)
 					return orbital.HandlerResponse{
-						WorkingState:      expWorkingState,
 						Result:            orbital.Result(expStatus),
 						ReconcileAfterSec: expReconcileAfterSec,
 					}, nil

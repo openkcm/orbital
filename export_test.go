@@ -110,3 +110,11 @@ func GetRepoJobForUpdate(r *Repository) func(ctx context.Context, id uuid.UUID) 
 func ToCanonicalData[T TaskRequest | TaskResponse](in T) ([]byte, error) {
 	return toCanonicalData(in)
 }
+
+func DecodeWorkingState(data []byte) (*WorkingState, error) {
+	return decodeWorkingState(data)
+}
+
+func (w *WorkingState) Encode() ([]byte, error) {
+	return w.encode()
+}
