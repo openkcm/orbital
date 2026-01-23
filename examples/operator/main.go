@@ -45,11 +45,10 @@ func main() {
 	sendAndReceive()
 }
 
-func handleExample(_ context.Context, _ orbital.HandlerRequest) (orbital.HandlerResponse, error) {
-	return orbital.HandlerResponse{
-		Result:            orbital.ResultProcessing,
-		ReconcileAfterSec: 10,
-	}, nil
+func handleExample(_ context.Context, _ orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
+	resp.Result = orbital.ResultProcessing
+	resp.ReconcileAfterSec = 10
+	return nil
 }
 
 func sendAndReceive() {

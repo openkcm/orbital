@@ -154,7 +154,7 @@ func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, stor
 
 	operatorConfig := operatorConfig{
 		handlers: map[string]orbital.Handler{
-			taskType: func(_ context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+			taskType: func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
 				operatorOnce.Do(func() {
 					close(operatorDone)
 				})
@@ -165,10 +165,13 @@ func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, stor
 
 				time.Sleep(100 * time.Millisecond)
 
-				req.WorkingState.Set("progress", "100%")
-				return orbital.HandlerResponse{
-					Result: orbital.ResultDone,
-				}, nil
+				workingState, err := resp.WorkingState()
+				assert.NoError(t, err)
+				assert.NotNil(t, workingState)
+
+				workingState.Set("progress", "100%")
+				resp.Result = orbital.ResultDone
+				return nil
 			},
 		},
 	}
@@ -318,17 +321,20 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 
 	operatorConfig1 := operatorConfig{
 		handlers: map[string]orbital.Handler{
-			taskType1: func(_ context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+			taskType1: func(_ context.Context, _ orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
 				operator1Once.Do(func() {
 					close(operator1Done)
 				})
 
 				time.Sleep(100 * time.Millisecond)
 
-				req.WorkingState.Set("info", "task 1 completed")
-				return orbital.HandlerResponse{
-					Result: orbital.ResultDone,
-				}, nil
+				workingState, err := resp.WorkingState()
+				assert.NoError(t, err)
+				assert.NotNil(t, workingState)
+
+				workingState.Set("info", "task 1 completed")
+				resp.Result = orbital.ResultDone
+				return nil
 			},
 		},
 	}
@@ -339,17 +345,20 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 
 	operatorConfig2 := operatorConfig{
 		handlers: map[string]orbital.Handler{
-			taskType2: func(_ context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+			taskType2: func(_ context.Context, _ orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
 				operator2Once.Do(func() {
 					close(operator2Done)
 				})
 
 				time.Sleep(100 * time.Millisecond)
 
-				req.WorkingState.Set("info", "task 2 completed")
-				return orbital.HandlerResponse{
-					Result: orbital.ResultDone,
-				}, nil
+				workingState, err := resp.WorkingState()
+				assert.NoError(t, err)
+				assert.NotNil(t, workingState)
+
+				workingState.Set("info", "task 2 completed")
+				resp.Result = orbital.ResultDone
+				return nil
 			},
 		},
 	}
@@ -495,17 +504,20 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *testEnviron
 
 	operatorConfig := operatorConfig{
 		handlers: map[string]orbital.Handler{
-			taskType: func(_ context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+			taskType: func(_ context.Context, _ orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
 				operatorOnce.Do(func() {
 					close(operatorDone)
 				})
 
 				time.Sleep(100 * time.Millisecond)
 
-				req.WorkingState.Set("attempt", "failed")
-				return orbital.HandlerResponse{
-					Result: orbital.ResultFailed,
-				}, nil
+				workingState, err := resp.WorkingState()
+				assert.NoError(t, err)
+				assert.NotNil(t, workingState)
+
+				workingState.Set("attempt", "failed")
+				resp.Result = orbital.ResultFailed
+				return nil
 			},
 		},
 	}
@@ -570,7 +582,7 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 
 	var handlerCalls int32
 	operatorDone := make(chan struct{})
-	expectedCycles := 3
+	expectedCycles := float64(3)
 
 	var jobDoneCalls, jobCanceledCalls, jobFailedCalls int32
 	terminationDone := make(chan orbital.Job, 1)
@@ -633,29 +645,30 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 
 	operatorConfig := operatorConfig{
 		handlers: map[string]orbital.Handler{
-			taskType: func(_ context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+			taskType: func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
 				mu.Lock()
 				defer mu.Unlock()
 
 				calls := atomic.AddInt32(&handlerCalls, 1)
 				t.Logf("Handler called for task %s (call #%d)", req.TaskID, calls)
 
-				counter := req.WorkingState.Inc("cycle_counter")
+				workingState, err := resp.WorkingState()
+				assert.NoError(t, err)
+				assert.NotNil(t, workingState)
+
+				counter := workingState.Inc("cycle_counter")
 
 				time.Sleep(100 * time.Millisecond)
 
 				if counter < expectedCycles {
-					return orbital.HandlerResponse{
-						Result:            orbital.ResultProcessing,
-						ReconcileAfterSec: 1,
-					}, nil
+					resp.ReconcileAfterSec = 1
+					return nil
 				}
 
 				close(operatorDone)
 
-				return orbital.HandlerResponse{
-					Result: orbital.ResultDone,
-				}, nil
+				resp.Result = orbital.ResultDone
+				return nil
 			},
 		},
 	}
@@ -701,7 +714,7 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 
 	task := tasks[0]
 	assert.Equal(t, orbital.TaskStatusDone, task.Status)
-	assert.Equal(t, fmt.Appendf([]byte{}, `{"cycle_counter":%d}`, expectedCycles), task.WorkingState)
+	assert.Equal(t, fmt.Appendf([]byte{}, `{"cycle_counter":%d}`, int(expectedCycles)), task.WorkingState)
 	assert.Zero(t, task.ReconcileCount)
 	assert.Equal(t, int64(expectedCycles), task.TotalSentCount, "task should have sent %d times", expectedCycles)
 	assert.Equal(t, int64(expectedCycles), task.TotalReceivedCount, "task should have received %d times", expectedCycles)

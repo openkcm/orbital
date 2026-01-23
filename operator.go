@@ -2,7 +2,6 @@ package orbital
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -44,142 +43,68 @@ type (
 )
 
 type (
-	// Handler is a function that takes a HandlerRequest,
-	// and returns a HandlerResponse and an error.
-	Handler func(ctx context.Context, request HandlerRequest) (HandlerResponse, error)
+	// Handler processes task requests and populates the response.
+	// It returns an error if the task cannot be processed successfully.
+	Handler func(ctx context.Context, request HandlerRequest, response *HandlerResponse) error
 
-	// HandlerRequest contains the fields extracted from orbital.TaskRequest
+	// HandlerRequest contains information extracted from orbital.TaskRequest
 	// that are relevant for the operator's processing.
 	HandlerRequest struct {
-		TaskID       uuid.UUID
-		Type         string
-		Data         []byte
-		WorkingState *WorkingState
+		TaskID uuid.UUID
+		Type   string
+		Data   []byte
 	}
 
-	// HandlerResponse contains the fields extracted from orbital.TaskResponse
-	// that can be modified by the operator during processing.
+	// HandlerResponse contains information that can be modified by the operator
+	// and will be populated to the orbital.TaskResponse.
 	HandlerResponse struct {
+		RawWorkingState   []byte
 		Result            Result
 		ReconcileAfterSec int64
-	}
 
-	// WorkingState represents the working state of a task.
-	// It provides methods for storing arbitrary key-value pairs
-	// and convenience methods for tracking integer metrics.
-	WorkingState struct {
-		s  map[string]any
-		mu sync.RWMutex
+		workingState *WorkingState
 	}
 
 	// Result represents the result of the operator's processing.
 	Result string
 )
 
+// WorkingState returns the WorkingState from the HandlerResponse.
+// It returns an error if the decoding of the RawWorkingState fails.
+//
+// The WorkingState is automatically encoded back into the orbital.TaskResponse.
+// If the working state is not decoded,
+// if the changes are discarded,
+// or if there is an error during encoding,
+// the RawWorkingState field will take precedence.
+func (r *HandlerResponse) WorkingState() (*WorkingState, error) {
+	if r.workingState != nil {
+		return r.workingState, nil
+	}
+
+	if len(r.RawWorkingState) == 0 {
+		workingState := &WorkingState{
+			s: make(map[string]any),
+		}
+		r.workingState = workingState
+		return workingState, nil
+	}
+
+	workingState, err := decodeWorkingState(r.RawWorkingState)
+	if err != nil {
+		return nil, err
+	}
+	r.workingState = workingState
+
+	return workingState, nil
+}
+
 var (
 	ErrHandlerNil                 = errors.New("handler cannot be nil")
 	ErrBufferSizeNegative         = errors.New("buffer size cannot be negative")
 	ErrNumberOfWorkersNotPositive = errors.New("number of workers must be greater than 0")
-	ErrWorkingStateInvalid        = errors.New("invalid working state")
 	ErrUnknownTaskType            = errors.New("unknown task type")
 )
-
-// decodeWorkingState decodes a byte slice into a WorkingState.
-func decodeWorkingState(data []byte) (*WorkingState, error) {
-	if len(data) == 0 {
-		return &WorkingState{
-			s: make(map[string]any),
-		}, nil
-	}
-	var state map[string]any
-	err := json.Unmarshal(data, &state)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrWorkingStateInvalid, err)
-	}
-	return &WorkingState{
-		s: state,
-	}, nil
-}
-
-// Set sets a key-value pair in the WorkingState.
-func (w *WorkingState) Set(key string, value any) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.s == nil {
-		w.s = make(map[string]any)
-	}
-	w.s[key] = value
-}
-
-// Value gets the value for a key from the WorkingState.
-func (w *WorkingState) Value(key string) (any, bool) {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	if w.s == nil {
-		return nil, false
-	}
-	val, ok := w.s[key]
-	return val, ok
-}
-
-// Inc increments the value of a key and returns the new value.
-func (w *WorkingState) Inc(key string) int {
-	return w.add(key, 1)
-}
-
-// Dec decrements a key and returns the new value.
-func (w *WorkingState) Dec(key string) int {
-	return w.add(key, -1)
-}
-
-// Add adds the specidied amount to a key and returns the new value.
-func (w *WorkingState) Add(key string, amount int) int {
-	return w.add(key, amount)
-}
-
-// Sub subtracts the specidied amount from a key and returns the new value.
-func (w *WorkingState) Sub(key string, amount int) int {
-	return w.add(key, -amount)
-}
-
-func (w *WorkingState) add(key string, amount int) int {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.s == nil {
-		w.s = make(map[string]any)
-	}
-	val, ok := w.s[key]
-	if !ok {
-		w.s[key] = amount
-		return amount
-	}
-	var num int
-	switch v := val.(type) {
-	case int:
-		num = v
-	case float64: // JSON numbers are decoded as float64
-		num = int(v)
-	default:
-		num = 0
-	}
-	num += amount
-	w.s[key] = num
-	return num
-}
-
-// encode encodes the WorkingState to a byte slice.
-func (w *WorkingState) encode() ([]byte, error) {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	if w.s == nil {
-		return []byte{}, nil
-	}
-	bytes, err := json.Marshal(w.s)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrWorkingStateInvalid, err)
-	}
-	return bytes, nil
-}
 
 // NewOperator creates a new Operator instance with the given Responder and options.
 func NewOperator(target OperatorTarget, opts ...Option) (*Operator, error) {
@@ -323,31 +248,36 @@ func (o *Operator) handleRequest(ctx context.Context, req TaskRequest) (TaskResp
 		return resp, fmt.Errorf("%w: %s", ErrUnknownTaskType, req.Type)
 	}
 
-	workingState, err := decodeWorkingState(req.WorkingState)
-	if err != nil {
-		return resp, err
+	hReq := HandlerRequest{
+		TaskID: req.TaskID,
+		Type:   req.Type,
+		Data:   req.Data,
 	}
-
+	hResp := &HandlerResponse{
+		RawWorkingState: req.WorkingState,
+		Result:          ResultProcessing,
+	}
 	start := time.Now()
-	hResp, err := h(ctx, HandlerRequest{
-		TaskID:       req.TaskID,
-		Type:         req.Type,
-		Data:         req.Data,
-		WorkingState: workingState,
-	})
-	slogctx.Debug(ctx, "task handler finished", "status", hResp.Result, "processingTime", time.Since(start))
+	err := h(ctx, hReq, hResp)
+	slogctx.Debug(ctx, "task handler finished", "processingTime", time.Since(start))
 	if err != nil {
 		return resp, err
 	}
 
-	bytes, err := workingState.encode()
-	if err != nil {
-		return resp, err
-	}
-
-	resp.WorkingState = bytes
 	resp.Status = string(hResp.Result)
 	resp.ReconcileAfterSec = hResp.ReconcileAfterSec
+	if hResp.workingState == nil || hResp.workingState.s == nil {
+		resp.WorkingState = hResp.RawWorkingState
+		return resp, nil
+	}
+
+	encodedState, err := hResp.workingState.encode()
+	if err != nil {
+		slogctx.Warn(ctx, "WARNING: encoding working state, %v", err)
+		resp.WorkingState = hResp.RawWorkingState
+		return resp, nil
+	}
+	resp.WorkingState = encodedState
 
 	return resp, nil
 }
