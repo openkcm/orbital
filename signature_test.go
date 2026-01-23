@@ -24,22 +24,20 @@ func TestResponderSignatureHandler(t *testing.T) {
 			expErr error
 		}{
 			{
-				name:   "should return error if signer is nil",
+				name:   "should not return error if signer is nil",
 				signer: nil,
 				verify: &jwtsigning.Verifier{},
-				expErr: orbital.ErrSignerNil,
 			},
 			{
-				name:   "should return error if verifier is nil",
+				name:   "should not return error if verifier is nil",
 				signer: &jwtsigning.Signer{},
 				verify: nil,
-				expErr: orbital.ErrVerifierNil,
 			},
 			{
 				name:   "should return error if both signer and verifier are nil",
 				signer: nil,
 				verify: nil,
-				expErr: orbital.ErrSignerNil,
+				expErr: orbital.ErrSignerVerifierNil,
 			},
 			{
 				name:   "should not return error if both signer and verifier are not nil",
@@ -76,22 +74,20 @@ func TestInitiatorSignatureHandler(t *testing.T) {
 			expErr error
 		}{
 			{
-				name:   "should return error if signer is nil",
+				name:   "should not return error if signer is nil",
 				signer: nil,
 				verify: &jwtsigning.Verifier{},
-				expErr: orbital.ErrSignerNil,
 			},
 			{
-				name:   "should return error if verifier is nil",
+				name:   "should not return error if verifier is nil",
 				signer: &jwtsigning.Signer{},
 				verify: nil,
-				expErr: orbital.ErrVerifierNil,
 			},
 			{
 				name:   "should return error if both signer and verifier are nil",
 				signer: nil,
 				verify: nil,
-				expErr: orbital.ErrSignerNil,
+				expErr: orbital.ErrSignerVerifierNil,
 			},
 			{
 				name:   "should not return error if both signer and verifier are not nil",
@@ -119,6 +115,58 @@ func TestInitiatorSignatureHandler(t *testing.T) {
 }
 
 func TestSignAndVerify(t *testing.T) {
+	t.Run("initiator signature handler ", func(t *testing.T) {
+		t.Run("if signer is nil then during signing it should return empty signature and no error", func(t *testing.T) {
+			// given
+			subj, err := orbital.NewInitiatorSignatureHandler(nil, &jwtsigning.Verifier{})
+			assert.NoError(t, err)
+
+			// when
+			result, err := subj.Sign(t.Context(), orbital.TaskRequest{})
+
+			// then
+			assert.NoError(t, err)
+			assert.Empty(t, result)
+		})
+		t.Run("if verifier is nil then during verification it should return no error", func(t *testing.T) {
+			// given
+			subj, err := orbital.NewInitiatorSignatureHandler(&jwtsigning.Signer{}, nil)
+			assert.NoError(t, err)
+
+			// when
+			err = subj.Verify(t.Context(), orbital.TaskResponse{})
+
+			// then
+			assert.NoError(t, err)
+		})
+	})
+	t.Run("responder signature handler", func(t *testing.T) {
+		t.Run("if signer is nil then during signing it should return empty signature and no error", func(t *testing.T) {
+			// given
+			subj, err := orbital.NewResponderSignatureHandler(nil, &jwtsigning.Verifier{})
+			assert.NoError(t, err)
+
+			// when
+			result, err := subj.Sign(t.Context(), orbital.TaskResponse{})
+
+			// then
+			assert.NoError(t, err)
+			assert.Empty(t, result)
+		})
+
+		t.Run("if verifier is nil then during verification it should return no error", func(t *testing.T) {
+			// given
+			subj, err := orbital.NewResponderSignatureHandler(&jwtsigning.Signer{}, nil)
+			assert.NoError(t, err)
+
+			// when
+			err = subj.Verify(t.Context(), orbital.TaskRequest{})
+
+			// then
+			assert.NoError(t, err)
+		})
+	})
+
 	t.Run("taskrequest", func(t *testing.T) {
 		t.Run("sign and verify should be successful", func(t *testing.T) {
 			// given
