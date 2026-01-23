@@ -266,18 +266,15 @@ func (o *Operator) handleRequest(ctx context.Context, req TaskRequest) (TaskResp
 
 	resp.Status = string(hResp.Result)
 	resp.ReconcileAfterSec = hResp.ReconcileAfterSec
-	if hResp.workingState == nil || hResp.workingState.s == nil {
-		resp.WorkingState = hResp.RawWorkingState
-		return resp, nil
+	resp.WorkingState = hResp.RawWorkingState
+	if hResp.workingState != nil && hResp.workingState.s != nil {
+		encodedState, err := hResp.workingState.encode()
+		if err != nil {
+			slogctx.Warn(ctx, "encoding working state", "error", err)
+			return resp, nil
+		}
+		resp.WorkingState = encodedState
 	}
-
-	encodedState, err := hResp.workingState.encode()
-	if err != nil {
-		slogctx.Warn(ctx, "encoding working state", "error", err)
-		resp.WorkingState = hResp.RawWorkingState
-		return resp, nil
-	}
-	resp.WorkingState = encodedState
 
 	return resp, nil
 }

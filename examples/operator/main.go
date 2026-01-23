@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 
 	"github.com/google/uuid"
@@ -35,24 +34,44 @@ func main() {
 	handleErr("initializing operator", err)
 
 	// Register a handler for the "example" task type
-	err = operator.RegisterHandler("example", handleExample)
+	err = operator.RegisterHandler("example", handlerExample)
 	handleErr("registering handler", err)
 
 	// Start the operator to listen for task requests and respond
 	operator.ListenAndRespond(ctx)
 
 	// Send a task request to the operator via the AMQP message broker and wait for the response
-	sendAndReceive()
+	sendAndReceive(ctx)
 }
 
-func handleExample(_ context.Context, _ orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
+func handlerExample(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
+	log.Printf("Received handler request:\n \tTaskID: %s\n \tType: %s\n \tData: %s\n",
+		req.TaskID, req.Type, string(req.Data))
+
+	log.Printf("Handler response default:\n \tResult: %s\n \t ReconcileAfterSec%d\n \tRawWorkingState%s\n",
+		resp.Result, resp.ReconcileAfterSec, string(resp.RawWorkingState))
+
+	workingState, err := resp.WorkingState() // decode existing working state
+	handleErr("decoding working state", err)
+
+	counter := workingState.Inc("attempts")
+	if counter > 3 {
+		resp.Result = orbital.ResultDone
+		return nil
+	}
+
+	workingState.Set("motivation", "keep trying")
+
 	resp.Result = orbital.ResultProcessing
 	resp.ReconcileAfterSec = 10
+
+	log.Printf("Handler response after update:\n \tResult: %s\n \t ReconcileAfterSec%d\n \tRawWorkingState%s\n",
+		resp.Result, resp.ReconcileAfterSec, string(resp.RawWorkingState))
+
 	return nil
 }
 
-func sendAndReceive() {
-	ctx := context.Background()
+func sendAndReceive(ctx context.Context) {
 	initiator, err := amqp.NewClient(ctx, codec.JSON{}, amqp.ConnectionInfo{
 		URL:    connInfo.URL,
 		Target: connInfo.Source, // use the responder source as target for the initiator
@@ -61,16 +80,16 @@ func sendAndReceive() {
 	handleErr("initializing initiator", err)
 
 	req := orbital.TaskRequest{
-		TaskID:     uuid.New(),
-		ETag:       "example-etag",
-		Type:       "example",
-		ExternalID: "example-external-id",
-		Data:       []byte("example data"),
+		TaskID:       uuid.New(),
+		ETag:         "example-etag",
+		Type:         "example",
+		ExternalID:   "example-external-id",
+		Data:         []byte("example data"),
+		WorkingState: []byte(`{"someField":"someValue"}`), // example existing working state
 	}
 
-	reqJSON, err := json.MarshalIndent(req, "", "  ") // will base64 encode the data field
-	handleErr("marshaling request to JSON", err)
-	log.Printf("Sent request: %s\n", string(reqJSON))
+	log.Printf("Sent task request:\n \tTaskID: %s\n \tType: %s\n \tExternalID: %s\n \tData: %s\n \tWorkingState: %s\n",
+		req.TaskID, req.Type, req.ExternalID, string(req.Data), string(req.WorkingState))
 
 	err = initiator.SendTaskRequest(ctx, req)
 	handleErr("sending request", err)
@@ -78,9 +97,8 @@ func sendAndReceive() {
 	resp, err := initiator.ReceiveTaskResponse(ctx)
 	handleErr("receiving response", err)
 
-	respJSON, err := json.MarshalIndent(resp, "", "  ") // will base64 encode the working state field
-	handleErr("marshaling response to JSON", err)
-	log.Printf("Received response: %s\n", string(respJSON))
+	log.Printf("Received task response:\n \tTaskID: %s\n \tType: %s\n \tStatus: %s\n \tReconcileAfterSec: %d\n \tWorkingState: %s\n",
+		resp.TaskID, resp.Type, resp.Status, resp.ReconcileAfterSec, string(resp.WorkingState))
 }
 
 func handleErr(msg string, err error) {
