@@ -216,12 +216,10 @@ func TestListenAndRespond_ErrorResponse(t *testing.T) {
 		name      string
 		taskType  string
 		handler   orbital.Handler
-		expStatus orbital.TaskStatus
 		expErrMsg string
 	}{
 		{
 			name:      "unknown task type",
-			expStatus: orbital.TaskStatusFailed,
 			expErrMsg: orbital.ErrUnknownTaskType.Error(),
 		},
 		{
@@ -230,7 +228,6 @@ func TestListenAndRespond_ErrorResponse(t *testing.T) {
 			handler: func(_ context.Context, _ orbital.HandlerRequest, _ *orbital.HandlerResponse) error {
 				return assert.AnError
 			},
-			expStatus: orbital.TaskStatusFailed,
 			expErrMsg: assert.AnError.Error(),
 		},
 	}

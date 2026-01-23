@@ -228,7 +228,7 @@ func (o *Operator) verifySignature(ctx context.Context, req TaskRequest) error {
 	if verifier != nil {
 		err := verifier.Verify(ctx, req)
 		if err != nil {
-			slogctx.Error(ctx, "error while verifying task request signature", "error", err)
+			slogctx.Error(ctx, "verifying task request signature", "error", err)
 		}
 		return err
 	}
@@ -273,7 +273,7 @@ func (o *Operator) handleRequest(ctx context.Context, req TaskRequest) (TaskResp
 
 	encodedState, err := hResp.workingState.encode()
 	if err != nil {
-		slogctx.Warn(ctx, "WARNING: encoding working state, %v", err)
+		slogctx.Warn(ctx, "encoding working state", "error", err)
 		resp.WorkingState = hResp.RawWorkingState
 		return resp, nil
 	}
@@ -287,7 +287,7 @@ func (o *Operator) createSignature(ctx context.Context, resp TaskResponse) (Sign
 	if signer != nil {
 		signature, err := signer.Sign(ctx, resp)
 		if err != nil {
-			slogctx.Error(ctx, "ERROR: signing task response, %v", err)
+			slogctx.Error(ctx, "signing task response", "error", err)
 		}
 		return signature, err
 	}
@@ -295,7 +295,7 @@ func (o *Operator) createSignature(ctx context.Context, resp TaskResponse) (Sign
 }
 
 func (o *Operator) sendErrorResponse(ctx context.Context, resp TaskResponse, err error) {
-	slogctx.Error(ctx, "ERROR: handling task request, %v", err)
+	slogctx.Error(ctx, "handling task request", "error", err)
 	resp.Status = string(ResultFailed)
 	resp.ErrorMessage = err.Error()
 	err = o.target.Client.SendTaskResponse(ctx, resp)
@@ -304,7 +304,7 @@ func (o *Operator) sendErrorResponse(ctx context.Context, resp TaskResponse, err
 
 func handleError(ctx context.Context, msg string, err error) {
 	if err != nil {
-		slogctx.Error(ctx, "ERROR: %s, %v", msg, err)
+		slogctx.Error(ctx, msg, "error", err)
 		return
 	}
 	slogctx.Debug(ctx, msg)
