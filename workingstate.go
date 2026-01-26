@@ -45,11 +45,15 @@ func (w *WorkingState) Set(key string, value any) {
 func (w *WorkingState) Value(key string) (any, bool) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	if w.s == nil {
-		return nil, false
-	}
 	val, ok := w.s[key]
 	return val, ok
+}
+
+// Delete removes a key from the WorkingState.
+func (w *WorkingState) Delete(key string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	delete(w.s, key)
 }
 
 // Inc increments the value of a key and returns the new value.
@@ -62,12 +66,12 @@ func (w *WorkingState) Dec(key string) float64 {
 	return w.add(key, -1)
 }
 
-// Add adds the specidied amount to a key and returns the new value.
+// Add adds the specified amount to a key and returns the new value.
 func (w *WorkingState) Add(key string, amount float64) float64 {
 	return w.add(key, amount)
 }
 
-// Sub subtracts the specidied amount from a key and returns the new value.
+// Sub subtracts the specified amount from a key and returns the new value.
 func (w *WorkingState) Sub(key string, amount float64) float64 {
 	return w.add(key, -amount)
 }

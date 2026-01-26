@@ -22,7 +22,7 @@ func TestWorkingState_SetAndValue(t *testing.T) {
 			expValue: "value1",
 		},
 		{
-			name:     "set and get float64eger value",
+			name:     "set and get float64 value",
 			key:      "key2",
 			value:    42,
 			expValue: 42,
@@ -51,6 +51,25 @@ func TestWorkingState_SetAndValue(t *testing.T) {
 			assert.Equal(t, tt.expValue, val)
 		})
 	}
+
+	t.Run("get from empty WorkingState", func(t *testing.T) {
+		ws := &orbital.WorkingState{}
+		_, ok := ws.Value("nonexistent")
+		assert.False(t, ok)
+	})
+}
+
+func TestWorkingState_Delete(t *testing.T) {
+	ws := &orbital.WorkingState{}
+	ws.Set("key1", "value1")
+
+	ws.Delete("key1")
+
+	_, ok := ws.Value("key1")
+	assert.False(t, ok)
+
+	// ensure deleting a non-existent key does not cause issues
+	ws.Delete("nonexistent")
 }
 
 func TestWorkingState_GaugeMethods(t *testing.T) {
