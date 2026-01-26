@@ -185,13 +185,11 @@ func NewOperatorTracker(ctx context.Context, env *testEnvironment, name string) 
 	}
 	tracker.operator = operator
 
-	handler := func(ctx context.Context, request orbital.HandlerRequest) (orbital.HandlerResponse, error) {
-		tracker.noOfTaskProcessed.Add(request.TaskID.String(), request)
-		slogctx.Info(ctx, "processing task", "operatorName", tracker.name, "data", string(request.Data))
-		return orbital.HandlerResponse{
-			WorkingState: []byte{},
-			Result:       orbital.ResultDone,
-		}, nil
+	handler := func(ctx context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
+		tracker.noOfTaskProcessed.Add(req.TaskID.String(), req)
+		slogctx.Info(ctx, "processing task", "operatorName", tracker.name, "data", string(req.Data))
+		resp.Result = orbital.ResultDone
+		return nil
 	}
 
 	taskType := deriveTaskType(name)

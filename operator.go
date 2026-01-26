@@ -3,6 +3,7 @@ package orbital
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"log/slog"
 	"sync"
@@ -42,38 +43,68 @@ type (
 )
 
 type (
-	// Handler is a function that takes a HandlerRequest,
-	// and returns a HandlerResponse and an error.
-	Handler func(ctx context.Context, request HandlerRequest) (HandlerResponse, error)
+	// Handler processes task requests and populates the response.
+	// It returns an error if the task cannot be processed successfully.
+	Handler func(ctx context.Context, request HandlerRequest, response *HandlerResponse) error
 
-	// HandlerRequest contains the fields extracted from orbital.TaskRequest
+	// HandlerRequest contains information extracted from orbital.TaskRequest
 	// that are relevant for the operator's processing.
 	HandlerRequest struct {
-		TaskID       uuid.UUID
-		Type         string
-		Data         []byte
-		WorkingState []byte
+		TaskID uuid.UUID
+		Type   string
+		Data   []byte
 	}
 
-	// HandlerResponse contains the fields extracted from orbital.TaskResponse
-	// that can be modified by the operator during processing.
+	// HandlerResponse contains information that can be modified by the operator
+	// and will be populated to the orbital.TaskResponse.
 	HandlerResponse struct {
-		WorkingState      []byte
+		RawWorkingState   []byte
 		Result            Result
 		ReconcileAfterSec int64
+
+		workingState *WorkingState
 	}
 
 	// Result represents the result of the operator's processing.
 	Result string
 )
 
+// WorkingState returns the WorkingState from the HandlerResponse.
+// It returns an error if the decoding of the RawWorkingState fails.
+//
+// The WorkingState is automatically encoded back into the orbital.TaskResponse.
+// If the working state is not decoded,
+// if the changes are discarded,
+// or if there is an error during encoding,
+// the RawWorkingState field will take precedence.
+func (r *HandlerResponse) WorkingState() (*WorkingState, error) {
+	if r.workingState != nil {
+		return r.workingState, nil
+	}
+
+	if len(r.RawWorkingState) == 0 {
+		workingState := &WorkingState{
+			s: make(map[string]any),
+		}
+		r.workingState = workingState
+		return workingState, nil
+	}
+
+	workingState, err := decodeWorkingState(r.RawWorkingState)
+	if err != nil {
+		return nil, err
+	}
+	r.workingState = workingState
+
+	return workingState, nil
+}
+
 var (
 	ErrHandlerNil                 = errors.New("handler cannot be nil")
 	ErrBufferSizeNegative         = errors.New("buffer size cannot be negative")
 	ErrNumberOfWorkersNotPositive = errors.New("number of workers must be greater than 0")
+	ErrUnknownTaskType            = errors.New("unknown task type")
 )
-
-var ErrMsgUnknownTaskType = "unknown task type"
 
 // NewOperator creates a new Operator instance with the given Responder and options.
 func NewOperator(target OperatorTarget, opts ...Option) (*Operator, error) {
@@ -134,8 +165,6 @@ func (o *Operator) RegisterHandler(taskType string, h Handler) error {
 }
 
 // ListenAndRespond starts listening for task requests and responding to them.
-//
-// NOTE: Handlers must be registered before calling ListenAndRespond.
 func (o *Operator) ListenAndRespond(ctx context.Context) {
 	go o.startListening(ctx)
 	o.startResponding(ctx)
@@ -173,36 +202,11 @@ func (o *Operator) startResponding(ctx context.Context) {
 						continue
 					}
 
-					resp := TaskResponse{
-						TaskID:     req.TaskID,
-						Type:       req.Type,
-						ExternalID: req.ExternalID,
-						ETag:       req.ETag,
-					}
-
-					h, ok := o.handlerRegistry.r[req.Type]
-					if !ok {
-						o.sendErrorResponse(logCtx, resp, ErrMsgUnknownTaskType)
-						continue
-					}
-
-					start := time.Now()
-					hResp, err := h(logCtx, HandlerRequest{
-						TaskID:       req.TaskID,
-						Type:         req.Type,
-						Data:         req.Data,
-						WorkingState: req.WorkingState,
-					})
-					elapsed := time.Since(start)
-					slogctx.Debug(logCtx, "task handler finished", "status", hResp.Result, "processingTime", elapsed)
+					resp, err := o.handleRequest(logCtx, req)
 					if err != nil {
-						o.sendErrorResponse(logCtx, resp, err.Error())
+						o.sendErrorResponse(logCtx, resp, err)
 						continue
 					}
-
-					resp.WorkingState = hResp.WorkingState
-					resp.Status = string(hResp.Result)
-					resp.ReconcileAfterSec = hResp.ReconcileAfterSec
 
 					signature, err := o.createSignature(logCtx, resp)
 					if err != nil {
@@ -224,11 +228,55 @@ func (o *Operator) verifySignature(ctx context.Context, req TaskRequest) error {
 	if verifier != nil {
 		err := verifier.Verify(ctx, req)
 		if err != nil {
-			slogctx.Error(ctx, "error while verifying task request signature", "error", err)
+			slogctx.Error(ctx, "verifying task request signature", "error", err)
 		}
 		return err
 	}
 	return nil
+}
+
+func (o *Operator) handleRequest(ctx context.Context, req TaskRequest) (TaskResponse, error) {
+	resp := TaskResponse{
+		TaskID:     req.TaskID,
+		Type:       req.Type,
+		ExternalID: req.ExternalID,
+		ETag:       req.ETag,
+	}
+
+	h, ok := o.handlerRegistry.r[req.Type]
+	if !ok {
+		return resp, fmt.Errorf("%w: %s", ErrUnknownTaskType, req.Type)
+	}
+
+	hReq := HandlerRequest{
+		TaskID: req.TaskID,
+		Type:   req.Type,
+		Data:   req.Data,
+	}
+	hResp := &HandlerResponse{
+		RawWorkingState: req.WorkingState,
+		Result:          ResultProcessing,
+	}
+	start := time.Now()
+	err := h(ctx, hReq, hResp)
+	slogctx.Debug(ctx, "task handler finished", "processingTime", time.Since(start))
+	if err != nil {
+		return resp, err
+	}
+
+	resp.Status = string(hResp.Result)
+	resp.ReconcileAfterSec = hResp.ReconcileAfterSec
+	resp.WorkingState = hResp.RawWorkingState
+	if hResp.workingState != nil && hResp.workingState.s != nil {
+		encodedState, err := hResp.workingState.encode()
+		if err != nil {
+			slogctx.Warn(ctx, "encoding working state", "error", err)
+			return resp, nil
+		}
+		resp.WorkingState = encodedState
+	}
+
+	return resp, nil
 }
 
 func (o *Operator) createSignature(ctx context.Context, resp TaskResponse) (Signature, error) {
@@ -236,23 +284,24 @@ func (o *Operator) createSignature(ctx context.Context, resp TaskResponse) (Sign
 	if signer != nil {
 		signature, err := signer.Sign(ctx, resp)
 		if err != nil {
-			slogctx.Error(ctx, "ERROR: signing task response, %v", err)
+			slogctx.Error(ctx, "signing task response", "error", err)
 		}
 		return signature, err
 	}
 	return Signature{}, nil
 }
 
-func (o *Operator) sendErrorResponse(ctx context.Context, resp TaskResponse, errMsg string) {
+func (o *Operator) sendErrorResponse(ctx context.Context, resp TaskResponse, err error) {
+	slogctx.Error(ctx, "handling task request", "error", err)
 	resp.Status = string(ResultFailed)
-	resp.ErrorMessage = errMsg
-	err := o.target.Client.SendTaskResponse(ctx, resp)
+	resp.ErrorMessage = err.Error()
+	err = o.target.Client.SendTaskResponse(ctx, resp)
 	handleError(ctx, "sending task response", err)
 }
 
 func handleError(ctx context.Context, msg string, err error) {
 	if err != nil {
-		slogctx.Error(ctx, "ERROR: %s, %v", msg, err)
+		slogctx.Error(ctx, msg, "error", err)
 		return
 	}
 	slogctx.Debug(ctx, msg)

@@ -154,7 +154,7 @@ func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, stor
 
 	operatorConfig := operatorConfig{
 		handlers: map[string]orbital.Handler{
-			taskType: func(_ context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+			taskType: func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
 				operatorOnce.Do(func() {
 					close(operatorDone)
 				})
@@ -165,10 +165,13 @@ func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, stor
 
 				time.Sleep(100 * time.Millisecond)
 
-				return orbital.HandlerResponse{
-					WorkingState: []byte("task completed"),
-					Result:       orbital.ResultDone,
-				}, nil
+				workingState, err := resp.WorkingState()
+				assert.NoError(t, err)
+				assert.NotNil(t, workingState)
+
+				workingState.Set("progress", "100%")
+				resp.Result = orbital.ResultDone
+				return nil
 			},
 		},
 	}
@@ -215,7 +218,7 @@ func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, stor
 	assert.Equal(t, taskType, task.Type)
 	assert.Equal(t, taskTarget, task.Target)
 	assert.Equal(t, []byte("task-data"), task.Data)
-	assert.Equal(t, []byte("task completed"), task.WorkingState)
+	assert.JSONEq(t, `{"progress":"100%"}`, string(task.WorkingState))
 
 	assert.Zero(t, task.ReconcileCount, "task reconcile count should be reset to zero")
 	assert.Equal(t, int64(1), task.TotalSentCount)
@@ -318,17 +321,20 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 
 	operatorConfig1 := operatorConfig{
 		handlers: map[string]orbital.Handler{
-			taskType1: func(_ context.Context, _ orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+			taskType1: func(_ context.Context, _ orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
 				operator1Once.Do(func() {
 					close(operator1Done)
 				})
 
 				time.Sleep(100 * time.Millisecond)
 
-				return orbital.HandlerResponse{
-					WorkingState: []byte("task 1 done"),
-					Result:       orbital.ResultDone,
-				}, nil
+				workingState, err := resp.WorkingState()
+				assert.NoError(t, err)
+				assert.NotNil(t, workingState)
+
+				workingState.Set("info", "task 1 completed")
+				resp.Result = orbital.ResultDone
+				return nil
 			},
 		},
 	}
@@ -339,17 +345,20 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 
 	operatorConfig2 := operatorConfig{
 		handlers: map[string]orbital.Handler{
-			taskType2: func(_ context.Context, _ orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+			taskType2: func(_ context.Context, _ orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
 				operator2Once.Do(func() {
 					close(operator2Done)
 				})
 
 				time.Sleep(100 * time.Millisecond)
 
-				return orbital.HandlerResponse{
-					WorkingState: []byte("task 2 done"),
-					Result:       orbital.ResultDone,
-				}, nil
+				workingState, err := resp.WorkingState()
+				assert.NoError(t, err)
+				assert.NotNil(t, workingState)
+
+				workingState.Set("info", "task 2 completed")
+				resp.Result = orbital.ResultDone
+				return nil
 			},
 		},
 	}
@@ -405,7 +414,7 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 	assert.True(t, ok)
 	assert.Equal(t, orbital.TaskStatusDone, task1.Status)
 	assert.Equal(t, []byte("data-1"), task1.Data)
-	assert.Equal(t, []byte("task 1 done"), task1.WorkingState)
+	assert.JSONEq(t, `{"info":"task 1 completed"}`, string(task1.WorkingState))
 	assert.Zero(t, task1.ReconcileCount)
 	assert.Equal(t, int64(1), task1.TotalSentCount)
 	assert.Equal(t, int64(1), task1.TotalReceivedCount)
@@ -414,7 +423,7 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 	assert.True(t, ok)
 	assert.Equal(t, orbital.TaskStatusDone, task2.Status)
 	assert.Equal(t, []byte("data-2"), task2.Data)
-	assert.Equal(t, []byte("task 2 done"), task2.WorkingState)
+	assert.JSONEq(t, `{"info":"task 2 completed"}`, string(task2.WorkingState))
 	assert.Zero(t, task2.ReconcileCount)
 	assert.Equal(t, int64(1), task2.TotalSentCount)
 	assert.Equal(t, int64(1), task2.TotalReceivedCount)
@@ -495,17 +504,20 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *testEnviron
 
 	operatorConfig := operatorConfig{
 		handlers: map[string]orbital.Handler{
-			taskType: func(_ context.Context, _ orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+			taskType: func(_ context.Context, _ orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
 				operatorOnce.Do(func() {
 					close(operatorDone)
 				})
 
 				time.Sleep(100 * time.Millisecond)
 
-				return orbital.HandlerResponse{
-					WorkingState: []byte("task failed"),
-					Result:       orbital.ResultFailed,
-				}, nil
+				workingState, err := resp.WorkingState()
+				assert.NoError(t, err)
+				assert.NotNil(t, workingState)
+
+				workingState.Set("attempt", "failed")
+				resp.Result = orbital.ResultFailed
+				return nil
 			},
 		},
 	}
@@ -549,7 +561,7 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *testEnviron
 
 	task := tasks[0]
 	assert.Equal(t, orbital.TaskStatusFailed, task.Status)
-	assert.Equal(t, []byte("task failed"), task.WorkingState)
+	assert.JSONEq(t, `{"attempt":"failed"}`, string(task.WorkingState))
 	assert.Zero(t, task.ReconcileCount)
 	assert.Equal(t, int64(1), task.TotalSentCount)
 	assert.Equal(t, int64(1), task.TotalReceivedCount)
@@ -570,7 +582,7 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 
 	var handlerCalls int32
 	operatorDone := make(chan struct{})
-	expectedCycles := int64(3)
+	expectedCycles := float64(3)
 
 	var jobDoneCalls, jobCanceledCalls, jobFailedCalls int32
 	terminationDone := make(chan orbital.Job, 1)
@@ -629,38 +641,34 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 	manager, err := createAndStartManager(ctxCancel, t, store, managerConfig)
 	assert.NoError(t, err)
 
-	workingStates := make([][]byte, 0, expectedCycles)
 	var mu sync.Mutex
 
 	operatorConfig := operatorConfig{
 		handlers: map[string]orbital.Handler{
-			taskType: func(_ context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
+			taskType: func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
 				mu.Lock()
 				defer mu.Unlock()
 
 				calls := atomic.AddInt32(&handlerCalls, 1)
-				t.Logf("Handler call #%d for task %s", calls, req.TaskID)
+				t.Logf("Handler called for task %s (call #%d)", req.TaskID, calls)
+
+				workingState, err := resp.WorkingState()
+				assert.NoError(t, err)
+				assert.NotNil(t, workingState)
+
+				counter := workingState.Inc("cycle_counter")
 
 				time.Sleep(100 * time.Millisecond)
 
-				if int64(calls) < expectedCycles {
-					state := fmt.Appendf(nil, "cycle %d in progress", calls)
-					workingStates = append(workingStates, state)
-					return orbital.HandlerResponse{
-						WorkingState:      state,
-						Result:            orbital.ResultProcessing,
-						ReconcileAfterSec: 1,
-					}, nil
+				if counter < expectedCycles {
+					resp.ReconcileAfterSec = 1
+					return nil
 				}
 
-				finalState := []byte("all cycles completed")
-				workingStates = append(workingStates, finalState)
 				close(operatorDone)
 
-				return orbital.HandlerResponse{
-					WorkingState: finalState,
-					Result:       orbital.ResultDone,
-				}, nil
+				resp.Result = orbital.ResultDone
+				return nil
 			},
 		},
 	}
@@ -689,7 +697,7 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 	}
 
 	finalCalls := atomic.LoadInt32(&handlerCalls)
-	assert.Equal(t, expectedCycles, int64(finalCalls), "handler should be called exactly %d times", expectedCycles)
+	assert.Equal(t, int64(expectedCycles), int64(finalCalls), "handler should be called exactly %d times", expectedCycles)
 
 	job, found, err := manager.GetJob(ctx, job.ID)
 	assert.NoError(t, err)
@@ -706,14 +714,12 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 
 	task := tasks[0]
 	assert.Equal(t, orbital.TaskStatusDone, task.Status)
-	assert.Equal(t, []byte("all cycles completed"), task.WorkingState)
+	assert.Equal(t, fmt.Appendf([]byte{}, `{"cycle_counter":%d}`, int(expectedCycles)), task.WorkingState)
 	assert.Zero(t, task.ReconcileCount)
-	assert.Equal(t, expectedCycles, task.TotalSentCount, "task should have sent %d times", expectedCycles)
-	assert.Equal(t, expectedCycles, task.TotalReceivedCount, "task should have received %d times", expectedCycles)
+	assert.Equal(t, int64(expectedCycles), task.TotalSentCount, "task should have sent %d times", expectedCycles)
+	assert.Equal(t, int64(expectedCycles), task.TotalReceivedCount, "task should have received %d times", expectedCycles)
 	assert.Positive(t, task.LastReconciledAt, "last_reconciled_at should be set")
 	assert.Equal(t, int64(0), task.ReconcileAfterSec, "reconcile_after_sec should be 0 for completed task")
-
-	assert.Len(t, workingStates, int(expectedCycles), "should have tracked all working states")
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&jobDoneCalls), "job done event function should be called exactly once")
 	assert.Equal(t, int32(0), atomic.LoadInt32(&jobCanceledCalls), "job canceled event function should not be called")

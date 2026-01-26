@@ -46,6 +46,7 @@ linters:
           - goconst
           - maintidx
           - cyclop
+          - nilerr
         path: _test.go
     paths:
       - third_party$
