@@ -421,9 +421,6 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, store *sql.SQ
 		},
 	}
 
-	ctxCancel, cancel = context.WithCancel(ctx)
-	defer cancel()
-
 	operatorTarget := orbital.OperatorTarget{Client: operatorClient, Verifier: responderHandler, Signer: responderHandler}
 	err = createAndStartOperatorWithTarget(ctxCancel, t, operatorTarget, operatorConfig)
 	require.NoError(t, err)
