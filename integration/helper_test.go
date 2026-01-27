@@ -46,12 +46,14 @@ type rabbitMQContainer struct {
 
 // managerConfig holds configuration for the manager.
 type managerConfig struct {
-	taskResolveFunc      orbital.TaskResolveFunc
-	jobConfirmFunc       orbital.JobConfirmFunc
-	managerTargets       map[string]orbital.ManagerTarget
-	jobDoneEventFunc     orbital.JobTerminatedEventFunc
-	jobCanceledEventFunc orbital.JobTerminatedEventFunc
-	jobFailedEventFunc   orbital.JobTerminatedEventFunc
+	taskResolveFunc       orbital.TaskResolveFunc
+	jobConfirmFunc        orbital.JobConfirmFunc
+	managerTargets        map[string]orbital.ManagerTarget
+	jobDoneEventFunc      orbital.JobTerminatedEventFunc
+	jobCanceledEventFunc  orbital.JobTerminatedEventFunc
+	jobFailedEventFunc    orbital.JobTerminatedEventFunc
+	maxReconcileCount     int64
+	backoffMaxIntervalSec int64
 }
 
 // operatorConfig holds configuration for the operator.
@@ -216,6 +218,12 @@ func createAndStartManager(ctx context.Context, t *testing.T, store *sql.SQL, co
 	manager.Config.ReconcileWorkerConfig.ExecInterval = 300 * time.Millisecond
 	manager.Config.NotifyWorkerConfig.ExecInterval = 200 * time.Millisecond
 	manager.Config.ConfirmJobAfter = 100 * time.Millisecond
+	if config.backoffMaxIntervalSec != 0 {
+		manager.Config.BackoffMaxIntervalSec = config.backoffMaxIntervalSec
+	}
+	if config.maxReconcileCount != 0 {
+		manager.Config.MaxReconcileCount = config.maxReconcileCount
+	}
 
 	err = manager.Start(ctx)
 	if err != nil {
@@ -234,8 +242,25 @@ func createAndStartOperator(ctx context.Context, t *testing.T, client orbital.Re
 		return fmt.Errorf("failed to create operator: %w", err)
 	}
 
+	return addHandlerAndListen(ctx, t, config, operator)
+}
+
+func createAndStartOperatorWithTarget(ctx context.Context, t *testing.T, target orbital.OperatorTarget, config operatorConfig) error {
+	t.Helper()
+
+	operator, err := orbital.NewOperator(target)
+	if err != nil {
+		return fmt.Errorf("failed to create operator: %w", err)
+	}
+
+	return addHandlerAndListen(ctx, t, config, operator)
+}
+
+func addHandlerAndListen(ctx context.Context, t *testing.T, config operatorConfig, operator *orbital.Operator) error {
+	t.Helper()
+
 	for taskType, handler := range config.handlers {
-		err = operator.RegisterHandler(taskType, handler)
+		err := operator.RegisterHandler(taskType, handler)
 		if err != nil {
 			return fmt.Errorf("failed to register handler for %s: %w", taskType, err)
 		}

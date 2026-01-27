@@ -38,20 +38,16 @@ var (
 )
 
 var (
-	ErrMissingMessageSignature = errors.New("signer missing message signature")
+	ErrMissingMessageSignature = errors.New("message signature not found in metadata")
 	ErrUnsupportedDataType     = errors.New("signer unsupported data type")
-	ErrSignerNil               = errors.New("signer cannot be nil")
-	ErrVerifierNil             = errors.New("verifier cannot be nil")
+	ErrSignerVerifierNil       = errors.New("both signer and verifier cannot be nil")
 )
 
 // NewInitiatorSignatureHandler creates a new InitiatorSignatureHandler using the provided signer and verifier.
-// Returns an error if either signer or verifier is nil.
+// Returns an error if both signer or verifier is nil.
 func NewInitiatorSignatureHandler(signer *jwtsigning.Signer, verifier *jwtsigning.Verifier) (*InitiatorSignatureHandler, error) {
-	if signer == nil {
-		return nil, ErrSignerNil
-	}
-	if verifier == nil {
-		return nil, ErrVerifierNil
+	if signer == nil && verifier == nil {
+		return nil, ErrSignerVerifierNil
 	}
 	return &InitiatorSignatureHandler{
 		signer:   signer,
@@ -60,13 +56,10 @@ func NewInitiatorSignatureHandler(signer *jwtsigning.Signer, verifier *jwtsignin
 }
 
 // NewResponderSignatureHandler creates a new ResponderSignatureHandler using the provided signer and verifier.
-// Returns an error if either signer or verifier is nil.
+// Returns an error if both signer or verifier is nil.
 func NewResponderSignatureHandler(signer *jwtsigning.Signer, verifier *jwtsigning.Verifier) (*ResponderSignatureHandler, error) {
-	if signer == nil {
-		return nil, ErrSignerNil
-	}
-	if verifier == nil {
-		return nil, ErrVerifierNil
+	if signer == nil && verifier == nil {
+		return nil, ErrSignerVerifierNil
 	}
 	return &ResponderSignatureHandler{
 		signer:   signer,
@@ -99,6 +92,10 @@ func (o *ResponderSignatureHandler) Verify(ctx context.Context, request TaskRequ
 }
 
 func signSignature[T TaskRequest | TaskResponse](ctx context.Context, signer *jwtsigning.Signer, in T) (Signature, error) {
+	if signer == nil {
+		return Signature{}, nil
+	}
+
 	b, err := toCanonicalData(in)
 	if err != nil {
 		return nil, err
@@ -115,6 +112,9 @@ func signSignature[T TaskRequest | TaskResponse](ctx context.Context, signer *jw
 }
 
 func verifySignature[T TaskRequest | TaskResponse](ctx context.Context, verifier *jwtsigning.Verifier, in T) error {
+	if verifier == nil {
+		return nil
+	}
 	token, err := tokenFromMetaData(in)
 	if err != nil {
 		return err
@@ -150,10 +150,10 @@ func tokenFromMetaData[T TaskRequest | TaskResponse](in T) (string, error) {
 //
 // Example serialization format
 // For TaskRequest:
-// taskId:string,type:string,externalId:string,data:base64EnodedString,workingState:base64EnodedString,eTag:string
+// taskId:string,type:string,externalId:string,data:base64EncodedString,workingState:base64EncodedString,eTag:string
 //
 // For TaskResponse:
-// taskId:string,type:string,externalId:string,workingState:base64EnodedString,eTag:string,status:string,errorMessage:string,reconcileAfterSec:string .
+// taskId:string,type:string,externalId:string,workingState:base64EncodedString,eTag:string,status:string,errorMessage:string,reconcileAfterSec:string .
 func toCanonicalData[T TaskRequest | TaskResponse](in T) ([]byte, error) {
 	enc := base64.StdEncoding
 
