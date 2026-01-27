@@ -7,7 +7,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -345,9 +344,8 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, store *sql.SQ
 	t.Helper()
 
 	ctx := t.Context()
-	time.Sleep(1 * time.Second) // ensure unique queue names
-	tasksQueue := fmt.Sprintf("tasks-minimal-%d", time.Now().UnixNano())
-	responsesQueue := fmt.Sprintf("responses-minimal-%d", time.Now().UnixNano())
+	tasksQueue := "tasks-minimal-" + uuid.NewString()
+	responsesQueue := "responses-minimal-" + uuid.NewString()
 
 	managerClient, err := createAMQPClient(ctx, env.rabbitMQ.url, tasksQueue, responsesQueue)
 	require.NoError(t, err)
