@@ -345,6 +345,7 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, store *sql.SQ
 	t.Helper()
 
 	ctx := t.Context()
+	time.Sleep(1 * time.Second) // ensure unique queue names
 	tasksQueue := fmt.Sprintf("tasks-minimal-%d", time.Now().UnixNano())
 	responsesQueue := fmt.Sprintf("responses-minimal-%d", time.Now().UnixNano())
 
