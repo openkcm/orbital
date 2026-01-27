@@ -176,8 +176,6 @@ func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, stor
 		},
 	}
 
-	ctxCancel, cancel = context.WithCancel(ctx)
-	defer cancel()
 	err = createAndStartOperator(ctxCancel, t, operatorClient, operatorConfig)
 	assert.NoError(t, err)
 
@@ -338,8 +336,7 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 			},
 		},
 	}
-	ctxCancel, cancel = context.WithCancel(ctx)
-	defer cancel()
+
 	err = createAndStartOperator(ctxCancel, t, operatorClient1, operatorConfig1)
 	assert.NoError(t, err)
 
@@ -362,8 +359,7 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 			},
 		},
 	}
-	ctxCancel, cancel = context.WithCancel(ctx)
-	defer cancel()
+
 	err = createAndStartOperator(ctxCancel, t, operatorClient2, operatorConfig2)
 	assert.NoError(t, err)
 
@@ -521,8 +517,7 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *testEnviron
 			},
 		},
 	}
-	ctxCancel, cancel = context.WithCancel(ctx)
-	defer cancel()
+
 	err = createAndStartOperator(ctxCancel, t, operatorClient, operatorConfig)
 	assert.NoError(t, err)
 
@@ -672,8 +667,7 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 			},
 		},
 	}
-	ctxCancel, cancel = context.WithCancel(ctx)
-	defer cancel()
+
 	err = createAndStartOperator(ctxCancel, t, operatorClient, operatorConfig)
 	assert.NoError(t, err)
 

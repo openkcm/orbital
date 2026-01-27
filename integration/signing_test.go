@@ -20,7 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/openkcm/orbital"
-	"github.com/openkcm/orbital/store/sql"
 )
 
 const (
@@ -41,11 +40,6 @@ func TestTaskSigningAndVerification(t *testing.T) {
 	ctx := t.Context()
 	env, err := setupTestEnvironment(ctx, t)
 	require.NoError(t, err)
-
-	store, db := createStore(ctx, t, env, "orbital_signing")
-	t.Cleanup(func() {
-		db.Close()
-	})
 
 	t.Run("task request and response signing and verification", func(t *testing.T) {
 		// given
@@ -134,7 +128,7 @@ func TestTaskSigningAndVerification(t *testing.T) {
 				}
 
 				// when
-				actJob, actTasks := execSigningReconciliation(t, env, store, mockInitiatorSigHandler, mockResponderSigHandler)
+				actJob, actTasks := execSigningReconciliation(t, env, mockInitiatorSigHandler, mockResponderSigHandler)
 
 				// then
 				assert.Equal(t, tt.expJobStatus, actJob.Status)
@@ -218,7 +212,7 @@ func TestTaskSigningAndVerification(t *testing.T) {
 				}
 
 				// when
-				actJob, actTasks := execSigningReconciliation(t, env, store, mockInitiatorSigHandler, mockResponderSigHandler)
+				actJob, actTasks := execSigningReconciliation(t, env, mockInitiatorSigHandler, mockResponderSigHandler)
 
 				// then
 				assert.Equal(t, tt.expJobStatus, actJob.Status)
@@ -304,7 +298,7 @@ func TestTaskSigningAndVerification(t *testing.T) {
 				}
 
 				// when
-				actJob, actTasks := execSigningReconciliation(t, env, store, mockInitiatorSigHandler, mockResponderSigHandler)
+				actJob, actTasks := execSigningReconciliation(t, env, mockInitiatorSigHandler, mockResponderSigHandler)
 
 				// then
 				assert.Equal(t, tt.expJobStatus, actJob.Status)
@@ -340,13 +334,19 @@ type testCase struct {
 	expResponderVerifyErr   error
 }
 
-func execSigningReconciliation(t *testing.T, env *testEnvironment, store *sql.SQL, initiatorHandler *mockInitiatorSigHandler, responderHandler *mockResponderSigHandler,
+func execSigningReconciliation(t *testing.T, env *testEnvironment, initiatorHandler *mockInitiatorSigHandler, responderHandler *mockResponderSigHandler,
 ) (orbital.Job, []orbital.Task) {
 	t.Helper()
 
 	ctx := t.Context()
-	tasksQueue := fmt.Sprintf("tasks-minimal-%d", time.Now().UnixNano())
-	responsesQueue := fmt.Sprintf("responses-minimal-%d", time.Now().UnixNano())
+
+	store, db := createStore(ctx, t, env, fmt.Sprintf("orbital_%d", time.Now().UnixNano()))
+	t.Cleanup(func() {
+		db.Close()
+	})
+
+	tasksQueue := "tasks-minimal-" + uuid.NewString()
+	responsesQueue := "responses-minimal-" + uuid.NewString()
 
 	managerClient, err := createAMQPClient(ctx, env.rabbitMQ.url, tasksQueue, responsesQueue)
 	require.NoError(t, err)
@@ -409,18 +409,17 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, store *sql.SQ
 
 	operatorConfig := operatorConfig{
 		handlers: map[string]orbital.Handler{
-			taskType: func(_ context.Context, req orbital.HandlerRequest) (orbital.HandlerResponse, error) {
-				t.Logf("Handler called for task %s", req.TaskID)
-				return orbital.HandlerResponse{
-					WorkingState: []byte("task completed"),
-					Result:       orbital.ResultDone,
-				}, nil
+			taskType: func(_ context.Context, request orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
+				t.Logf("Handler called for task %s", request.TaskID)
+				resp.Result = orbital.ResultDone
+				workingState, err := resp.WorkingState()
+				assert.NoError(t, err)
+				assert.NotNil(t, workingState)
+				workingState.Set("progress", "100%")
+				return nil
 			},
 		},
 	}
-
-	ctxCancel, cancel = context.WithCancel(ctx)
-	defer cancel()
 
 	operatorTarget := orbital.OperatorTarget{Client: operatorClient, Verifier: responderHandler, Signer: responderHandler}
 	err = createAndStartOperatorWithTarget(ctxCancel, t, operatorTarget, operatorConfig)
