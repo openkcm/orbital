@@ -27,7 +27,7 @@ type TaskResponse struct {
 	ETag              string    `json:"eTag"`                   // ETag is used to correlate the TaskResponse with the TaskRequest.
 	Status            string    `json:"status"`                 // Status is the status of the task.
 	ErrorMessage      string    `json:"errorMessage,omitempty"` // ErrorMessage contains the error message if the task fails.
-	ReconcileAfterSec int64     `json:"reconcileAfterSec"`      // ReconcileAfterSec is the time in seconds after which the next TaskRequest should be queued again.
+	ReconcileAfterSec uint64    `json:"reconcileAfterSec"`      // ReconcileAfterSec is the time in seconds after which the next TaskRequest should be queued again.
 	MetaData          MetaData  `json:"metaData"`               // MetaData contains additional information about the TaskResponse.
 }
 

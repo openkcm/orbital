@@ -398,7 +398,7 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, initiatorHand
 			terminationDone <- job
 			return nil
 		},
-		maxReconcileCount:     int64(mgrMaxReconcileCount),
+		maxReconcileCount:     uint64(mgrMaxReconcileCount),
 		backoffMaxIntervalSec: 1,
 	}
 

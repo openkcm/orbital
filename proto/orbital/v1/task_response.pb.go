@@ -82,7 +82,7 @@ type TaskResponse struct {
 	Etag              string                 `protobuf:"bytes,40,opt,name=etag,proto3" json:"etag,omitempty"`                                                                                   // Correlates with TaskRequest
 	Status            TaskStatus             `protobuf:"varint,50,opt,name=status,proto3,enum=orbital.v1.TaskStatus" json:"status,omitempty"`                                                   // Status of the task
 	ErrorMessage      *string                `protobuf:"bytes,60,opt,name=errorMessage,proto3,oneof" json:"errorMessage,omitempty"`                                                             // Optional error message
-	ReconcileAfterSec int64                  `protobuf:"varint,70,opt,name=reconcileAfterSec,proto3" json:"reconcileAfterSec,omitempty"`                                                        // Time in seconds to delay next retry
+	ReconcileAfterSec uint64                 `protobuf:"varint,70,opt,name=reconcileAfterSec,proto3" json:"reconcileAfterSec,omitempty"`                                                        // Time in seconds to delay next retry
 	MetaData          map[string]string      `protobuf:"bytes,80,rep,name=metaData,proto3" json:"metaData,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // MetaData contains additional information about the message
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
@@ -167,7 +167,7 @@ func (x *TaskResponse) GetErrorMessage() string {
 	return ""
 }
 
-func (x *TaskResponse) GetReconcileAfterSec() int64 {
+func (x *TaskResponse) GetReconcileAfterSec() uint64 {
 	if x != nil {
 		return x.ReconcileAfterSec
 	}
@@ -198,7 +198,7 @@ const file_orbital_v1_task_response_proto_rawDesc = "" +
 	"\x04etag\x18( \x01(\tR\x04etag\x12.\n" +
 	"\x06status\x182 \x01(\x0e2\x16.orbital.v1.TaskStatusR\x06status\x12'\n" +
 	"\ferrorMessage\x18< \x01(\tH\x01R\ferrorMessage\x88\x01\x01\x12,\n" +
-	"\x11reconcileAfterSec\x18F \x01(\x03R\x11reconcileAfterSec\x12B\n" +
+	"\x11reconcileAfterSec\x18F \x01(\x04R\x11reconcileAfterSec\x12B\n" +
 	"\bmetaData\x18P \x03(\v2&.orbital.v1.TaskResponse.MetaDataEntryR\bmetaData\x1a;\n" +
 	"\rMetaDataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
