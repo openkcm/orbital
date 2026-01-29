@@ -184,7 +184,7 @@ func toCanonicalData[T TaskRequest | TaskResponse](in T) ([]byte, error) {
 			",eTag:", v.ETag,
 			",status:", v.Status,
 			",errorMessage:", v.ErrorMessage,
-			",reconcileAfterSec:", strconv.FormatInt(v.ReconcileAfterSec, 10),
+			",reconcileAfterSec:", strconv.FormatUint(v.ReconcileAfterSec, 10),
 		)
 	default:
 		return nil, ErrUnsupportedDataType

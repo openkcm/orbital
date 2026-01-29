@@ -267,7 +267,7 @@ func TestListenAndRespond(t *testing.T) {
 	}
 
 	expState := orbital.ResultDone
-	expReconcileAfterSec := int64(10)
+	expReconcileAfterSec := uint64(10)
 
 	h := func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
 		assert.Equal(t, taskReq.TaskID, req.TaskID)
@@ -499,7 +499,7 @@ func TestOperatorCrypto(t *testing.T) {
 					actHandlerCallChan <- struct{}{}
 
 					resp.Result = orbital.ResultDone
-					resp.ReconcileAfterSec = int64(10)
+					resp.ReconcileAfterSec = uint64(10)
 					return nil
 				}
 
@@ -535,7 +535,7 @@ func TestOperatorCrypto(t *testing.T) {
 		}
 
 		expStatus := string(orbital.ResultDone)
-		expReconcileAfterSec := int64(19)
+		expReconcileAfterSec := uint64(19)
 		expWorkingState := []byte("{}")
 
 		taskReq := orbital.TaskRequest{

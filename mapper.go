@@ -286,16 +286,16 @@ func decodeTask[T EntityTypes](e Entity) (T, error) {
 	if t.LastReconciledAt, err = resolve[int64](vals, "last_reconciled_at"); err != nil {
 		return empty, err
 	}
-	if t.ReconcileCount, err = resolve[int64](vals, "reconcile_count"); err != nil {
+	if t.ReconcileCount, err = resolveUint64(vals, "reconcile_count"); err != nil {
 		return empty, err
 	}
-	if t.TotalSentCount, err = resolve[int64](vals, "total_sent_count"); err != nil {
+	if t.TotalSentCount, err = resolveUint64(vals, "total_sent_count"); err != nil {
 		return empty, err
 	}
-	if t.TotalReceivedCount, err = resolve[int64](vals, "total_received_count"); err != nil {
+	if t.TotalReceivedCount, err = resolveUint64(vals, "total_received_count"); err != nil {
 		return empty, err
 	}
-	if t.ReconcileAfterSec, err = resolve[int64](vals, "reconcile_after_sec"); err != nil {
+	if t.ReconcileAfterSec, err = resolveUint64(vals, "reconcile_after_sec"); err != nil {
 		return empty, err
 	}
 	if t.ErrorMessage, err = resolve[string](vals, "error_message"); err != nil {
@@ -383,5 +383,26 @@ func resolveType[A ~string](values map[string]any, key string) (A, error) {
 		return v, nil
 	default:
 		return empty, fmt.Errorf("%w `%s` not supported: (type %T)", ErrInvalidEntityType, key, raw)
+	}
+}
+
+func resolveUint64(values map[string]any, key string) (uint64, error) {
+	raw, ok := values[key]
+	if !ok {
+		return 0, fmt.Errorf("%w '%s' not found", ErrMandatoryFields, key)
+	}
+	if raw == nil {
+		return 0, nil
+	}
+	switch v := raw.(type) {
+	case uint64:
+		return v, nil
+	case int64:
+		if v < 0 {
+			return 0, fmt.Errorf("%w '%s' cannot be negative", ErrInvalidEntityType, key)
+		}
+		return uint64(v), nil
+	default:
+		return 0, fmt.Errorf("%w '%s' not supported: (type %T)", ErrInvalidEntityType, key, raw)
 	}
 }
