@@ -41,7 +41,7 @@ func TestReconcile(t *testing.T) {
 			name                  string
 			jobStatus             orbital.JobStatus
 			taskStatus            orbital.TaskStatus
-			taskReconcileAfterSec int64
+			taskReconcileAfterSec uint64
 			expJobStatus          orbital.JobStatus
 			isEventRecorded       bool
 		}{
@@ -199,9 +199,9 @@ func TestReconcile(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, orbital.TaskStatusProcessing, actTask.Status)
 		assert.NotZero(t, actTask.LastReconciledAt)
-		assert.Equal(t, int64(1), actTask.ReconcileCount)
-		assert.Equal(t, int64(1), actTask.TotalSentCount)
-		assert.Equal(t, int64(20), actTask.ReconcileAfterSec)
+		assert.Equal(t, uint64(1), actTask.ReconcileCount)
+		assert.Equal(t, uint64(1), actTask.TotalSentCount)
+		assert.Equal(t, uint64(20), actTask.ReconcileAfterSec)
 	})
 
 	t.Run("reconcile_after_sec", func(t *testing.T) {
@@ -232,7 +232,7 @@ func TestReconcile(t *testing.T) {
 				assert.NoError(t, err)
 
 				expTarget := "target-1"
-				taskSentCount := int64(8) // simulate that the task was sent 8 times before
+				taskSentCount := uint64(8) // simulate that the task was sent 8 times before
 				ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
 					{
 						JobID:            job.ID,
@@ -338,8 +338,8 @@ func TestReconcile(t *testing.T) {
 		actTask, ok, err := orbital.GetRepoTask(repo)(ctx, ids[0])
 		assert.NoError(t, err)
 		assert.True(t, ok)
-		assert.Equal(t, int64(2), actTask.ReconcileCount)
-		assert.Equal(t, int64(2), actTask.TotalSentCount)
+		assert.Equal(t, uint64(2), actTask.ReconcileCount)
+		assert.Equal(t, uint64(2), actTask.TotalSentCount)
 		assert.Equal(t, expETag, actTask.ETag)
 	})
 
@@ -405,10 +405,10 @@ func TestReconcile(t *testing.T) {
 
 			// then
 			if count >= 10 {
-				assert.Equal(t, int64(2), actTask.TotalSentCount, "should not update reconcile count if reconcile_after_sec is not reached")
+				assert.Equal(t, uint64(2), actTask.TotalSentCount, "should not update reconcile count if reconcile_after_sec is not reached")
 				assert.GreaterOrEqual(t, execTime.Sub(startTime), 5*time.Second)
 			} else {
-				assert.Equal(t, int64(1), actTask.TotalSentCount, "should update reconcile count if reconcile_after_sec is reached")
+				assert.Equal(t, uint64(1), actTask.TotalSentCount, "should update reconcile count if reconcile_after_sec is reached")
 				assert.Less(t, execTime.Sub(startTime), 5*time.Second)
 			}
 		}
@@ -456,12 +456,12 @@ func TestReconcile(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, ok)
 		assert.Greater(t, actTask.LastReconciledAt, int64(1))
-		assert.Equal(t, int64(1), actTask.ReconcileCount)
+		assert.Equal(t, uint64(1), actTask.ReconcileCount)
 		assert.Equal(t, orbital.TaskStatusProcessing, actTask.Status)
 		expReconcileAfterSec := retry.ExponentialBackoffInterval(subj.Config.BackoffBaseIntervalSec,
 			subj.Config.BackoffMaxIntervalSec, 1)
 		assert.Equal(t, expReconcileAfterSec, actTask.ReconcileAfterSec)
-		assert.Equal(t, int64(0), actTask.TotalSentCount, "should not update total_sent_count on failed send")
+		assert.Equal(t, uint64(0), actTask.TotalSentCount, "should not update total_sent_count on failed send")
 	})
 
 	t.Run("should not send task request if max sent count is reached", func(t *testing.T) {
@@ -562,7 +562,7 @@ func TestReconcile(t *testing.T) {
 				// making sure there is no delay in sending the task request
 				subj.Config.BackoffMaxIntervalSec = 0
 
-				for i := range 4 {
+				for i := range uint(4) {
 					// when
 					err = orbital.Reconcile(subj)(ctx)
 
@@ -572,9 +572,9 @@ func TestReconcile(t *testing.T) {
 					assert.NoError(t, err)
 					assert.True(t, ok)
 					if tc.isSentCountIncremented {
-						assert.Equal(t, int64(i+1), actTask.TotalSentCount)
+						assert.Equal(t, uint64(i+1), actTask.TotalSentCount)
 					} else {
-						assert.Equal(t, int64(0), actTask.TotalSentCount)
+						assert.Equal(t, uint64(0), actTask.TotalSentCount)
 					}
 				}
 			})
@@ -620,7 +620,7 @@ func TestReconcile(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, ok)
 		assert.Equal(t, orbital.TaskStatusFailed, actTask.Status)
-		assert.Equal(t, int64(0), actTask.TotalSentCount)
+		assert.Equal(t, uint64(0), actTask.TotalSentCount)
 	})
 }
 
@@ -634,9 +634,9 @@ func TestProcessResponse(t *testing.T) {
 			taskResponse           func(taskID uuid.UUID) orbital.TaskResponse
 			expTaskStatus          orbital.TaskStatus
 			expWorkingState        []byte
-			expTotalReceivedCount  int64
-			expReconcileAfter      int64
-			expReconcileCount      int64
+			expTotalReceivedCount  uint64
+			expReconcileAfter      uint64
+			expReconcileCount      uint64
 			isLastReconcileAtEqual bool
 			expErrorMessage        string
 		}{
@@ -927,7 +927,7 @@ func TestProcessResponse(t *testing.T) {
 
 			mgr, err := orbital.NewManager(repo, mockTaskResolveFunc())
 			assert.NoError(t, err)
-			for i := range 5 {
+			for i := range uint(5) {
 				response := orbital.TaskResponse{
 					TaskID: taskID,
 					Type:   "task-type",
@@ -941,7 +941,7 @@ func TestProcessResponse(t *testing.T) {
 				task, found, err := orbital.GetRepoTask(repo)(ctx, taskID)
 				assert.NoError(t, err)
 				assert.True(t, found)
-				assert.Equal(t, int64(i+1), task.TotalReceivedCount)
+				assert.Equal(t, uint64(i+1), task.TotalReceivedCount)
 
 				etag = task.ETag
 			}
@@ -978,7 +978,7 @@ func TestProcessResponse(t *testing.T) {
 			task, found, err := orbital.GetRepoTask(repo)(ctx, taskID)
 			assert.NoError(t, err)
 			assert.True(t, found)
-			assert.Equal(t, int64(0), task.TotalReceivedCount)
+			assert.Equal(t, uint64(0), task.TotalReceivedCount)
 		})
 	})
 	t.Run("task not found", func(t *testing.T) {

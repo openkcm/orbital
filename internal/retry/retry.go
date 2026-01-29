@@ -5,9 +5,9 @@ package retry
 // maxIntervalSec: maximum interval in seconds.
 // attempts: current retry attempt number.
 // Returns the interval in seconds, capped at maxIntervalSec.
-func ExponentialBackoffInterval(baseIntervalSec, maxIntervalSec, attempts int64) int64 {
-	interval := baseIntervalSec * int64(1) << attempts
-	if interval <= 0 {
+func ExponentialBackoffInterval(baseIntervalSec, maxIntervalSec, attempts uint64) uint64 {
+	interval := baseIntervalSec << attempts
+	if interval < baseIntervalSec || interval == 0 {
 		return maxIntervalSec
 	}
 	return min(interval, maxIntervalSec)
