@@ -23,7 +23,7 @@ const (
 type (
 	// Operator handles task requests and responses.
 	Operator struct {
-		target          OperatorTarget
+		target          TargetOperator
 		handlerRegistry handlerRegistry
 		requests        chan TaskRequest
 		numberOfWorkers int
@@ -108,7 +108,7 @@ var (
 )
 
 // NewOperator creates a new Operator instance with the given Responder and options.
-func NewOperator(target OperatorTarget, opts ...Option) (*Operator, error) {
+func NewOperator(target TargetOperator, opts ...Option) (*Operator, error) {
 	if target.MustCheckSignature && target.Verifier == nil {
 		return nil, ErrOperatorInvalidConfig
 	}

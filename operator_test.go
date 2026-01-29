@@ -14,7 +14,7 @@ import (
 
 func TestOperator_NewOperator(t *testing.T) {
 	t.Run("should return error if signature checking is enabled and the verifier is nil set for the target", func(t *testing.T) {
-		invalidTarget := orbital.OperatorTarget{
+		invalidTarget := orbital.TargetOperator{
 			Client:             respondertest.NewResponder(),
 			Verifier:           nil,
 			MustCheckSignature: true,
@@ -159,7 +159,7 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client}, tt.opts...)
+			o, err := orbital.NewOperator(orbital.TargetOperator{Client: client}, tt.opts...)
 			if tt.expErr != nil {
 				assert.ErrorIs(t, err, tt.expErr)
 				return
@@ -173,7 +173,7 @@ func TestNew(t *testing.T) {
 func TestRegisterHandler(t *testing.T) {
 	client := respondertest.NewResponder()
 
-	o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client})
+	o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	assert.NoError(t, err)
 	assert.NotNil(t, o)
 
@@ -218,7 +218,7 @@ func TestRegisterHandler(t *testing.T) {
 func TestListenAndRespond_ErrorResponse(t *testing.T) {
 	client := respondertest.NewResponder()
 
-	o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client})
+	o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	assert.NoError(t, err)
 	assert.NotNil(t, o)
 
@@ -264,7 +264,7 @@ func TestListenAndRespond_ErrorResponse(t *testing.T) {
 func TestListenAndRespond(t *testing.T) {
 	client := respondertest.NewResponder()
 
-	o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client})
+	o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	assert.NoError(t, err)
 	assert.NotNil(t, o)
 
@@ -309,7 +309,7 @@ func TestListenAndRespond(t *testing.T) {
 func TestListenAndRespond_WorkingState(t *testing.T) {
 	client := respondertest.NewResponder()
 
-	o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client})
+	o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	assert.NoError(t, err)
 	assert.NotNil(t, o)
 

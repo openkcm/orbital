@@ -73,7 +73,7 @@ func NewManagerTracker(ctx context.Context,
 	}
 
 	// initializes the targets
-	targets := make(map[string]orbital.ManagerTarget, noOfOperator)
+	targets := make(map[string]orbital.TargetManager, noOfOperator)
 	for _, operatorName := range deriveOperatorNames(noOfOperator) {
 		toMgr, toOpr := deriveQueueName(operatorName)
 		client, err := createAMQPClient(ctx, env, toOpr, toMgr)
@@ -81,7 +81,7 @@ func NewManagerTracker(ctx context.Context,
 			return tracker, err
 		}
 		tracker.client = append(tracker.client, client)
-		targets[operatorName] = orbital.ManagerTarget{
+		targets[operatorName] = orbital.TargetManager{
 			Client: client,
 		}
 	}
@@ -179,7 +179,7 @@ func NewOperatorTracker(ctx context.Context, env *testEnvironment, name string) 
 	}
 
 	tracker.client = client
-	operator, err := orbital.NewOperator(orbital.OperatorTarget{Client: client})
+	operator, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	if err != nil {
 		return tracker, fmt.Errorf("failed to create operator: %w", err)
 	}

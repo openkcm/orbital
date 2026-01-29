@@ -36,10 +36,10 @@ type TaskResponse struct {
 // related to requests, responses, or signatures.
 type MetaData map[string]string
 
-// ManagerTarget holds the client and cryptographic implementation for initiating
+// TargetManager holds the client and cryptographic implementation for initiating
 // tasks. It provides access to the Initiator for communication,
 // Signer and Verifier for signing and verification operations.
-type ManagerTarget struct {
+type TargetManager struct {
 	Client             Initiator
 	Signer             TaskRequestSigner
 	Verifier           TaskResponseVerifier
@@ -53,10 +53,10 @@ type Initiator interface {
 	Close(ctx context.Context) error
 }
 
-// OperatorTarget holds the client and cryptographic implementation for responding
+// TargetOperator holds the client and cryptographic implementation for responding
 // to tasks. It provides access to the Responder for communication,
 // Signer and Verifier for signing and verification operations.
-type OperatorTarget struct {
+type TargetOperator struct {
 	Client             Responder
 	Verifier           TaskRequestVerifier
 	Signer             TaskResponseSigner

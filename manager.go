@@ -37,7 +37,7 @@ type (
 		jobDoneEventFunc     JobTerminatedEventFunc
 		jobCanceledEventFunc JobTerminatedEventFunc
 		jobFailedEventFunc   JobTerminatedEventFunc
-		targets              map[string]ManagerTarget
+		targets              map[string]TargetManager
 	}
 
 	// JobTerminatedEventFunc defines a callback function type for sending job events.
@@ -190,8 +190,8 @@ func WithJobConfirmFunc(f JobConfirmFunc) ManagerOptsFunc {
 	}
 }
 
-// WithTargets set the map that maps the target string to its ManagerTarget.
-func WithTargets(targets map[string]ManagerTarget) ManagerOptsFunc {
+// WithTargets set the map that maps the target string to its TargetManager.
+func WithTargets(targets map[string]TargetManager) ManagerOptsFunc {
 	return func(m *Manager) {
 		m.targets = targets
 	}
@@ -688,7 +688,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 	mgrTarget, ok := m.targets[task.Target]
 	// this is an additional safeguard, this should never happen as we check for the existence of targets while creating tasks.
 	if !ok || mgrTarget.Client == nil {
-		errLog := "no managerTarget found for task target, marking task as failed"
+		errLog := "no target manager found for task target, marking task as failed"
 		if mgrTarget.Client == nil {
 			errLog = "no initiator client found for task target, marking task as failed"
 		}
@@ -755,7 +755,7 @@ func (m *Manager) updateJobAndCreateJobEvent(ctx context.Context, repo Repositor
 func (m *Manager) startResponseReaders(ctx context.Context) {
 	for target, mgrTarget := range m.targets {
 		m.wg.Add(1)
-		go func(ctx context.Context, target string, mgrTarget ManagerTarget) {
+		go func(ctx context.Context, target string, mgrTarget TargetManager) {
 			defer m.wg.Done()
 			m.handleResponses(ctx, mgrTarget, target)
 		}(ctx, target, mgrTarget)
@@ -763,7 +763,7 @@ func (m *Manager) startResponseReaders(ctx context.Context) {
 }
 
 // handleResponses continuously reads TaskResponse messages from a client.
-func (m *Manager) handleResponses(ctx context.Context, mgrTarget ManagerTarget, target string) {
+func (m *Manager) handleResponses(ctx context.Context, mgrTarget TargetManager, target string) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -857,7 +857,7 @@ func (m *Manager) isValidConfig(ctx context.Context) bool {
 	return true
 }
 
-func isValidSignature(ctx context.Context, mgrTarget ManagerTarget, resp TaskResponse) bool {
+func isValidSignature(ctx context.Context, mgrTarget TargetManager, resp TaskResponse) bool {
 	if !mgrTarget.MustCheckSignature {
 		return true
 	}

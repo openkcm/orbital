@@ -376,7 +376,7 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, initiatorHand
 			t.Logf("JobConfirmFunc called for job %s", job.ID)
 			return orbital.JobConfirmResult{Done: true}, nil
 		},
-		managerTargets: map[string]orbital.ManagerTarget{
+		targetManagers: map[string]orbital.TargetManager{
 			taskTarget: {
 				Client:             managerClient,
 				Signer:             initiatorHandler,
@@ -422,8 +422,8 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, initiatorHand
 		},
 	}
 
-	operatorTarget := orbital.OperatorTarget{Client: operatorClient, Verifier: responderHandler, Signer: responderHandler, MustCheckSignature: true}
-	err = createAndStartOperatorWithTarget(ctxCancel, t, operatorTarget, operatorConfig)
+	targetOperator := orbital.TargetOperator{Client: operatorClient, Verifier: responderHandler, Signer: responderHandler, MustCheckSignature: true}
+	err = createAndStartOperatorWithTarget(ctxCancel, t, targetOperator, operatorConfig)
 	require.NoError(t, err)
 
 	job, err := createTestJob(ctx, t, manager, "test-job", []byte("job-data"))

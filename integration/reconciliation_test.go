@@ -124,7 +124,7 @@ func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, stor
 			t.Logf("JobConfirmFunc called for job %s", job.ID)
 			return orbital.JobConfirmResult{Done: true}, nil
 		},
-		managerTargets: map[string]orbital.ManagerTarget{
+		targetManagers: map[string]orbital.TargetManager{
 			taskTarget: {Client: managerClient},
 		},
 		jobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
@@ -288,7 +288,7 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 			return orbital.JobConfirmResult{Done: true}, nil
 		},
-		managerTargets: map[string]orbital.ManagerTarget{
+		targetManagers: map[string]orbital.TargetManager{
 			taskTarget1: {Client: managerClient1},
 			taskTarget2: {Client: managerClient2},
 		},
@@ -470,7 +470,7 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *testEnviron
 		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 			return orbital.JobConfirmResult{Done: true}, nil
 		},
-		managerTargets: map[string]orbital.ManagerTarget{
+		targetManagers: map[string]orbital.TargetManager{
 			taskTarget: {Client: managerClient},
 		},
 		jobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
@@ -608,7 +608,7 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 			return orbital.JobConfirmResult{Done: true}, nil
 		},
-		managerTargets: map[string]orbital.ManagerTarget{
+		targetManagers: map[string]orbital.TargetManager{
 			taskTarget: {Client: managerClient},
 		},
 		jobDoneEventFunc: func(_ context.Context, job orbital.Job) error {

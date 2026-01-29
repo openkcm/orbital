@@ -30,7 +30,7 @@ func main() {
 	defer client.Close(ctx)
 
 	// Initialize an orbital operator that uses the responder
-	operator, err := orbital.NewOperator(orbital.OperatorTarget{Client: client})
+	operator, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	handleErr("initializing operator", err)
 
 	// Register a handler for the "example" task type

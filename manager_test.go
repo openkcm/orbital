@@ -524,7 +524,7 @@ func TestCreateTasks(t *testing.T) {
 						Done: true,
 					}, nil
 				}
-				targets := map[string]orbital.ManagerTarget{
+				targets := map[string]orbital.TargetManager{
 					"target-1": {Client: nil},
 				}
 				subj, _ := orbital.NewManager(
@@ -588,7 +588,7 @@ func TestCreateTasks(t *testing.T) {
 					}, nil
 				}
 
-				targets := map[string]orbital.ManagerTarget{
+				targets := map[string]orbital.TargetManager{
 					"target": {Client: nil},
 				}
 				subj, _ := orbital.NewManager(
@@ -656,7 +656,7 @@ func TestCreateTasks(t *testing.T) {
 				Done: true,
 			}, nil
 		}
-		targets := map[string]orbital.ManagerTarget{
+		targets := map[string]orbital.TargetManager{
 			"target-1": {Client: nil},
 		}
 		subj, _ := orbital.NewManager(
@@ -747,7 +747,7 @@ func TestCreateTasks(t *testing.T) {
 				return tt.resolverResult, nil
 			}
 
-			targets := map[string]orbital.ManagerTarget{
+			targets := map[string]orbital.TargetManager{
 				"target-1": {Client: nil},
 			}
 			subj, _ := orbital.NewManager(
@@ -911,7 +911,7 @@ func TestCreateTasks(t *testing.T) {
 			}, nil
 		}
 
-		targets := map[string]orbital.ManagerTarget{
+		targets := map[string]orbital.TargetManager{
 			"target": {Client: nil},
 		}
 		subj, _ := orbital.NewManager(
@@ -971,7 +971,7 @@ func TestCreateTasks(t *testing.T) {
 			}, nil
 		}
 
-		targets := map[string]orbital.ManagerTarget{
+		targets := map[string]orbital.TargetManager{
 			"target-1": {Client: nil},
 			"target-2": {Client: nil},
 		}
@@ -1065,7 +1065,7 @@ func TestListTasks(t *testing.T) {
 
 func TestStart(t *testing.T) {
 	t.Run("should fail to start manager", func(t *testing.T) {
-		t.Run("if any of manager target's signing verifier is not set and signature check is enabled ", func(t *testing.T) {
+		t.Run("if any of target managers signing verifier is not set and signature check is enabled ", func(t *testing.T) {
 			// given
 			ctx := t.Context()
 
@@ -1075,7 +1075,7 @@ func TestStart(t *testing.T) {
 			repo := orbital.NewRepository(store)
 
 			optsFunc := []orbital.ManagerOptsFunc{
-				orbital.WithTargets(map[string]orbital.ManagerTarget{
+				orbital.WithTargets(map[string]orbital.TargetManager{
 					"target-1": {
 						Client: &testInitiator{},
 					},
@@ -1291,7 +1291,7 @@ func TestManagerStop_ClosesAllClients(t *testing.T) {
 		},
 	}
 
-	targets := map[string]orbital.ManagerTarget{
+	targets := map[string]orbital.TargetManager{
 		"target-1": {Client: mockClient},
 		"target-2": {Client: mockClient},
 	}
@@ -1421,7 +1421,7 @@ func TestManagerStop_GracefulShutdown(t *testing.T) {
 			},
 		}
 
-		targets := map[string]orbital.ManagerTarget{
+		targets := map[string]orbital.TargetManager{
 			"target": {Client: mockClient},
 		}
 
@@ -1469,7 +1469,7 @@ func TestManagerStop_GracefulShutdown(t *testing.T) {
 			}
 		}
 
-		targets := map[string]orbital.ManagerTarget{
+		targets := map[string]orbital.TargetManager{
 			"target-1": {Client: createMockClient()},
 			"target-2": {Client: createMockClient()},
 			"target-3": {Client: createMockClient()},

@@ -42,16 +42,16 @@ var (
 var errUnknownJobType = errors.New("unknown job type")
 
 func main() {
-	targets := map[string]orbital.ManagerTarget{}
+	targets := map[string]orbital.TargetManager{}
 	var err error
 
 	// Create embedded clients with operator functions
 	client1, err := embedded.NewClient(operatorFunc1)
 	handleErr("Failed to create client1", err)
-	targets[target1] = orbital.ManagerTarget{Client: client1}
+	targets[target1] = orbital.TargetManager{Client: client1}
 	client2, err := embedded.NewClient(operatorFunc2)
 	handleErr("Failed to create client2", err)
-	targets[target2] = orbital.ManagerTarget{Client: client2}
+	targets[target2] = orbital.TargetManager{Client: client2}
 
 	// Create PostgreSQL database handle
 	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",

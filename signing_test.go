@@ -100,7 +100,7 @@ func TestManager_Signing(t *testing.T) {
 
 				subj, err := orbital.NewManager(repo,
 					mockTaskResolveFunc(),
-					orbital.WithTargets(map[string]orbital.ManagerTarget{
+					orbital.WithTargets(map[string]orbital.TargetManager{
 						expTarget: {Client: mockClient, Signer: tt.reqSigner},
 					}),
 				)
@@ -236,7 +236,7 @@ func TestManager_Verification(t *testing.T) {
 					return <-taskResponseChan, nil
 				}
 
-				initiator := orbital.ManagerTarget{
+				initiator := orbital.TargetManager{
 					Client:             mockClient,
 					Verifier:           tt.respVerifier,
 					MustCheckSignature: tt.mustCheckSignature,
@@ -364,7 +364,7 @@ func TestOperator_Signing(t *testing.T) {
 					return nil
 				}
 
-				o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client, Verifier: mockVerifier, Signer: tt.respSigner})
+				o, err := orbital.NewOperator(orbital.TargetOperator{Client: client, Verifier: mockVerifier, Signer: tt.respSigner})
 				assert.NoError(t, err)
 				assert.NotNil(t, o)
 
@@ -484,7 +484,7 @@ func TestOperator_Verification(t *testing.T) {
 				actVerifyTaskRequestCalls.Store(0)
 
 				client := respondertest.NewResponder()
-				o, err := orbital.NewOperator(orbital.OperatorTarget{
+				o, err := orbital.NewOperator(orbital.TargetOperator{
 					Client:             client,
 					Signer:             respSigner,
 					Verifier:           tt.reqVerifier,

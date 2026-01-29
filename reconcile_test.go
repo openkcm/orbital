@@ -181,7 +181,7 @@ func TestReconcile(t *testing.T) {
 
 		subj, err := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
-			orbital.WithTargets(map[string]orbital.ManagerTarget{
+			orbital.WithTargets(map[string]orbital.TargetManager{
 				expTarget: {Client: client},
 			}),
 		)
@@ -251,7 +251,7 @@ func TestReconcile(t *testing.T) {
 				subj, err := orbital.NewManager(repo,
 					mockTaskResolveFunc(),
 					orbital.WithTargets(
-						map[string]orbital.ManagerTarget{
+						map[string]orbital.TargetManager{
 							expTarget: {Client: tc.client},
 						},
 					),
@@ -315,7 +315,7 @@ func TestReconcile(t *testing.T) {
 
 		subj, err := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
-			orbital.WithTargets(map[string]orbital.ManagerTarget{
+			orbital.WithTargets(map[string]orbital.TargetManager{
 				expTarget: {Client: client},
 			}),
 		)
@@ -379,7 +379,7 @@ func TestReconcile(t *testing.T) {
 
 		subj, err := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
-			orbital.WithTargets(map[string]orbital.ManagerTarget{
+			orbital.WithTargets(map[string]orbital.TargetManager{
 				expTarget: {Client: initiator},
 			}),
 		)
@@ -441,7 +441,7 @@ func TestReconcile(t *testing.T) {
 
 		subj, err := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
-			orbital.WithTargets(map[string]orbital.ManagerTarget{
+			orbital.WithTargets(map[string]orbital.TargetManager{
 				target: {Client: failedClient()},
 			}),
 		)
@@ -554,7 +554,7 @@ func TestReconcile(t *testing.T) {
 
 				subj, err := orbital.NewManager(repo,
 					mockTaskResolveFunc(),
-					orbital.WithTargets(map[string]orbital.ManagerTarget{
+					orbital.WithTargets(map[string]orbital.TargetManager{
 						target: {Client: tc.client},
 					}),
 				)
@@ -607,7 +607,7 @@ func TestReconcile(t *testing.T) {
 
 		subj, err := orbital.NewManager(repo,
 			mockTaskResolveFunc(),
-			orbital.WithTargets(map[string]orbital.ManagerTarget{}),
+			orbital.WithTargets(map[string]orbital.TargetManager{}),
 		)
 		assert.NoError(t, err)
 
@@ -1043,7 +1043,7 @@ func TestReconciliationRaceCondition(t *testing.T) {
 		responseStartChan := make(chan string)
 
 		mgr, err := orbital.NewManager(repo, mockTaskResolveFunc(),
-			orbital.WithTargets(map[string]orbital.ManagerTarget{
+			orbital.WithTargets(map[string]orbital.TargetManager{
 				target: {
 					Client: &mockInitiator{
 						FnSendTaskRequest: func(_ context.Context, _ orbital.TaskRequest) error {
@@ -1086,7 +1086,7 @@ func TestReconciliationRaceCondition(t *testing.T) {
 		jobID, taskID := createInitJobAndTask(ctx)
 
 		mgr, err := orbital.NewManager(repo, mockTaskResolveFunc(),
-			orbital.WithTargets(map[string]orbital.ManagerTarget{
+			orbital.WithTargets(map[string]orbital.TargetManager{
 				target: {
 					Client: &mockInitiator{
 						FnSendTaskRequest: func(_ context.Context, _ orbital.TaskRequest) error {
@@ -1125,7 +1125,7 @@ func TestHandleResponse(t *testing.T) {
 		defer clearTables(t, db)
 		repo := orbital.NewRepository(store)
 
-		initiator := orbital.ManagerTarget{Client: nil}
+		initiator := orbital.TargetManager{Client: nil}
 
 		subj, err := orbital.NewManager(repo,
 			mockTaskResolveFunc(),

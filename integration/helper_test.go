@@ -48,7 +48,7 @@ type rabbitMQContainer struct {
 type managerConfig struct {
 	taskResolveFunc       orbital.TaskResolveFunc
 	jobConfirmFunc        orbital.JobConfirmFunc
-	managerTargets        map[string]orbital.ManagerTarget
+	targetManagers        map[string]orbital.TargetManager
 	jobDoneEventFunc      orbital.JobTerminatedEventFunc
 	jobCanceledEventFunc  orbital.JobTerminatedEventFunc
 	jobFailedEventFunc    orbital.JobTerminatedEventFunc
@@ -202,7 +202,7 @@ func createAndStartManager(ctx context.Context, t *testing.T, store *sql.SQL, co
 
 	managerOpts := []orbital.ManagerOptsFunc{
 		orbital.WithJobConfirmFunc(config.jobConfirmFunc),
-		orbital.WithTargets(config.managerTargets),
+		orbital.WithTargets(config.targetManagers),
 		orbital.WithJobDoneEventFunc(config.jobDoneEventFunc),
 		orbital.WithJobCanceledEventFunc(config.jobCanceledEventFunc),
 		orbital.WithJobFailedEventFunc(config.jobFailedEventFunc),
@@ -237,7 +237,7 @@ func createAndStartManager(ctx context.Context, t *testing.T, store *sql.SQL, co
 func createAndStartOperator(ctx context.Context, t *testing.T, client orbital.Responder, config operatorConfig) error {
 	t.Helper()
 
-	operator, err := orbital.NewOperator(orbital.OperatorTarget{Client: client})
+	operator, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	if err != nil {
 		return fmt.Errorf("failed to create operator: %w", err)
 	}
@@ -245,7 +245,7 @@ func createAndStartOperator(ctx context.Context, t *testing.T, client orbital.Re
 	return addHandlerAndListen(ctx, t, config, operator)
 }
 
-func createAndStartOperatorWithTarget(ctx context.Context, t *testing.T, target orbital.OperatorTarget, config operatorConfig) error {
+func createAndStartOperatorWithTarget(ctx context.Context, t *testing.T, target orbital.TargetOperator, config operatorConfig) error {
 	t.Helper()
 
 	operator, err := orbital.NewOperator(target)
