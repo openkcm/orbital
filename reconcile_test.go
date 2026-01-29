@@ -564,7 +564,7 @@ func TestReconcile(t *testing.T) {
 				// making sure there is no delay in sending the task request
 				subj.Config.BackoffMaxIntervalSec = 0
 
-				for i := range 4 {
+				for i := range uint(4) {
 					// when
 					err = orbital.Reconcile(subj)(ctx)
 
@@ -929,7 +929,7 @@ func TestProcessResponse(t *testing.T) {
 
 			mgr, err := orbital.NewManager(repo, mockTaskResolveFunc())
 			assert.NoError(t, err)
-			for i := range 5 {
+			for i := range uint(5) {
 				response := orbital.TaskResponse{
 					TaskID: taskID,
 					Type:   "task-type",
