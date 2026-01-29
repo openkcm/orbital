@@ -465,8 +465,8 @@ func (j *jwksProvider) CurrentSigningKey(_ context.Context) (*rsa.PrivateKey, jw
 
 type mockInitiatorSigHandler struct {
 	handler        *orbital.InitiatorSignatureHandler
-	actSignCalls   int
-	actVerifyCalls int
+	actSignCalls   uint
+	actVerifyCalls uint
 	actToken       string
 	actVerifyErr   error
 }
@@ -496,8 +496,8 @@ func (h *mockInitiatorSigHandler) Verify(ctx context.Context, response orbital.T
 
 type mockResponderSigHandler struct {
 	handler        *orbital.ResponderSignatureHandler
-	actSignCalls   int
-	actVerifyCalls int
+	actSignCalls   uint
+	actVerifyCalls uint
 	actToken       string
 	actVerifyErr   error
 }
