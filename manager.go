@@ -122,6 +122,7 @@ const (
 var (
 	ErrManagerAlreadyStarted = errors.New("manager was already started")
 	ErrManagerNotStarted     = errors.New("manager was not started")
+	ErrManagerInvalidConfig  = errors.New("manager has invalid configuration")
 	ErrTaskResolverNotSet    = errors.New("taskResolver not set")
 	ErrMsgFailedTasks        = "job has failed tasks"
 	ErrJobUnCancelable       = errors.New("job cannot be canceled in its current state")
@@ -219,6 +220,10 @@ func WithJobFailedEventFunc(f JobTerminatedEventFunc) ManagerOptsFunc {
 
 // Start starts the job manager to process jobs.
 func (m *Manager) Start(ctx context.Context) error {
+	if !m.isValidConfig(ctx) {
+		return ErrManagerInvalidConfig
+	}
+
 	if m.started.Load() {
 		return ErrManagerAlreadyStarted
 	}
@@ -780,12 +785,10 @@ func (m *Manager) handleResponses(ctx context.Context, mgrTarget ManagerTarget, 
 			newCtx := slogctx.With(ctx, "target", target, "externalID", resp.ExternalID, "taskID", resp.TaskID.String(), "etag", resp.ETag)
 			slogctx.Debug(newCtx, "received task response")
 
-			if mgrTarget.Verifier != nil {
-				err = mgrTarget.Verifier.Verify(newCtx, resp)
-				if err != nil {
-					slogctx.Error(newCtx, "failed while verifying task response signature", "error", err)
-					continue
-				}
+			isValid := isValidSignature(newCtx, mgrTarget, resp)
+			if !isValid {
+				slogctx.Warn(newCtx, "task response signature verification failed, discarding response")
+				continue
 			}
 
 			if err := m.processResponse(newCtx, resp); err != nil {
@@ -842,4 +845,30 @@ func (m *Manager) closeClients(ctx context.Context) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+func (m *Manager) isValidConfig(ctx context.Context) bool {
+	for target, mgrTarget := range m.targets {
+		if mgrTarget.MustCheckSignature && mgrTarget.Verifier == nil {
+			slogctx.Error(ctx, "signature verification is enabled but no signature verifier is set for", "target", target)
+			return false
+		}
+	}
+	return true
+}
+
+func isValidSignature(ctx context.Context, mgrTarget ManagerTarget, resp TaskResponse) bool {
+	if !mgrTarget.MustCheckSignature {
+		return true
+	}
+	if mgrTarget.Verifier == nil {
+		slogctx.Error(ctx, "signature verification is enabled but no signature verifier is set")
+		return false
+	}
+	err := mgrTarget.Verifier.Verify(ctx, resp)
+	if err != nil {
+		slogctx.Error(ctx, "failed while verifying task response signature", "error", err)
+		return false
+	}
+	return true
 }

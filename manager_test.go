@@ -1064,6 +1064,63 @@ func TestListTasks(t *testing.T) {
 }
 
 func TestStart(t *testing.T) {
+	t.Run("should fail to start manager", func(t *testing.T) {
+		t.Run("if any of manager target's signing verifier is not set and signature check is enabled ", func(t *testing.T) {
+			// given
+			ctx := t.Context()
+
+			db, store := createSQLStore(t)
+			defer clearTables(t, db)
+
+			repo := orbital.NewRepository(store)
+
+			optsFunc := []orbital.ManagerOptsFunc{
+				orbital.WithTargets(map[string]orbital.ManagerTarget{
+					"target-1": {
+						Client: &testInitiator{},
+					},
+					"target-2": {
+						Client:             &testInitiator{},
+						MustCheckSignature: true,
+					},
+				}),
+			}
+
+			subj, err := orbital.NewManager(repo,
+				mockTaskResolveFunc(), optsFunc...,
+			)
+			assert.NoError(t, err)
+
+			// when
+			err = subj.Start(ctx)
+
+			// then
+			assert.ErrorIs(t, err, orbital.ErrManagerInvalidConfig)
+		})
+
+		t.Run("if manager is already started", func(t *testing.T) {
+			// given
+			db, store := createSQLStore(t)
+			defer clearTables(t, db)
+			repo := orbital.NewRepository(store)
+
+			ctx := t.Context()
+
+			subj, err := orbital.NewManager(repo, mockTaskResolveFunc())
+			assert.NoError(t, err)
+
+			// when
+			assert.NoError(t, subj.Start(ctx))
+			defer assert.NoError(t, subj.Stop(ctx))
+
+			// then
+			err = subj.Start(ctx)
+			assert.ErrorIs(t, err, orbital.ErrManagerAlreadyStarted)
+		})
+	})
+}
+
+func TestManager_JovDoneEventFunc(t *testing.T) {
 	t.Run("should call JobDoneEventFunc", func(t *testing.T) {
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
@@ -1155,23 +1212,6 @@ func TestCancel(t *testing.T) {
 		assert.ErrorIs(t, err, orbital.ErrJobNotFound)
 		assert.ErrorContains(t, err, "job not found")
 	})
-}
-
-func TestManagerStart_AlreadyStarted(t *testing.T) {
-	db, store := createSQLStore(t)
-	defer clearTables(t, db)
-	repo := orbital.NewRepository(store)
-
-	subj, err := orbital.NewManager(repo, mockTaskResolveFunc())
-	assert.NoError(t, err)
-
-	ctx := t.Context()
-
-	assert.NoError(t, subj.Start(ctx))
-	defer assert.NoError(t, subj.Stop(ctx))
-
-	err = subj.Start(ctx)
-	assert.ErrorIs(t, err, orbital.ErrManagerAlreadyStarted)
 }
 
 func TestManagerStop_Success(t *testing.T) {

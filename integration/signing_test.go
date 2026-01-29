@@ -378,9 +378,10 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, initiatorHand
 		},
 		managerTargets: map[string]orbital.ManagerTarget{
 			taskTarget: {
-				Client:   managerClient,
-				Signer:   initiatorHandler,
-				Verifier: initiatorHandler,
+				Client:             managerClient,
+				Signer:             initiatorHandler,
+				Verifier:           initiatorHandler,
+				MustCheckSignature: true,
 			},
 		},
 		jobDoneEventFunc: func(_ context.Context, job orbital.Job) error {
@@ -421,7 +422,7 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, initiatorHand
 		},
 	}
 
-	operatorTarget := orbital.OperatorTarget{Client: operatorClient, Verifier: responderHandler, Signer: responderHandler}
+	operatorTarget := orbital.OperatorTarget{Client: operatorClient, Verifier: responderHandler, Signer: responderHandler, MustCheckSignature: true}
 	err = createAndStartOperatorWithTarget(ctxCancel, t, operatorTarget, operatorConfig)
 	require.NoError(t, err)
 

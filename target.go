@@ -40,9 +40,10 @@ type MetaData map[string]string
 // tasks. It provides access to the Initiator for communication,
 // Signer and Verifier for signing and verification operations.
 type ManagerTarget struct {
-	Client   Initiator
-	Signer   TaskRequestSigner
-	Verifier TaskResponseVerifier
+	Client             Initiator
+	Signer             TaskRequestSigner
+	Verifier           TaskResponseVerifier
+	MustCheckSignature bool
 }
 
 // Initiator defines the methods for sending task requests and receiving task responses.
@@ -56,9 +57,10 @@ type Initiator interface {
 // to tasks. It provides access to the Responder for communication,
 // Signer and Verifier for signing and verification operations.
 type OperatorTarget struct {
-	Client   Responder
-	Verifier TaskRequestVerifier
-	Signer   TaskResponseSigner
+	Client             Responder
+	Verifier           TaskRequestVerifier
+	Signer             TaskResponseSigner
+	MustCheckSignature bool
 }
 
 // Responder defines the methods for receiving task requests and sending task responses.
