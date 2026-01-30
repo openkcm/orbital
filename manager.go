@@ -441,6 +441,13 @@ func (m *Manager) createTask(ctx context.Context) error {
 	})
 }
 
+// createTasksForJob creates tasks for a given job by resolving targets and updating the job cursor.
+//
+// NOTE: in case of an error, the job is updated
+// to ensure the updated_at timestamp is refreshed
+// to avoid stalling the job processing.
+//
+//nolint:cyclop,funlen
 func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Job) error {
 	ctx = slogctx.With(ctx, "jobID", job.ID, "externalID", job.ExternalID, "type", job.Type)
 	slogctx.Debug(ctx, "creating tasks for job")
@@ -448,13 +455,13 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 	jobCursor, found, err := m.getJobCursor(ctx, repo, job.ID)
 	if err != nil {
 		slogctx.Error(ctx, "failed to get job cursor", "error", err)
+		repo.updateJob(ctx, job) //nolint:errcheck
 		return err
 	}
 
 	resolverResult, err := m.taskResolveFunc(ctx, job, jobCursor.Cursor)
 	if err != nil {
 		slogctx.Error(ctx, "error in task resolver function", "error", err)
-		// NOTE: here we update the job to change the updated_at timestamp in order to spread the fetching of jobs.
 		return repo.updateJob(ctx, job)
 	}
 	if resolverResult.IsCanceled {
@@ -471,28 +478,38 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 		return m.updateJobAndCreateJobEvent(ctx, repo, job)
 	}
 
-	// Create tasks and update the cursor.
-	jobCursor.Cursor = resolverResult.Cursor
-	_, err = repo.createTasks(ctx, newTasks(job.ID, resolverResult.TaskInfos))
-	if err != nil {
-		slogctx.Error(ctx, "failed to create tasks for job", "error", err)
-		return err
+	hasTasks := len(resolverResult.TaskInfos) != 0
+	if hasTasks {
+		_, err = repo.createTasks(ctx, newTasks(job.ID, resolverResult.TaskInfos))
+		if err != nil {
+			slogctx.Error(ctx, "failed to create tasks for job", "error", err)
+			repo.updateJob(ctx, job) //nolint:errcheck
+			return err
+		}
 	}
 
+	jobCursor.Cursor = resolverResult.Cursor
 	err = m.createOrUpdateCursor(ctx, repo, found, jobCursor)
 	if err != nil {
 		slogctx.Error(ctx, "failed to create/update tasks cursor for job ", "error", err)
+		repo.updateJob(ctx, job) //nolint:errcheck
 		return err
 	}
 
-	if resolverResult.Done {
-		slogctx.Debug(ctx, "tasks resolved successfully")
-		job.Status = JobStatusReady
-	} else {
-		slogctx.Debug(ctx, "task resolving still in progress")
-		job.Status = JobStatusResolving
+	if !resolverResult.Done && !hasTasks {
+		msg := "task resolver returned no tasks but not done, invalid state"
+		slogctx.Debug(ctx, msg, "status", job.Status)
+		job.Status = JobStatusResolveCanceled
+		job.ErrorMessage = msg
+		return m.updateJobAndCreateJobEvent(ctx, repo, job)
 	}
 
+	job.Status = JobStatusResolving
+	if resolverResult.Done {
+		job.Status = JobStatusReady
+	}
+
+	slogctx.Debug(ctx, "task resolving completed", "status", job.Status)
 	return repo.updateJob(ctx, job)
 }
 
