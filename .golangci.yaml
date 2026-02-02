@@ -32,6 +32,10 @@ linters:
     testifylint:
       disable:
         - require-error
+    errcheck:
+      exclude-functions:
+        - (*github.com/openkcm/orbital.Repository).updateJob
+        - (*github.com/openkcm/orbital.Repository).updateTask
   exclusions:
     generated: lax
     presets:

@@ -455,7 +455,7 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 	jobCursor, found, err := m.getJobCursor(ctx, repo, job.ID)
 	if err != nil {
 		slogctx.Error(ctx, "failed to get job cursor", "error", err)
-		repo.updateJob(ctx, job) //nolint:errcheck
+		repo.updateJob(ctx, job)
 		return err
 	}
 
@@ -483,25 +483,25 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 		_, err = repo.createTasks(ctx, newTasks(job.ID, resolverResult.TaskInfos))
 		if err != nil {
 			slogctx.Error(ctx, "failed to create tasks for job", "error", err)
-			repo.updateJob(ctx, job) //nolint:errcheck
+			repo.updateJob(ctx, job)
 			return err
 		}
+	}
+
+	if !hasTasks && !resolverResult.Done {
+		msg := "task resolver returned no tasks but not done, invalid state"
+		slogctx.Warn(ctx, msg, "status", job.Status)
+		job.Status = JobStatusResolveCanceled
+		job.ErrorMessage = msg
+		return m.updateJobAndCreateJobEvent(ctx, repo, job)
 	}
 
 	jobCursor.Cursor = resolverResult.Cursor
 	err = m.createOrUpdateCursor(ctx, repo, found, jobCursor)
 	if err != nil {
 		slogctx.Error(ctx, "failed to create/update tasks cursor for job ", "error", err)
-		repo.updateJob(ctx, job) //nolint:errcheck
+		repo.updateJob(ctx, job)
 		return err
-	}
-
-	if !resolverResult.Done && !hasTasks {
-		msg := "task resolver returned no tasks but not done, invalid state"
-		slogctx.Debug(ctx, msg, "status", job.Status)
-		job.Status = JobStatusResolveCanceled
-		job.ErrorMessage = msg
-		return m.updateJobAndCreateJobEvent(ctx, repo, job)
 	}
 
 	job.Status = JobStatusResolving
@@ -698,7 +698,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 		slogctx.Debug(ctx, "max reconcile count for task exceeded")
 		task.ETag = uuid.NewString()
 		task.Status = TaskStatusFailed
-		repo.updateTask(ctx, task) //nolint:errcheck
+		repo.updateTask(ctx, task)
 		return
 	}
 
@@ -711,7 +711,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 		}
 		slogctx.Warn(ctx, errLog)
 		task.Status = TaskStatusFailed
-		repo.updateTask(ctx, task) //nolint:errcheck
+		repo.updateTask(ctx, task)
 		return
 	}
 
@@ -738,7 +738,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 		if err != nil {
 			slogctx.Warn(ctx, "task request signing failed , marking task as failed")
 			task.Status = TaskStatusFailed
-			repo.updateTask(ctx, task) //nolint:errcheck
+			repo.updateTask(ctx, task)
 			return
 		}
 		req.addMeta(signature)
@@ -748,12 +748,12 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 
 	if err := mgrTarget.Client.SendTaskRequest(ctx, req); err != nil {
 		slogctx.Error(ctx, "failed to send task request", "error", err)
-		repo.updateTask(ctx, task) //nolint:errcheck
+		repo.updateTask(ctx, task)
 		return
 	}
 	task.TotalSentCount++
 
-	repo.updateTask(ctx, task) //nolint:errcheck
+	repo.updateTask(ctx, task)
 }
 
 // updateJobAndCreateJobEvent updates the given job in the repository and records a job event.
