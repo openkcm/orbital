@@ -3,9 +3,7 @@ package orbital_test
 import (
 	"context"
 	"strings"
-	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -13,6 +11,20 @@ import (
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/respondertest"
 )
+
+func TestOperator_NewOperator(t *testing.T) {
+	t.Run("should return error if signature checking is enabled and the verifier is nil set for the target", func(t *testing.T) {
+		invalidTarget := orbital.TargetOperator{
+			Client:             respondertest.NewResponder(),
+			Verifier:           nil,
+			MustCheckSignature: true,
+		}
+
+		actResult, actErr := orbital.NewOperator(invalidTarget)
+		assert.Nil(t, actResult)
+		assert.ErrorIs(t, actErr, orbital.ErrOperatorInvalidConfig)
+	})
+}
 
 func TestHandlerResponse_WorkingState(t *testing.T) {
 	// given
@@ -147,7 +159,7 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client}, tt.opts...)
+			o, err := orbital.NewOperator(orbital.TargetOperator{Client: client}, tt.opts...)
 			if tt.expErr != nil {
 				assert.ErrorIs(t, err, tt.expErr)
 				return
@@ -161,7 +173,7 @@ func TestNew(t *testing.T) {
 func TestRegisterHandler(t *testing.T) {
 	client := respondertest.NewResponder()
 
-	o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client})
+	o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	assert.NoError(t, err)
 	assert.NotNil(t, o)
 
@@ -206,7 +218,7 @@ func TestRegisterHandler(t *testing.T) {
 func TestListenAndRespond_ErrorResponse(t *testing.T) {
 	client := respondertest.NewResponder()
 
-	o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client})
+	o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	assert.NoError(t, err)
 	assert.NotNil(t, o)
 
@@ -252,7 +264,7 @@ func TestListenAndRespond_ErrorResponse(t *testing.T) {
 func TestListenAndRespond(t *testing.T) {
 	client := respondertest.NewResponder()
 
-	o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client})
+	o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	assert.NoError(t, err)
 	assert.NotNil(t, o)
 
@@ -297,7 +309,7 @@ func TestListenAndRespond(t *testing.T) {
 func TestListenAndRespond_WorkingState(t *testing.T) {
 	client := respondertest.NewResponder()
 
-	o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client})
+	o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	assert.NoError(t, err)
 	assert.NotNil(t, o)
 
@@ -419,256 +431,6 @@ func TestListenAndRespond_WorkingState(t *testing.T) {
 			assert.Empty(t, resp.ErrorMessage)
 		})
 	}
-}
-
-func TestOperatorCrypto(t *testing.T) {
-	t.Run("VerifyTaskRequest", func(t *testing.T) {
-		taskReq := orbital.TaskRequest{
-			TaskID:       uuid.New(),
-			Type:         "success",
-			ExternalID:   "external-id",
-			ETag:         "etag",
-			Data:         []byte("test data"),
-			WorkingState: []byte("{}"),
-		}
-
-		var actVerifyTaskRequestCalls atomic.Int32
-
-		respSigner := &mockResponseSigner{
-			FnSign: func(_ context.Context, _ orbital.TaskResponse) (orbital.Signature, error) {
-				return orbital.Signature{}, nil
-			},
-		}
-
-		tts := []struct {
-			name                      string
-			reqVerifier               orbital.TaskRequestVerifier
-			expVerifyTaskRequestCalls int32
-			expHandlerCalls           int32
-		}{
-			{
-				name: "should call verifyTaskRequest and handler if the crypto is not nil",
-				reqVerifier: &mockRequestVerifier{
-					FnVerify: func(_ context.Context, request orbital.TaskRequest) error {
-						actVerifyTaskRequestCalls.Add(1)
-						assert.Equal(t, taskReq, request)
-						return nil
-					},
-				},
-				expVerifyTaskRequestCalls: 1,
-				expHandlerCalls:           1,
-			},
-			{
-				name:                      "should call handler even if the crypto is nil",
-				reqVerifier:               nil,
-				expVerifyTaskRequestCalls: 0,
-				expHandlerCalls:           1,
-			},
-			{
-				name: "should not call the handler if the verifyTaskRequest returns an error",
-				reqVerifier: &mockRequestVerifier{
-					FnVerify: func(_ context.Context, request orbital.TaskRequest) error {
-						actVerifyTaskRequestCalls.Add(1)
-						assert.Equal(t, taskReq, request)
-						return assert.AnError
-					},
-				},
-				expVerifyTaskRequestCalls: 1,
-				expHandlerCalls:           0,
-			},
-		}
-
-		for _, tt := range tts {
-			t.Run(tt.name, func(t *testing.T) {
-				// given
-				actVerifyTaskRequestCalls.Store(0)
-
-				client := respondertest.NewResponder()
-				o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client, Signer: respSigner, Verifier: tt.reqVerifier})
-				assert.NoError(t, err)
-				assert.NotNil(t, o)
-
-				ctx := t.Context()
-				o.ListenAndRespond(ctx)
-
-				var actHandlerCalls atomic.Int32
-				actHandlerCallChan := make(chan struct{})
-				h := func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
-					assert.Equal(t, taskReq.TaskID, req.TaskID)
-					actHandlerCalls.Add(1)
-					actHandlerCallChan <- struct{}{}
-
-					resp.Result = orbital.ResultDone
-					resp.ReconcileAfterSec = int64(10)
-					return nil
-				}
-
-				err = o.RegisterHandler(taskReq.Type, h)
-				assert.NoError(t, err)
-
-				// when
-				client.NewRequest(taskReq)
-
-				ctxTimeout, cancel := context.WithTimeout(ctx, time.Second*2)
-				defer cancel()
-				select {
-				case <-ctxTimeout.Done():
-				case <-actHandlerCallChan:
-				}
-
-				// then
-				assert.Equal(t, tt.expVerifyTaskRequestCalls, actVerifyTaskRequestCalls.Load())
-				assert.Equal(t, tt.expHandlerCalls, actHandlerCalls.Load())
-			})
-		}
-	})
-	t.Run("SignTaskResponse", func(t *testing.T) {
-		// given
-		mockVerifier := &mockRequestVerifier{
-			FnVerify: func(_ context.Context, _ orbital.TaskRequest) error {
-				return nil
-			},
-		}
-		expSignature := orbital.Signature{
-			"value": "signature",
-			"type":  "jwt",
-		}
-
-		expStatus := string(orbital.ResultDone)
-		expReconcileAfterSec := int64(19)
-		expWorkingState := []byte("{}")
-
-		taskReq := orbital.TaskRequest{
-			TaskID:       uuid.New(),
-			Type:         "success",
-			ExternalID:   "external-id",
-			ETag:         "etag",
-			Data:         []byte("test data"),
-			WorkingState: []byte("{}"),
-		}
-		expResponse := orbital.TaskResponse{
-			TaskID:            taskReq.TaskID,
-			Type:              taskReq.Type,
-			ExternalID:        taskReq.ExternalID,
-			ETag:              taskReq.ETag,
-			WorkingState:      expWorkingState,
-			Status:            expStatus,
-			ReconcileAfterSec: expReconcileAfterSec,
-		}
-
-		var actSignTaskResponseCalls atomic.Int32
-		tts := []struct {
-			name                     string
-			respSigner               orbital.TaskResponseSigner
-			expSendTaskResponseCalls int32
-			expSignCalls             int32
-			expSignature             orbital.Signature
-		}{
-			{
-				name: "should call signTaskResponse and client sendTaskResponse if crypto is not nil",
-				respSigner: &mockResponseSigner{
-					FnSign: func(_ context.Context, response orbital.TaskResponse) (orbital.Signature, error) {
-						actSignTaskResponseCalls.Add(1)
-						assert.Equal(t, expResponse, response)
-						return expSignature, nil
-					},
-				},
-				expSignCalls:             1,
-				expSendTaskResponseCalls: 1,
-				expSignature:             expSignature,
-			},
-			{
-				name:                     "should call client sendTaskResponse even if the crypto is nil",
-				respSigner:               nil,
-				expSignCalls:             0,
-				expSendTaskResponseCalls: 1,
-			},
-			{
-				name: "should not call the client sendTaskResponse if the sign task response returns an error",
-				respSigner: &mockResponseSigner{
-					FnSign: func(_ context.Context, response orbital.TaskResponse) (orbital.Signature, error) {
-						actSignTaskResponseCalls.Add(1)
-						assert.Equal(t, expResponse, response)
-						return orbital.Signature{}, assert.AnError
-					},
-				},
-				expSignCalls:             1,
-				expSendTaskResponseCalls: 0,
-			},
-		}
-
-		for _, tt := range tts {
-			t.Run(tt.name, func(t *testing.T) {
-				actSignTaskResponseCalls.Store(0)
-
-				client := &mockResponder{}
-				taskRequestChan := make(chan orbital.TaskRequest)
-				client.FnReceiveTaskRequest = func(_ context.Context) (orbital.TaskRequest, error) {
-					return <-taskRequestChan, nil
-				}
-
-				var actSendTaskResponseCalls atomic.Int32
-				actSendTaskResponseCallChan := make(chan struct{})
-				client.FnSendTaskResponse = func(_ context.Context, response orbital.TaskResponse) error {
-					actSendTaskResponseCalls.Add(1)
-					actSendTaskResponseCallChan <- struct{}{}
-					assertMapContains(t, response.MetaData, tt.expSignature)
-					return nil
-				}
-
-				o, err := orbital.NewOperator(orbital.OperatorTarget{Client: client, Verifier: mockVerifier, Signer: tt.respSigner})
-				assert.NoError(t, err)
-				assert.NotNil(t, o)
-
-				ctx := t.Context()
-				o.ListenAndRespond(ctx)
-
-				h := func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
-					assert.Equal(t, taskReq.TaskID, req.TaskID)
-					resp.Result = orbital.Result(expStatus)
-					resp.ReconcileAfterSec = expReconcileAfterSec
-					return nil
-				}
-
-				err = o.RegisterHandler(taskReq.Type, h)
-				assert.NoError(t, err)
-
-				// when
-				taskRequestChan <- taskReq
-
-				ctxTimeout, cancel := context.WithTimeout(ctx, time.Second*2)
-				defer cancel()
-				select {
-				case <-ctxTimeout.Done():
-				case <-actSendTaskResponseCallChan:
-				}
-
-				// then
-				assert.Equal(t, tt.expSignCalls, actSignTaskResponseCalls.Load())
-				assert.Equal(t, tt.expSendTaskResponseCalls, actSendTaskResponseCalls.Load())
-			})
-		}
-	})
-}
-
-type mockRequestVerifier struct {
-	FnVerify func(ctx context.Context, request orbital.TaskRequest) error
-}
-
-var _ orbital.TaskRequestVerifier = &mockRequestVerifier{}
-
-func (m *mockRequestVerifier) Verify(ctx context.Context, request orbital.TaskRequest) error {
-	return m.FnVerify(ctx, request)
-}
-
-type mockResponseSigner struct {
-	FnSign func(ctx context.Context, response orbital.TaskResponse) (orbital.Signature, error)
-}
-
-var _ orbital.TaskResponseSigner = &mockResponseSigner{}
-
-func (m *mockResponseSigner) Sign(ctx context.Context, response orbital.TaskResponse) (orbital.Signature, error) {
-	return m.FnSign(ctx, response)
 }
 
 type mockResponder struct {

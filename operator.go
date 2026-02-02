@@ -23,7 +23,7 @@ const (
 type (
 	// Operator handles task requests and responses.
 	Operator struct {
-		target          OperatorTarget
+		target          TargetOperator
 		handlerRegistry handlerRegistry
 		requests        chan TaskRequest
 		numberOfWorkers int
@@ -100,6 +100,7 @@ func (r *HandlerResponse) WorkingState() (*WorkingState, error) {
 }
 
 var (
+	ErrOperatorInvalidConfig      = errors.New("invalid operator configuration")
 	ErrHandlerNil                 = errors.New("handler cannot be nil")
 	ErrBufferSizeNegative         = errors.New("buffer size cannot be negative")
 	ErrNumberOfWorkersNotPositive = errors.New("number of workers must be greater than 0")
@@ -107,7 +108,11 @@ var (
 )
 
 // NewOperator creates a new Operator instance with the given Responder and options.
-func NewOperator(target OperatorTarget, opts ...Option) (*Operator, error) {
+func NewOperator(target TargetOperator, opts ...Option) (*Operator, error) {
+	if target.MustCheckSignature && target.Verifier == nil {
+		return nil, ErrOperatorInvalidConfig
+	}
+
 	c := config{
 		bufferSize:      100,
 		numberOfWorkers: 10,
@@ -197,8 +202,8 @@ func (o *Operator) startResponding(ctx context.Context) {
 					logCtx := slogctx.With(ctx, "externalID", req.ExternalID, "taskID", req.TaskID, "etag", req.ETag, "taskType", req.Type)
 					slogctx.Debug(logCtx, "received task request")
 
-					err := o.verifySignature(logCtx, req)
-					if err != nil {
+					isValid := o.isValidSignature(logCtx, req)
+					if !isValid {
 						continue
 					}
 
@@ -223,16 +228,21 @@ func (o *Operator) startResponding(ctx context.Context) {
 	}
 }
 
-func (o *Operator) verifySignature(ctx context.Context, req TaskRequest) error {
-	verifier := o.target.Verifier
-	if verifier != nil {
-		err := verifier.Verify(ctx, req)
-		if err != nil {
-			slogctx.Error(ctx, "verifying task request signature", "error", err)
-		}
-		return err
+func (o *Operator) isValidSignature(ctx context.Context, req TaskRequest) bool {
+	if !o.target.MustCheckSignature {
+		return true
 	}
-	return nil
+	verifier := o.target.Verifier
+	if verifier == nil {
+		slogctx.Error(ctx, "signature verification is enabled but no signature verifier is set")
+		return false
+	}
+	err := verifier.Verify(ctx, req)
+	if err != nil {
+		slogctx.Error(ctx, "failed while verifying task request signature", "error", err)
+		return false
+	}
+	return true
 }
 
 func (o *Operator) handleRequest(ctx context.Context, req TaskRequest) (TaskResponse, error) {

@@ -524,7 +524,7 @@ func TestCreateTasks(t *testing.T) {
 						Done: true,
 					}, nil
 				}
-				targets := map[string]orbital.ManagerTarget{
+				targets := map[string]orbital.TargetManager{
 					"target-1": {Client: nil},
 				}
 				subj, _ := orbital.NewManager(
@@ -588,7 +588,7 @@ func TestCreateTasks(t *testing.T) {
 					}, nil
 				}
 
-				targets := map[string]orbital.ManagerTarget{
+				targets := map[string]orbital.TargetManager{
 					"target": {Client: nil},
 				}
 				subj, _ := orbital.NewManager(
@@ -656,7 +656,7 @@ func TestCreateTasks(t *testing.T) {
 				Done: true,
 			}, nil
 		}
-		targets := map[string]orbital.ManagerTarget{
+		targets := map[string]orbital.TargetManager{
 			"target-1": {Client: nil},
 		}
 		subj, _ := orbital.NewManager(
@@ -747,7 +747,7 @@ func TestCreateTasks(t *testing.T) {
 				return tt.resolverResult, nil
 			}
 
-			targets := map[string]orbital.ManagerTarget{
+			targets := map[string]orbital.TargetManager{
 				"target-1": {Client: nil},
 			}
 			subj, _ := orbital.NewManager(
@@ -911,7 +911,7 @@ func TestCreateTasks(t *testing.T) {
 			}, nil
 		}
 
-		targets := map[string]orbital.ManagerTarget{
+		targets := map[string]orbital.TargetManager{
 			"target": {Client: nil},
 		}
 		subj, _ := orbital.NewManager(
@@ -971,7 +971,7 @@ func TestCreateTasks(t *testing.T) {
 			}, nil
 		}
 
-		targets := map[string]orbital.ManagerTarget{
+		targets := map[string]orbital.TargetManager{
 			"target-1": {Client: nil},
 			"target-2": {Client: nil},
 		}
@@ -1064,6 +1064,63 @@ func TestListTasks(t *testing.T) {
 }
 
 func TestStart(t *testing.T) {
+	t.Run("should fail to start manager", func(t *testing.T) {
+		t.Run("if any of target managers signing verifier is not set and signature check is enabled ", func(t *testing.T) {
+			// given
+			ctx := t.Context()
+
+			db, store := createSQLStore(t)
+			defer clearTables(t, db)
+
+			repo := orbital.NewRepository(store)
+
+			optsFunc := []orbital.ManagerOptsFunc{
+				orbital.WithTargets(map[string]orbital.TargetManager{
+					"target-1": {
+						Client: &testInitiator{},
+					},
+					"target-2": {
+						Client:             &testInitiator{},
+						MustCheckSignature: true,
+					},
+				}),
+			}
+
+			subj, err := orbital.NewManager(repo,
+				mockTaskResolveFunc(), optsFunc...,
+			)
+			assert.NoError(t, err)
+
+			// when
+			err = subj.Start(ctx)
+
+			// then
+			assert.ErrorIs(t, err, orbital.ErrManagerInvalidConfig)
+		})
+
+		t.Run("if manager is already started", func(t *testing.T) {
+			// given
+			db, store := createSQLStore(t)
+			defer clearTables(t, db)
+			repo := orbital.NewRepository(store)
+
+			ctx := t.Context()
+
+			subj, err := orbital.NewManager(repo, mockTaskResolveFunc())
+			assert.NoError(t, err)
+
+			// when
+			assert.NoError(t, subj.Start(ctx))
+			defer assert.NoError(t, subj.Stop(ctx))
+
+			// then
+			err = subj.Start(ctx)
+			assert.ErrorIs(t, err, orbital.ErrManagerAlreadyStarted)
+		})
+	})
+}
+
+func TestManager_JovDoneEventFunc(t *testing.T) {
 	t.Run("should call JobDoneEventFunc", func(t *testing.T) {
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
@@ -1157,23 +1214,6 @@ func TestCancel(t *testing.T) {
 	})
 }
 
-func TestManagerStart_AlreadyStarted(t *testing.T) {
-	db, store := createSQLStore(t)
-	defer clearTables(t, db)
-	repo := orbital.NewRepository(store)
-
-	subj, err := orbital.NewManager(repo, mockTaskResolveFunc())
-	assert.NoError(t, err)
-
-	ctx := t.Context()
-
-	assert.NoError(t, subj.Start(ctx))
-	defer assert.NoError(t, subj.Stop(ctx))
-
-	err = subj.Start(ctx)
-	assert.ErrorIs(t, err, orbital.ErrManagerAlreadyStarted)
-}
-
 func TestManagerStop_Success(t *testing.T) {
 	db, store := createSQLStore(t)
 	defer clearTables(t, db)
@@ -1251,7 +1291,7 @@ func TestManagerStop_ClosesAllClients(t *testing.T) {
 		},
 	}
 
-	targets := map[string]orbital.ManagerTarget{
+	targets := map[string]orbital.TargetManager{
 		"target-1": {Client: mockClient},
 		"target-2": {Client: mockClient},
 	}
@@ -1381,7 +1421,7 @@ func TestManagerStop_GracefulShutdown(t *testing.T) {
 			},
 		}
 
-		targets := map[string]orbital.ManagerTarget{
+		targets := map[string]orbital.TargetManager{
 			"target": {Client: mockClient},
 		}
 
@@ -1429,7 +1469,7 @@ func TestManagerStop_GracefulShutdown(t *testing.T) {
 			}
 		}
 
-		targets := map[string]orbital.ManagerTarget{
+		targets := map[string]orbital.TargetManager{
 			"target-1": {Client: createMockClient()},
 			"target-2": {Client: createMockClient()},
 			"target-3": {Client: createMockClient()},

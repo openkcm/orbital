@@ -75,7 +75,7 @@ func HandleTask(m *Manager) func(ctx context.Context, wg *sync.WaitGroup, repo R
 	return m.handleTask
 }
 
-func HandleResponses(m *Manager) func(ctx context.Context, initiator ManagerTarget, target string) {
+func HandleResponses(m *Manager) func(ctx context.Context, initiator TargetManager, target string) {
 	return m.handleResponses
 }
 

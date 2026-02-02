@@ -37,7 +37,7 @@ type (
 		jobDoneEventFunc     JobTerminatedEventFunc
 		jobCanceledEventFunc JobTerminatedEventFunc
 		jobFailedEventFunc   JobTerminatedEventFunc
-		targets              map[string]ManagerTarget
+		targets              map[string]TargetManager
 	}
 
 	// JobTerminatedEventFunc defines a callback function type for sending job events.
@@ -122,6 +122,7 @@ const (
 var (
 	ErrManagerAlreadyStarted = errors.New("manager was already started")
 	ErrManagerNotStarted     = errors.New("manager was not started")
+	ErrManagerInvalidConfig  = errors.New("manager has invalid configuration")
 	ErrTaskResolverNotSet    = errors.New("taskResolver not set")
 	ErrMsgFailedTasks        = "job has failed tasks"
 	ErrJobUnCancelable       = errors.New("job cannot be canceled in its current state")
@@ -189,8 +190,8 @@ func WithJobConfirmFunc(f JobConfirmFunc) ManagerOptsFunc {
 	}
 }
 
-// WithTargets set the map that maps the target string to its ManagerTarget.
-func WithTargets(targets map[string]ManagerTarget) ManagerOptsFunc {
+// WithTargets set the map that maps the target string to its TargetManager.
+func WithTargets(targets map[string]TargetManager) ManagerOptsFunc {
 	return func(m *Manager) {
 		m.targets = targets
 	}
@@ -219,6 +220,10 @@ func WithJobFailedEventFunc(f JobTerminatedEventFunc) ManagerOptsFunc {
 
 // Start starts the job manager to process jobs.
 func (m *Manager) Start(ctx context.Context) error {
+	if !m.isValidConfig(ctx) {
+		return ErrManagerInvalidConfig
+	}
+
 	if m.started.Load() {
 		return ErrManagerAlreadyStarted
 	}
@@ -683,7 +688,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 	mgrTarget, ok := m.targets[task.Target]
 	// this is an additional safeguard, this should never happen as we check for the existence of targets while creating tasks.
 	if !ok || mgrTarget.Client == nil {
-		errLog := "no managerTarget found for task target, marking task as failed"
+		errLog := "no target manager found for task target, marking task as failed"
 		if mgrTarget.Client == nil {
 			errLog = "no initiator client found for task target, marking task as failed"
 		}
@@ -750,7 +755,7 @@ func (m *Manager) updateJobAndCreateJobEvent(ctx context.Context, repo Repositor
 func (m *Manager) startResponseReaders(ctx context.Context) {
 	for target, mgrTarget := range m.targets {
 		m.wg.Add(1)
-		go func(ctx context.Context, target string, mgrTarget ManagerTarget) {
+		go func(ctx context.Context, target string, mgrTarget TargetManager) {
 			defer m.wg.Done()
 			m.handleResponses(ctx, mgrTarget, target)
 		}(ctx, target, mgrTarget)
@@ -758,7 +763,7 @@ func (m *Manager) startResponseReaders(ctx context.Context) {
 }
 
 // handleResponses continuously reads TaskResponse messages from a client.
-func (m *Manager) handleResponses(ctx context.Context, mgrTarget ManagerTarget, target string) {
+func (m *Manager) handleResponses(ctx context.Context, mgrTarget TargetManager, target string) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -780,12 +785,10 @@ func (m *Manager) handleResponses(ctx context.Context, mgrTarget ManagerTarget, 
 			newCtx := slogctx.With(ctx, "target", target, "externalID", resp.ExternalID, "taskID", resp.TaskID.String(), "etag", resp.ETag)
 			slogctx.Debug(newCtx, "received task response")
 
-			if mgrTarget.Verifier != nil {
-				err = mgrTarget.Verifier.Verify(newCtx, resp)
-				if err != nil {
-					slogctx.Error(newCtx, "failed while verifying task response signature", "error", err)
-					continue
-				}
+			isValid := isValidSignature(newCtx, mgrTarget, resp)
+			if !isValid {
+				slogctx.Warn(newCtx, "task response signature verification failed, discarding response")
+				continue
 			}
 
 			if err := m.processResponse(newCtx, resp); err != nil {
@@ -842,4 +845,30 @@ func (m *Manager) closeClients(ctx context.Context) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+func (m *Manager) isValidConfig(ctx context.Context) bool {
+	for target, mgrTarget := range m.targets {
+		if mgrTarget.MustCheckSignature && mgrTarget.Verifier == nil {
+			slogctx.Error(ctx, "signature verification is enabled but no signature verifier is set for", "target", target)
+			return false
+		}
+	}
+	return true
+}
+
+func isValidSignature(ctx context.Context, mgrTarget TargetManager, resp TaskResponse) bool {
+	if !mgrTarget.MustCheckSignature {
+		return true
+	}
+	if mgrTarget.Verifier == nil {
+		slogctx.Error(ctx, "signature verification is enabled but no signature verifier is set")
+		return false
+	}
+	err := mgrTarget.Verifier.Verify(ctx, resp)
+	if err != nil {
+		slogctx.Error(ctx, "failed while verifying task response signature", "error", err)
+		return false
+	}
+	return true
 }
