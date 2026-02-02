@@ -687,6 +687,8 @@ func (m *Manager) handleTasks(ctx context.Context, repo Repository, job Job, tas
 // If the task has reached its max sent count, it updates the task status to FAILED.
 // If the task can be sent, it retrieves the corresponding client,
 // sends the task request, and updates the task.
+//
+//nolint:funlen
 func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repository, job Job, task Task) {
 	defer wg.Done()
 
