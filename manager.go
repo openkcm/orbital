@@ -455,7 +455,6 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 	jobCursor, found, err := m.getJobCursor(ctx, repo, job.ID)
 	if err != nil {
 		slogctx.Error(ctx, "failed to get job cursor", "error", err)
-		repo.updateJob(ctx, job)
 		return err
 	}
 
@@ -483,7 +482,6 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 		_, err = repo.createTasks(ctx, newTasks(job.ID, resolverResult.TaskInfos))
 		if err != nil {
 			slogctx.Error(ctx, "failed to create tasks for job", "error", err)
-			repo.updateJob(ctx, job)
 			return err
 		}
 	}
@@ -500,7 +498,6 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 	err = m.createOrUpdateCursor(ctx, repo, found, jobCursor)
 	if err != nil {
 		slogctx.Error(ctx, "failed to create/update tasks cursor for job ", "error", err)
-		repo.updateJob(ctx, job)
 		return err
 	}
 

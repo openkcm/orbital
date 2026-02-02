@@ -715,6 +715,14 @@ func TestCreateTasks(t *testing.T) {
 				expStatus: orbital.JobStatusReady,
 			},
 			{
+				name: "to READY if an empty target list is returned and resolver is done",
+				resolverResult: orbital.TaskResolverResult{
+					TaskInfos: []orbital.TaskInfo{},
+					Done:      true,
+				},
+				expStatus: orbital.JobStatusReady,
+			},
+			{
 				name: "to FAILED if the target does not exist",
 				resolverResult: orbital.TaskResolverResult{
 					TaskInfos: []orbital.TaskInfo{
