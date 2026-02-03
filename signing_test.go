@@ -534,3 +534,23 @@ func TestOperator_Verification(t *testing.T) {
 		}
 	})
 }
+
+type mockRequestVerifier struct {
+	FnVerify func(ctx context.Context, request orbital.TaskRequest) error
+}
+
+var _ orbital.TaskRequestVerifier = &mockRequestVerifier{}
+
+func (m *mockRequestVerifier) Verify(ctx context.Context, request orbital.TaskRequest) error {
+	return m.FnVerify(ctx, request)
+}
+
+type mockResponseSigner struct {
+	FnSign func(ctx context.Context, response orbital.TaskResponse) (orbital.Signature, error)
+}
+
+var _ orbital.TaskResponseSigner = &mockResponseSigner{}
+
+func (m *mockResponseSigner) Sign(ctx context.Context, response orbital.TaskResponse) (orbital.Signature, error) {
+	return m.FnSign(ctx, response)
+}
