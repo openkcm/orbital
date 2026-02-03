@@ -279,7 +279,7 @@ func TestListenAndRespond(t *testing.T) {
 	}
 
 	expState := orbital.ResultDone
-	expReconcileAfterSec := int64(10)
+	expReconcileAfterSec := uint64(10)
 
 	h := func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
 		assert.Equal(t, taskReq.TaskID, req.TaskID)

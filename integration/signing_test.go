@@ -28,7 +28,7 @@ const (
 )
 
 var (
-	mgrMaxReconcileCount = 3
+	mgrMaxReconcileCount = uint(3)
 	validSubject         = pkix.Name{
 		CommonName: "CA", Organization: []string{"SE"}, Country: []string{"US"}, Locality: []string{"Canary"},
 		OrganizationalUnit: []string{"Clients"},
@@ -69,10 +69,10 @@ func TestTaskSigningAndVerification(t *testing.T) {
 			responderVerifier       *jwtsigning.Verifier
 			expJobStatus            orbital.JobStatus
 			expTaskStatus           orbital.TaskStatus
-			expInitiatorSignCalls   int
-			expInitiatorVerifyCalls int
-			expResponderSignCalls   int
-			expResponderVerifyCalls int
+			expInitiatorSignCalls   uint
+			expInitiatorVerifyCalls uint
+			expResponderSignCalls   uint
+			expResponderVerifyCalls uint
 		}{
 			{
 				name:                    "task request should sign and verify",
@@ -326,10 +326,10 @@ type testCase struct {
 	hasher                  jwtsigning.Hasher
 	expJobStatus            orbital.JobStatus
 	expTaskStatus           orbital.TaskStatus
-	expInitiatorSignCalls   int
-	expInitiatorVerifyCalls int
-	expResponderSignCalls   int
-	expResponderVerifyCalls int
+	expInitiatorSignCalls   uint
+	expInitiatorVerifyCalls uint
+	expResponderSignCalls   uint
+	expResponderVerifyCalls uint
 	expInitiatorVerifyErr   error
 	expResponderVerifyErr   error
 }
@@ -399,7 +399,7 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, initiatorHand
 			terminationDone <- job
 			return nil
 		},
-		maxReconcileCount:     int64(mgrMaxReconcileCount),
+		maxReconcileCount:     uint64(mgrMaxReconcileCount),
 		backoffMaxIntervalSec: 1,
 	}
 
@@ -466,8 +466,8 @@ func (j *jwksProvider) CurrentSigningKey(_ context.Context) (*rsa.PrivateKey, jw
 
 type mockInitiatorSigHandler struct {
 	handler        *orbital.InitiatorSignatureHandler
-	actSignCalls   int
-	actVerifyCalls int
+	actSignCalls   uint
+	actVerifyCalls uint
 	actToken       string
 	actVerifyErr   error
 }
@@ -497,8 +497,8 @@ func (h *mockInitiatorSigHandler) Verify(ctx context.Context, response orbital.T
 
 type mockResponderSigHandler struct {
 	handler        *orbital.ResponderSignatureHandler
-	actSignCalls   int
-	actVerifyCalls int
+	actSignCalls   uint
+	actVerifyCalls uint
 	actToken       string
 	actVerifyErr   error
 }

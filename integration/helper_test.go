@@ -52,8 +52,8 @@ type managerConfig struct {
 	jobDoneEventFunc      orbital.JobTerminatedEventFunc
 	jobCanceledEventFunc  orbital.JobTerminatedEventFunc
 	jobFailedEventFunc    orbital.JobTerminatedEventFunc
-	maxReconcileCount     int64
-	backoffMaxIntervalSec int64
+	maxReconcileCount     uint64
+	backoffMaxIntervalSec uint64
 }
 
 // operatorConfig holds configuration for the operator.

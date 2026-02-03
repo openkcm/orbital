@@ -60,7 +60,7 @@ type (
 	HandlerResponse struct {
 		RawWorkingState   []byte
 		Result            Result
-		ReconcileAfterSec int64
+		ReconcileAfterSec uint64
 
 		workingState *WorkingState
 	}
