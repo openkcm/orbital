@@ -33,7 +33,7 @@ type (
 
 	// TaskResolverResult represents the outcome of a task resolution attempt.
 	TaskResolverResult interface {
-		TaskResolverResultType() TaskResolverResultType
+		Type() TaskResolverResultType
 	}
 
 	// TaskResolverResultType is the type for the task resolver result.
@@ -50,8 +50,8 @@ type TaskResolverProcessing struct {
 	cursor   TaskResolverCursor
 }
 
-// TaskResolverResultType returns the type of the task resolver result.
-func (r TaskResolverProcessing) TaskResolverResultType() TaskResolverResultType {
+// Type returns the type of the task resolver result.
+func (r TaskResolverProcessing) Type() TaskResolverResultType {
 	return ContinueTaskResolverResult
 }
 
@@ -83,8 +83,8 @@ type TaskResolverCanceled struct {
 	reason string
 }
 
-// TaskResolverResultType returns the type of the task resolver result.
-func (r TaskResolverCanceled) TaskResolverResultType() TaskResolverResultType {
+// Type returns the type of the task resolver result.
+func (r TaskResolverCanceled) Type() TaskResolverResultType {
 	return CancelTaskResolverResult
 }
 
@@ -104,8 +104,8 @@ type TaskResolverDone struct {
 	taskInfo []TaskInfo
 }
 
-// TaskResolverResultType returns the type of the task resolver result.
-func (r TaskResolverDone) TaskResolverResultType() TaskResolverResultType {
+// Type returns the type of the task resolver result.
+func (r TaskResolverDone) Type() TaskResolverResultType {
 	return CompleteTaskResolverResult
 }
 

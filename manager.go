@@ -439,7 +439,7 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 		// NOTE: here we update the job to change the updated_at timestamp in order to spread the fetching of jobs.
 		return repo.updateJob(ctx, job)
 	}
-	slogctx.Debug(ctx, "task resolver function executed successfully", "type", resolverResult.TaskResolverResultType())
+	slogctx.Debug(ctx, "task resolver function executed successfully", "type", resolverResult.Type())
 
 	switch r := resolverResult.(type) {
 	case TaskResolverProcessing:
@@ -479,7 +479,7 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 		}
 		job.Status = JobStatusReady
 	default:
-		slogctx.Error(ctx, "unknown task resolver result type", "type", resolverResult.TaskResolverResultType())
+		slogctx.Error(ctx, "unknown task resolver result type", "type", resolverResult.Type())
 		return ErrUnknownTaskResolverType
 	}
 
