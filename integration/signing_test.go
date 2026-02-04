@@ -361,16 +361,14 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, initiatorHand
 	managerConfig := managerConfig{
 		taskResolveFunc: func(_ context.Context, job orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			t.Logf("TaskResolver called for job %s", job.ID)
-			return orbital.TaskResolverResult{
-				TaskInfos: []orbital.TaskInfo{
+			return orbital.CompleteTaskResolver().
+				WithTaskInfo([]orbital.TaskInfo{
 					{
 						Data:   []byte("task-data"),
 						Type:   taskType,
 						Target: taskTarget,
 					},
-				},
-				Done: true,
-			}, nil
+				}), nil
 		},
 		jobConfirmFunc: func(_ context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
 			t.Logf("JobConfirmFunc called for job %s", job.ID)

@@ -117,18 +117,16 @@ func resolveTask(_ context.Context, job orbital.Job, _ orbital.TaskResolverCurso
 	}
 	target, ok := targets[job.Type]
 	if !ok {
-		return orbital.TaskResolverResult{}, errUnknownJobType
+		return nil, errUnknownJobType
 	}
-	return orbital.TaskResolverResult{
-		TaskInfos: []orbital.TaskInfo{
+	return orbital.CompleteTaskResolver().
+		WithTaskInfo([]orbital.TaskInfo{
 			{
 				Data:   job.Data,
 				Type:   job.Type,
 				Target: target,
 			},
-		},
-		Done: true,
-	}, nil
+		}), nil
 }
 
 func operatorFunc1(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {

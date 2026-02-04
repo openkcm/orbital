@@ -112,8 +112,8 @@ func jobDoneEventFunc(_ context.Context, job orbital.Job) error {
 
 func taskResolver() orbital.TaskResolveFunc {
 	return func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
-		return orbital.TaskResolverResult{
-			TaskInfos: []orbital.TaskInfo{
+		return orbital.CompleteTaskResolver().
+			WithTaskInfo([]orbital.TaskInfo{
 				{
 					Data:   []byte("data-1"),
 					Type:   "type-1",
@@ -124,9 +124,7 @@ func taskResolver() orbital.TaskResolveFunc {
 					Type:   "type-2",
 					Target: "target-2",
 				},
-			},
-			Done: true,
-		}, nil
+			}), nil
 	}
 }
 
