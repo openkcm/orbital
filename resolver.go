@@ -21,6 +21,7 @@ type (
 	// Errors returned from this function will be treated as recoverable meaning the resolver can retry later.
 	//
 	// Example:
+	//
 	//   func myResolver(ctx context.Context, job Job, cursor TaskResolverCursor) (TaskResolverResult, error) {
 	//       tasks := []TaskInfo{...} // resolve some tasks
 	//       if moreTasksExist {
@@ -43,25 +44,25 @@ type (
 	TaskResolverCursor string
 )
 
-// TaskResolverResultContinue indicates the task resolver should continue resolving tasks.
-type TaskResolverResultContinue struct {
+// TaskResolverProcessing indicates the task resolver should continue resolving tasks.
+type TaskResolverProcessing struct {
 	taskInfo []TaskInfo
 	cursor   TaskResolverCursor
 }
 
 // TaskResolverResultType returns the type of the task resolver result.
-func (r TaskResolverResultContinue) TaskResolverResultType() TaskResolverResultType {
+func (r TaskResolverProcessing) TaskResolverResultType() TaskResolverResultType {
 	return ContinueTaskResolverResult
 }
 
 // WithTaskInfo sets the task info for the result.
-func (r TaskResolverResultContinue) WithTaskInfo(info []TaskInfo) TaskResolverResultContinue {
+func (r TaskResolverProcessing) WithTaskInfo(info []TaskInfo) TaskResolverProcessing {
 	r.taskInfo = info
 	return r
 }
 
 // WithCursor sets the cursor for the result.
-func (r TaskResolverResultContinue) WithCursor(cursor TaskResolverCursor) TaskResolverResultContinue {
+func (r TaskResolverProcessing) WithCursor(cursor TaskResolverCursor) TaskResolverProcessing {
 	r.cursor = cursor
 	return r
 }
@@ -73,17 +74,17 @@ func (r TaskResolverResultContinue) WithCursor(cursor TaskResolverCursor) TaskRe
 //	return orbital.ContinueTaskResolver().
 //	    WithTaskInfo(batchOfTasks).
 //	    WithCursor("page-2-token"), nil
-func ContinueTaskResolver() TaskResolverResultContinue {
-	return TaskResolverResultContinue{}
+func ContinueTaskResolver() TaskResolverProcessing {
+	return TaskResolverProcessing{}
 }
 
-// TaskResolverResultCancel indicates the task resolver should cancel the job.
-type TaskResolverResultCancel struct {
+// TaskResolverCanceled indicates the task resolver should cancel the job.
+type TaskResolverCanceled struct {
 	reason string
 }
 
 // TaskResolverResultType returns the type of the task resolver result.
-func (r TaskResolverResultCancel) TaskResolverResultType() TaskResolverResultType {
+func (r TaskResolverCanceled) TaskResolverResultType() TaskResolverResultType {
 	return CancelTaskResolverResult
 }
 
@@ -92,24 +93,24 @@ func (r TaskResolverResultCancel) TaskResolverResultType() TaskResolverResultTyp
 // Example:
 //
 //	return orbital.CancelTaskResolver("invalid job"), nil
-func CancelTaskResolver(reason string) TaskResolverResultCancel {
-	return TaskResolverResultCancel{
+func CancelTaskResolver(reason string) TaskResolverCanceled {
+	return TaskResolverCanceled{
 		reason: reason,
 	}
 }
 
-// TaskResolverResultComplete indicates the task resolver has completed resolving tasks.
-type TaskResolverResultComplete struct {
+// TaskResolverDone indicates the task resolver is done resolving tasks.
+type TaskResolverDone struct {
 	taskInfo []TaskInfo
 }
 
 // TaskResolverResultType returns the type of the task resolver result.
-func (r TaskResolverResultComplete) TaskResolverResultType() TaskResolverResultType {
+func (r TaskResolverDone) TaskResolverResultType() TaskResolverResultType {
 	return CompleteTaskResolverResult
 }
 
 // WithTaskInfo sets the task info for the result.
-func (r TaskResolverResultComplete) WithTaskInfo(info []TaskInfo) TaskResolverResultComplete {
+func (r TaskResolverDone) WithTaskInfo(info []TaskInfo) TaskResolverDone {
 	r.taskInfo = info
 	return r
 }
@@ -120,6 +121,6 @@ func (r TaskResolverResultComplete) WithTaskInfo(info []TaskInfo) TaskResolverRe
 //
 //	return orbital.CompleteTaskResolver().
 //	    WithTaskInfo(finalBatchOfTasks), nil
-func CompleteTaskResolver() TaskResolverResultComplete {
-	return TaskResolverResultComplete{}
+func CompleteTaskResolver() TaskResolverDone {
+	return TaskResolverDone{}
 }

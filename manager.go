@@ -442,7 +442,7 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 	slogctx.Debug(ctx, "task resolver function executed successfully", "type", resolverResult.TaskResolverResultType())
 
 	switch r := resolverResult.(type) {
-	case TaskResolverResultContinue:
+	case TaskResolverProcessing:
 		err = m.handleTaskInfo(ctx, repo, job.ID, r.taskInfo)
 		if err != nil {
 			if errors.Is(err, ErrNoClientForTarget) {
@@ -463,11 +463,11 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 			slogctx.Error(ctx, "failed to create/update tasks cursor for job", "error", err)
 			return err
 		}
-	case TaskResolverResultCancel:
+	case TaskResolverCanceled:
 		job.Status = JobStatusResolveCanceled
 		job.ErrorMessage = r.reason
 		return m.updateJobAndCreateJobEvent(ctx, repo, job)
-	case TaskResolverResultComplete:
+	case TaskResolverDone:
 		err = m.handleTaskInfo(ctx, repo, job.ID, r.taskInfo)
 		if err != nil {
 			if errors.Is(err, ErrNoClientForTarget) {
