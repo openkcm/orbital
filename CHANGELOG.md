@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0](https://github.com/openkcm/orbital/compare/v0.3.1...v0.4.0) (2026-02-04)
+
+
+### Features
+
+* add JWT signing and verification handlers  ([cc21a9a](https://github.com/openkcm/orbital/commit/cc21a9ae99622f83e072fe9faee211b63175169a))
+* implemented  stop method and graceful shutdown for manager ([#126](https://github.com/openkcm/orbital/issues/126)) ([56570ac](https://github.com/openkcm/orbital/commit/56570acc5dd7db58447c9f22db74be8ff414cddb))
+* provide working state with a structure ([da0fb12](https://github.com/openkcm/orbital/commit/da0fb121325df3909d7151b989c13e3f806510d4)), closes [#127](https://github.com/openkcm/orbital/issues/127)
+* **signature:** support nil signer or verifier in handlers  ([2142292](https://github.com/openkcm/orbital/commit/2142292f9952f18b5457514ad2b0fe0b4fedebbc))
+
+
+### Bug Fixes
+
+* changed type of non negative fields  from int64 to uint64 ([#133](https://github.com/openkcm/orbital/issues/133)) ([7060a1e](https://github.com/openkcm/orbital/commit/7060a1ed06b507d5e1387c69addb57b3abc65173))
+* **test:** update handler signature in signing test  ([847ee85](https://github.com/openkcm/orbital/commit/847ee85c2a5a67ab8137892ab2382b73257990eb))
+
 ## [0.3.1](https://github.com/openkcm/orbital/compare/v0.3.0...v0.3.1) (2025-11-28)
 
 
