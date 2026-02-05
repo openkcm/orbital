@@ -99,10 +99,7 @@ func NewManagerTracker(ctx context.Context,
 			})
 		}
 
-		return orbital.TaskResolverResult{
-			TaskInfos: taskInfos,
-			Done:      true,
-		}, nil
+		return orbital.CompleteTaskResolver().WithTaskInfo(taskInfos), nil
 	}
 
 	// initializes the terminal functions

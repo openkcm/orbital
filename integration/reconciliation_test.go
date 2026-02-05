@@ -109,16 +109,14 @@ func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, stor
 	managerConfig := managerConfig{
 		taskResolveFunc: func(_ context.Context, job orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			t.Logf("TaskResolver called for job %s", job.ID)
-			return orbital.TaskResolverResult{
-				TaskInfos: []orbital.TaskInfo{
+			return orbital.CompleteTaskResolver().
+				WithTaskInfo([]orbital.TaskInfo{
 					{
 						Data:   []byte("task-data"),
 						Type:   taskType,
 						Target: taskTarget,
 					},
-				},
-				Done: true,
-			}, nil
+				}), nil
 		},
 		jobConfirmFunc: func(_ context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
 			t.Logf("JobConfirmFunc called for job %s", job.ID)
@@ -269,8 +267,8 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 
 	managerConfig := managerConfig{
 		taskResolveFunc: func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
-			return orbital.TaskResolverResult{
-				TaskInfos: []orbital.TaskInfo{
+			return orbital.CompleteTaskResolver().
+				WithTaskInfo([]orbital.TaskInfo{
 					{
 						Data:   []byte("data-1"),
 						Type:   taskType1,
@@ -281,9 +279,7 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 						Type:   taskType2,
 						Target: taskTarget2,
 					},
-				},
-				Done: true,
-			}, nil
+				}), nil
 		},
 		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 			return orbital.JobConfirmResult{Done: true}, nil
@@ -456,16 +452,14 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *testEnviron
 
 	managerConfig := managerConfig{
 		taskResolveFunc: func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
-			return orbital.TaskResolverResult{
-				TaskInfos: []orbital.TaskInfo{
+			return orbital.CompleteTaskResolver().
+				WithTaskInfo([]orbital.TaskInfo{
 					{
 						Data:   []byte("fail-task-data"),
 						Type:   taskType,
 						Target: taskTarget,
 					},
-				},
-				Done: true,
-			}, nil
+				}), nil
 		},
 		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 			return orbital.JobConfirmResult{Done: true}, nil
@@ -594,16 +588,14 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 
 	managerConfig := managerConfig{
 		taskResolveFunc: func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
-			return orbital.TaskResolverResult{
-				TaskInfos: []orbital.TaskInfo{
+			return orbital.CompleteTaskResolver().
+				WithTaskInfo([]orbital.TaskInfo{
 					{
 						Data:   []byte("multi-cycle-data"),
 						Type:   taskType,
 						Target: taskTarget,
 					},
-				},
-				Done: true,
-			}, nil
+				}), nil
 		},
 		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
 			return orbital.JobConfirmResult{Done: true}, nil

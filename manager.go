@@ -60,26 +60,6 @@ type (
 		CanceledErrorMessage string
 	}
 
-	// TaskResolverCursor is the type for the next cursor.
-	TaskResolverCursor string
-
-	// TaskResolverResult represents the response from resolving tasks.
-	TaskResolverResult struct {
-		// TaskInfos contains the data to be sent for each target.
-		TaskInfos []TaskInfo
-		// Cursor provides information for pagination or continuation.
-		Cursor TaskResolverCursor
-		// Done indicates whether the resolution process is complete.
-		Done bool
-		// IsCanceled indicates whether the job needs to be canceled.
-		IsCanceled bool
-		// CanceledErrorMessage provides an error message if the job is canceled.
-		CanceledErrorMessage string
-	}
-
-	// TaskResolveFunc is a  function type that resolves targets for the creation tasks for a job and the cursor.
-	TaskResolveFunc func(ctx context.Context, job Job, cursor TaskResolverCursor) (TaskResolverResult, error)
-
 	// Config contains configuration for job processing.
 	Config struct {
 		// TaskLimitNum is the maximum number of tasks to process at once.
@@ -120,18 +100,19 @@ const (
 )
 
 var (
-	ErrManagerAlreadyStarted = errors.New("manager was already started")
-	ErrManagerNotStarted     = errors.New("manager was not started")
-	ErrManagerInvalidConfig  = errors.New("manager has invalid configuration")
-	ErrTaskResolverNotSet    = errors.New("taskResolver not set")
-	ErrMsgFailedTasks        = "job has failed tasks"
-	ErrJobUnCancelable       = errors.New("job cannot be canceled in its current state")
-	ErrJobNotFound           = errors.New("job not found")
-	ErrJobAlreadyExists      = errors.New("job already exists")
-	ErrNoClientForTarget     = errors.New("no client for task target")
-	ErrLoadingJob            = errors.New("failed to load job")
-	ErrUpdatingJob           = errors.New("failed to update job")
-	ErrTaskNotFound          = errors.New("task not found")
+	ErrManagerAlreadyStarted   = errors.New("manager was already started")
+	ErrManagerNotStarted       = errors.New("manager was not started")
+	ErrManagerInvalidConfig    = errors.New("manager has invalid configuration")
+	ErrTaskResolverNotSet      = errors.New("taskResolver not set")
+	ErrUnknownTaskResolverType = errors.New("unknown task resolver result type")
+	ErrMsgFailedTasks          = "job has failed tasks"
+	ErrJobUnCancelable         = errors.New("job cannot be canceled in its current state")
+	ErrJobNotFound             = errors.New("job not found")
+	ErrJobAlreadyExists        = errors.New("job already exists")
+	ErrNoClientForTarget       = errors.New("no client for task target")
+	ErrLoadingJob              = errors.New("failed to load job")
+	ErrUpdatingJob             = errors.New("failed to update job")
+	ErrTaskNotFound            = errors.New("task not found")
 )
 
 // NewManager creates a new Manager instance.
@@ -441,6 +422,7 @@ func (m *Manager) createTask(ctx context.Context) error {
 	})
 }
 
+//nolint:cyclop,funlen
 func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Job) error {
 	ctx = slogctx.With(ctx, "jobID", job.ID, "externalID", job.ExternalID, "type", job.Type)
 	slogctx.Debug(ctx, "creating tasks for job")
@@ -457,43 +439,72 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 		// NOTE: here we update the job to change the updated_at timestamp in order to spread the fetching of jobs.
 		return repo.updateJob(ctx, job)
 	}
-	if resolverResult.IsCanceled {
-		slogctx.Debug(ctx, "job canceled by task resolver")
+	slogctx.Debug(ctx, "task resolver function executed successfully", "type", resolverResult.Type())
+
+	switch r := resolverResult.(type) {
+	case TaskResolverProcessing:
+		err = m.handleTaskInfo(ctx, repo, job.ID, r.taskInfo)
+		if err != nil {
+			if errors.Is(err, ErrNoClientForTarget) {
+				job.Status = JobStatusFailed
+				job.ErrorMessage = err.Error()
+				return m.updateJobAndCreateJobEvent(ctx, repo, job)
+			}
+			return err
+		}
+		job.Status = JobStatusResolving
+
+		if r.cursor == "" {
+			break
+		}
+		jobCursor.Cursor = r.cursor
+		err = m.createOrUpdateCursor(ctx, repo, found, jobCursor)
+		if err != nil {
+			slogctx.Error(ctx, "failed to create/update tasks cursor for job", "error", err)
+			return err
+		}
+	case TaskResolverCanceled:
 		job.Status = JobStatusResolveCanceled
-		job.ErrorMessage = resolverResult.CanceledErrorMessage
+		job.ErrorMessage = r.reason
 		return m.updateJobAndCreateJobEvent(ctx, repo, job)
+	case TaskResolverDone:
+		err = m.handleTaskInfo(ctx, repo, job.ID, r.taskInfo)
+		if err != nil {
+			if errors.Is(err, ErrNoClientForTarget) {
+				job.Status = JobStatusFailed
+				job.ErrorMessage = err.Error()
+				return m.updateJobAndCreateJobEvent(ctx, repo, job)
+			}
+			return err
+		}
+		job.Status = JobStatusReady
+	default:
+		slogctx.Error(ctx, "unknown task resolver result type", "type", resolverResult.Type())
+		return ErrUnknownTaskResolverType
 	}
 
-	if err := m.targetsExist(resolverResult.TaskInfos); err != nil {
-		slogctx.Debug(ctx, "failed to resolve task targets for job", "error", err)
-		job.Status = JobStatusFailed
-		job.ErrorMessage = err.Error()
-		return m.updateJobAndCreateJobEvent(ctx, repo, job)
+	return repo.updateJob(ctx, job)
+}
+
+func (m *Manager) handleTaskInfo(ctx context.Context, repo Repository, jobID uuid.UUID, info []TaskInfo) error {
+	if len(info) == 0 {
+		slogctx.Debug(ctx, "no task info returned from task resolver")
+		return nil
 	}
 
-	// Create tasks and update the cursor.
-	jobCursor.Cursor = resolverResult.Cursor
-	_, err = repo.createTasks(ctx, newTasks(job.ID, resolverResult.TaskInfos))
+	err := m.targetsExist(info)
+	if err != nil {
+		slogctx.Error(ctx, "failed to resolve task targets for job", "error", err)
+		return err
+	}
+
+	_, err = repo.createTasks(ctx, newTasks(jobID, info))
 	if err != nil {
 		slogctx.Error(ctx, "failed to create tasks for job", "error", err)
 		return err
 	}
 
-	err = m.createOrUpdateCursor(ctx, repo, found, jobCursor)
-	if err != nil {
-		slogctx.Error(ctx, "failed to create/update tasks cursor for job ", "error", err)
-		return err
-	}
-
-	if resolverResult.Done {
-		slogctx.Debug(ctx, "tasks resolved successfully")
-		job.Status = JobStatusReady
-	} else {
-		slogctx.Debug(ctx, "task resolving still in progress")
-		job.Status = JobStatusResolving
-	}
-
-	return repo.updateJob(ctx, job)
+	return nil
 }
 
 // targetsExist checks if all targets in the provided TaskInfo slice have corresponding clients.

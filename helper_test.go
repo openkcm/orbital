@@ -110,7 +110,7 @@ func createSQLStore(t *testing.T) (*stdsql.DB, *sql.SQL) {
 
 func mockTaskResolveFunc() orbital.TaskResolveFunc {
 	return func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
-		return orbital.TaskResolverResult{}, nil
+		return orbital.ContinueTaskResolver(), nil
 	}
 }
 

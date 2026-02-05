@@ -515,14 +515,12 @@ func TestCreateTasks(t *testing.T) {
 				resolverCalled := 0
 				resolverFunc := func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 					resolverCalled++
-					return orbital.TaskResolverResult{
-						TaskInfos: []orbital.TaskInfo{
+					return orbital.CompleteTaskResolver().
+						WithTaskInfo([]orbital.TaskInfo{
 							{
 								Target: "target-1",
 							},
-						},
-						Done: true,
-					}, nil
+						}), nil
 				}
 				targets := map[string]orbital.TargetManager{
 					"target-1": {Client: nil},
@@ -582,10 +580,9 @@ func TestCreateTasks(t *testing.T) {
 				repo := orbital.NewRepository(store)
 
 				resolverFunc := func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
-					return orbital.TaskResolverResult{
-						TaskInfos: []orbital.TaskInfo{tc.info},
-						Done:      true,
-					}, nil
+					return orbital.CompleteTaskResolver().WithTaskInfo([]orbital.TaskInfo{
+						tc.info,
+					}), nil
 				}
 
 				targets := map[string]orbital.TargetManager{
@@ -647,14 +644,11 @@ func TestCreateTasks(t *testing.T) {
 				callerChan <- "start second retrieval mode list"
 				assert.Equal(t, "finish taskresolver func", <-callerChan)
 			}
-			return orbital.TaskResolverResult{
-				TaskInfos: []orbital.TaskInfo{
-					{
-						Target: "target-1",
-					},
+			return orbital.CompleteTaskResolver().WithTaskInfo([]orbital.TaskInfo{
+				{
+					Target: "target-1",
 				},
-				Done: true,
-			}, nil
+			}), nil
 		}
 		targets := map[string]orbital.TargetManager{
 			"target-1": {Client: nil},
@@ -688,199 +682,171 @@ func TestCreateTasks(t *testing.T) {
 
 	t.Run("should update job Status", func(t *testing.T) {
 		// given
+		tts := []struct {
+			name           string
+			resolverResult orbital.TaskResolverResult
+			expStatus      orbital.JobStatus
+			expErrMsg      string
+			expEvent       bool
+		}{
+			{
+				name: "to READY if the all targets are resolved",
+				resolverResult: orbital.CompleteTaskResolver().
+					WithTaskInfo([]orbital.TaskInfo{
+						{
+							Target: "target-1",
+						},
+					}),
+				expStatus: orbital.JobStatusReady,
+			},
+			{
+				name:           "to READY if no targets are returned",
+				resolverResult: orbital.CompleteTaskResolver(),
+				expStatus:      orbital.JobStatusReady,
+			},
+			{
+				name: "to READY if an empty target list is returned",
+				resolverResult: orbital.CompleteTaskResolver().
+					WithTaskInfo([]orbital.TaskInfo{}),
+				expStatus: orbital.JobStatusReady,
+			},
+			{
+				name: "to FAILED if the target does not exist for continued resolution",
+				resolverResult: orbital.ContinueTaskResolver().
+					WithTaskInfo([]orbital.TaskInfo{
+						{
+							Target: "target-unknown",
+						},
+					}),
+				expStatus: orbital.JobStatusFailed,
+				expErrMsg: fmt.Sprintf("%v target: %s", orbital.ErrNoClientForTarget, "target-unknown"),
+				expEvent:  true,
+			},
+			{
+				name: "to FAILED if the target does not exist for completed resolution",
+				resolverResult: orbital.CompleteTaskResolver().
+					WithTaskInfo([]orbital.TaskInfo{
+						{
+							Target: "target-unknown",
+						},
+					}),
+				expStatus: orbital.JobStatusFailed,
+				expErrMsg: fmt.Sprintf("%v target: %s", orbital.ErrNoClientForTarget, "target-unknown"),
+				expEvent:  true,
+			},
+			{
+				name: "to RESOLVING if not all targets are resolved yet",
+				resolverResult: orbital.ContinueTaskResolver().
+					WithTaskInfo([]orbital.TaskInfo{
+						{
+							Target: "target-1",
+						},
+					}),
+				expStatus: orbital.JobStatusResolving,
+			},
+			{
+				name:           "to RESOLVE_CANCELED if the resolver result is canceled",
+				resolverResult: orbital.CancelTaskResolver("resolution canceled"),
+				expStatus:      orbital.JobStatusResolveCanceled,
+				expErrMsg:      "resolution canceled",
+				expEvent:       true,
+			},
+		}
+		for _, tt := range tts {
+			t.Run(tt.name, func(t *testing.T) {
+				ctx := t.Context()
+				db, store := createSQLStore(t)
+				defer clearTables(t, db)
+				repo := orbital.NewRepository(store)
+
+				job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+					Status: orbital.JobStatusConfirmed,
+					Data:   make([]byte, 0),
+				})
+				assert.NoError(t, err)
+
+				resolverCalled := 0
+				resolverFunc := func(_ context.Context, j orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
+					resolverCalled++
+					assert.Equal(t, job.ID, j.ID)
+					return tt.resolverResult, nil
+				}
+
+				targets := map[string]orbital.TargetManager{
+					"target-1": {Client: nil},
+				}
+				subj, _ := orbital.NewManager(
+					repo,
+					resolverFunc,
+					orbital.WithTargets(targets),
+					orbital.WithJobCanceledEventFunc(mockTerminatedFunc()),
+					orbital.WithJobFailedEventFunc(mockTerminatedFunc()),
+				)
+
+				// when
+				err = orbital.CreateTask(subj)(ctx)
+
+				// then
+				assert.NoError(t, err)
+				assert.Equal(t, 1, resolverCalled)
+
+				actJob, ok, err := orbital.GetRepoJob(repo)(ctx, job.ID)
+				assert.NoError(t, err)
+				assert.True(t, ok)
+				assert.Equal(t, tt.expStatus, actJob.Status)
+				assert.Equal(t, tt.expErrMsg, actJob.ErrorMessage)
+
+				actJobEvent, ok, err := orbital.GetRepoJobEvent(repo)(ctx, orbital.JobEventQuery{
+					ID: job.ID,
+				})
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expEvent, ok)
+				if tt.expEvent {
+					assert.Equal(t, job.ID, actJobEvent.ID)
+					assert.False(t, actJobEvent.IsNotified)
+				}
+			})
+		}
+	})
+
+	t.Run("should not update the job status if there is an error in task resolver", func(t *testing.T) {
+		// given
 		ctx := t.Context()
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
 		repo := orbital.NewRepository(store)
 
-		tts := []struct {
-			name           string
-			resolverResult orbital.TaskResolverResult
-			expStatus      orbital.JobStatus
-		}{
-			{
-				name: "to READY if the all targets are resolved",
-				resolverResult: orbital.TaskResolverResult{
-					TaskInfos: []orbital.TaskInfo{
-						{
-							Target: "target-1",
-						},
-					},
-					Done: true,
-				},
-				expStatus: orbital.JobStatusReady,
-			},
-			{
-				name: "to FAILED if the target does not exist",
-				resolverResult: orbital.TaskResolverResult{
-					TaskInfos: []orbital.TaskInfo{
-						{
-							Target: "target-2",
-						},
-					},
-					Done: false,
-				},
-				expStatus: orbital.JobStatusFailed,
-			},
-			{
-				name: "to RESOLVING if the all targets are not resolved",
-				resolverResult: orbital.TaskResolverResult{
-					TaskInfos: []orbital.TaskInfo{
-						{
-							Target: "target-1",
-						},
-					},
-					Done: false,
-				},
-				expStatus: orbital.JobStatusResolving,
-			},
+		job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+			Status: orbital.JobStatusConfirmed,
+		})
+		assert.NoError(t, err)
+
+		resolverFunc := func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
+			return nil, assert.AnError
 		}
-		for _, tt := range tts {
-			// given
-			job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
-				Status: orbital.JobStatusConfirmed,
-				Data:   make([]byte, 0),
-			})
-			assert.NoError(t, err)
 
-			resolverFunc := func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
-				return tt.resolverResult, nil
-			}
-
-			targets := map[string]orbital.TargetManager{
-				"target-1": {Client: nil},
-			}
-			subj, _ := orbital.NewManager(
-				repo,
-				resolverFunc,
-				orbital.WithTargets(targets),
-			)
-
-			// when
-			err = orbital.CreateTask(subj)(ctx)
-
-			// then
-			assert.NoError(t, err)
-			actJob, ok, err := orbital.GetRepoJob(repo)(ctx, job.ID)
-			assert.NoError(t, err)
-			assert.True(t, ok)
-			assert.Equal(t, tt.expStatus, actJob.Status)
+		targets := map[string]orbital.TargetManager{
+			"target": {Client: nil},
 		}
-	})
+		subj, _ := orbital.NewManager(
+			repo,
+			resolverFunc,
+			orbital.WithTargets(targets),
+		)
 
-	t.Run("if TaskResolveFunc return IsAborted as true then", func(t *testing.T) {
-		t.Run("should update job status as Aborted", func(t *testing.T) {
-			// given
-			ctx := t.Context()
-			db, store := createSQLStore(t)
-			defer clearTables(t, db)
-			repo := orbital.NewRepository(store)
+		// ensure update time difference
+		time.Sleep(time.Millisecond)
 
-			job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
-				Status: orbital.JobStatusConfirmed,
-			})
-			assert.NoError(t, err)
+		// when
+		err = orbital.CreateTask(subj)(ctx)
 
-			resolverCalled := 0
-			resolverFunc := func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
-				resolverCalled++
-				return orbital.TaskResolverResult{
-					IsCanceled: true,
-				}, nil
-			}
-
-			subj, _ := orbital.NewManager(repo,
-				resolverFunc,
-			)
-
-			// when
-			err = orbital.CreateTask(subj)(ctx)
-
-			// then
-			assert.NoError(t, err)
-
-			actJob, ok, err := orbital.GetRepoJob(repo)(ctx, job.ID)
-			assert.NoError(t, err)
-			assert.True(t, ok)
-			assert.Equal(t, 1, resolverCalled)
-			assert.Equal(t, orbital.JobStatusResolveCanceled, actJob.Status)
-		})
-		t.Run("should update job error message", func(t *testing.T) {
-			// given
-			ctx := t.Context()
-			db, store := createSQLStore(t)
-			defer clearTables(t, db)
-			repo := orbital.NewRepository(store)
-
-			job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
-				Status: orbital.JobStatusConfirmed,
-			})
-			assert.NoError(t, err)
-
-			resolverCalled := 0
-			resolverFunc := func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
-				resolverCalled++
-				return orbital.TaskResolverResult{
-					IsCanceled:           true,
-					CanceledErrorMessage: "the job needs to be canceled",
-				}, nil
-			}
-
-			subj, _ := orbital.NewManager(repo,
-				resolverFunc,
-			)
-
-			// when
-			err = orbital.CreateTask(subj)(ctx)
-
-			// then
-			assert.NoError(t, err)
-
-			actJob, ok, err := orbital.GetRepoJob(repo)(ctx, job.ID)
-			assert.NoError(t, err)
-			assert.True(t, ok)
-			assert.Equal(t, 1, resolverCalled)
-			assert.Equal(t, "the job needs to be canceled", actJob.ErrorMessage)
-		})
-		t.Run("should create a job event", func(t *testing.T) {
-			// given
-			ctx := t.Context()
-			db, store := createSQLStore(t)
-			defer clearTables(t, db)
-			repo := orbital.NewRepository(store)
-
-			job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
-				Status: orbital.JobStatusConfirmed,
-			})
-			assert.NoError(t, err)
-
-			resolverCalled := 0
-			resolverFunc := func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
-				resolverCalled++
-				return orbital.TaskResolverResult{
-					IsCanceled: true,
-				}, nil
-			}
-
-			subj, _ := orbital.NewManager(repo,
-				resolverFunc,
-				orbital.WithJobCanceledEventFunc(mockTerminatedFunc()),
-			)
-
-			// when
-			err = orbital.CreateTask(subj)(ctx)
-
-			// then
-			assert.NoError(t, err)
-
-			actJobEvent, ok, err := orbital.GetRepoJobEvent(repo)(ctx, orbital.JobEventQuery{
-				ID: job.ID,
-			})
-			assert.NoError(t, err)
-			assert.True(t, ok)
-			assert.Equal(t, job.ID, actJobEvent.ID)
-			assert.False(t, actJobEvent.IsNotified)
-		})
+		// then
+		assert.NoError(t, err)
+		actJob, ok, err := orbital.GetRepoJob(repo)(ctx, job.ID)
+		assert.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, orbital.JobStatusConfirmed, actJob.Status)
+		assert.Greater(t, actJob.UpdatedAt, job.UpdatedAt)
 	})
 
 	t.Run("should update job Status to READY if resolverFunc resolves all targets in the second call", func(t *testing.T) {
@@ -900,15 +866,16 @@ func TestCreateTasks(t *testing.T) {
 		expCursor := orbital.TaskResolverCursor("cursor-1st-time")
 		resolverFunc := func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			resolverCalled++
-			return orbital.TaskResolverResult{
-				Cursor: expCursor,
-				TaskInfos: []orbital.TaskInfo{
+			if resolverCalled == 2 {
+				return orbital.CompleteTaskResolver(), nil
+			}
+			return orbital.ContinueTaskResolver().
+				WithCursor(expCursor).
+				WithTaskInfo([]orbital.TaskInfo{
 					{
 						Target: "target",
 					},
-				},
-				Done: resolverCalled == 2,
-			}, nil
+				}), nil
 		}
 
 		targets := map[string]orbital.TargetManager{
@@ -959,16 +926,24 @@ func TestCreateTasks(t *testing.T) {
 		resolverCalled := 0
 		resolverFunc := func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
 			resolverCalled++
-			return orbital.TaskResolverResult{
-				TaskInfos: []orbital.TaskInfo{
+			if resolverCalled == 2 {
+				return orbital.CompleteTaskResolver().
+					WithTaskInfo([]orbital.TaskInfo{
+						{
+							Target: "target-2",
+							Data:   fmt.Append(nil, "data-2"),
+							Type:   "type-2",
+						},
+					}), nil
+			}
+			return orbital.ContinueTaskResolver().
+				WithTaskInfo([]orbital.TaskInfo{
 					{
-						Target: fmt.Sprintf("target-%d", resolverCalled),
-						Data:   fmt.Appendf(nil, "data-%d", resolverCalled),
-						Type:   fmt.Sprintf("type-%d", resolverCalled),
+						Target: "target-1",
+						Data:   fmt.Append(nil, "data-1"),
+						Type:   "type-1",
 					},
-				},
-				Done: resolverCalled == 2,
-			}, nil
+				}), nil
 		}
 
 		targets := map[string]orbital.TargetManager{
@@ -1039,7 +1014,7 @@ func TestListTasks(t *testing.T) {
 		assert.Len(t, taskIDs, 1)
 
 		subj, err := orbital.NewManager(repo, func(_ context.Context, _ orbital.Job, _ orbital.TaskResolverCursor) (orbital.TaskResolverResult, error) {
-			return orbital.TaskResolverResult{}, nil
+			return orbital.CompleteTaskResolver(), nil
 		})
 		assert.NoError(t, err)
 
