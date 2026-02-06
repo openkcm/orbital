@@ -118,9 +118,9 @@ func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, stor
 					},
 				}), nil
 		},
-		jobConfirmFunc: func(_ context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
+		jobConfirmFunc: func(_ context.Context, job orbital.Job) (orbital.JobConfirmerResult, error) {
 			t.Logf("JobConfirmFunc called for job %s", job.ID)
-			return orbital.JobConfirmResult{Done: true}, nil
+			return orbital.CompleteJobConfirmer(), nil
 		},
 		targetManagers: map[string]orbital.TargetManager{
 			taskTarget: {Client: managerClient},
@@ -281,8 +281,8 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 					},
 				}), nil
 		},
-		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
-			return orbital.JobConfirmResult{Done: true}, nil
+		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmerResult, error) {
+			return orbital.CompleteJobConfirmer(), nil
 		},
 		targetManagers: map[string]orbital.TargetManager{
 			taskTarget1: {Client: managerClient1},
@@ -461,8 +461,8 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *testEnviron
 					},
 				}), nil
 		},
-		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
-			return orbital.JobConfirmResult{Done: true}, nil
+		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmerResult, error) {
+			return orbital.CompleteJobConfirmer(), nil
 		},
 		targetManagers: map[string]orbital.TargetManager{
 			taskTarget: {Client: managerClient},
@@ -597,8 +597,8 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 					},
 				}), nil
 		},
-		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
-			return orbital.JobConfirmResult{Done: true}, nil
+		jobConfirmFunc: func(_ context.Context, _ orbital.Job) (orbital.JobConfirmerResult, error) {
+			return orbital.CompleteJobConfirmer(), nil
 		},
 		targetManagers: map[string]orbital.TargetManager{
 			taskTarget: {Client: managerClient},
