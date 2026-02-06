@@ -104,12 +104,10 @@ func NewManagerTracker(ctx context.Context,
 
 	// initializes the terminal functions
 	opts := []orbital.ManagerOptsFunc{
-		orbital.WithJobConfirmFunc(func(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
+		orbital.WithJobConfirmFunc(func(ctx context.Context, job orbital.Job) (orbital.JobConfirmerResult, error) {
 			tracker.noOfJobConfirmed.Add(job.ID.String(), job)
 			slogctx.Info(ctx, "confirmFunc", "managerName", tracker.name)
-			return orbital.JobConfirmResult{
-				Done: true,
-			}, nil
+			return orbital.CompleteJobConfirmer(), nil
 		}),
 		orbital.WithJobDoneEventFunc(func(ctx context.Context, job orbital.Job) error {
 			tracker.noOfJobDone.Add(job.ID.String(), job)

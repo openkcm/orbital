@@ -370,9 +370,9 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, initiatorHand
 					},
 				}), nil
 		},
-		jobConfirmFunc: func(_ context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
+		jobConfirmFunc: func(_ context.Context, job orbital.Job) (orbital.JobConfirmerResult, error) {
 			t.Logf("JobConfirmFunc called for job %s", job.ID)
-			return orbital.JobConfirmResult{Done: true}, nil
+			return orbital.CompleteJobConfirmer(), nil
 		},
 		targetManagers: map[string]orbital.TargetManager{
 			taskTarget: {
