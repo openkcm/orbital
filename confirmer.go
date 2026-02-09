@@ -12,7 +12,7 @@ const (
 
 type (
 	// JobConfirmFunc validates a job's readiness before task resolution.
-	// It can verify the underlying resource is available and in the expected state.
+	// It can verify that the underlying resource is available and in the expected state.
 	//
 	// Return one of:
 	//   - ContinueJobConfirmer() to continue confirming
