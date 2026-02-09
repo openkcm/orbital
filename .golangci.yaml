@@ -32,6 +32,10 @@ linters:
     testifylint:
       disable:
         - require-error
+    revive:
+      rules:
+        - name: unexported-return
+          disabled: true
   exclusions:
     generated: lax
     presets:

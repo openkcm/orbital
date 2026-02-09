@@ -40,11 +40,11 @@ type (
 	JobConfirmerResultType int
 )
 
-// JobConfirmerProcessing indicates the job confirmer should continue confirming the job.
-type JobConfirmerProcessing struct{}
+// jobConfirmerProcessing indicates the job confirmer should continue confirming the job.
+type jobConfirmerProcessing struct{}
 
 // Type returns the type of the job confirmer result.
-func (r JobConfirmerProcessing) Type() JobConfirmerResultType {
+func (r jobConfirmerProcessing) Type() JobConfirmerResultType {
 	return ContinueJobConfirmerResult
 }
 
@@ -53,17 +53,17 @@ func (r JobConfirmerProcessing) Type() JobConfirmerResultType {
 // Example:
 //
 //	return orbital.ContinueJobConfirmer(), nil
-func ContinueJobConfirmer() JobConfirmerProcessing {
-	return JobConfirmerProcessing{}
+func ContinueJobConfirmer() jobConfirmerProcessing {
+	return jobConfirmerProcessing{}
 }
 
-// JobConfirmerCanceled indicates the job confirmer should cancel the job with a reason.
-type JobConfirmerCanceled struct {
+// jobConfirmerCanceled indicates the job confirmer should cancel the job with a reason.
+type jobConfirmerCanceled struct {
 	reason string
 }
 
 // Type returns the type of the job confirmer result.
-func (r JobConfirmerCanceled) Type() JobConfirmerResultType {
+func (r jobConfirmerCanceled) Type() JobConfirmerResultType {
 	return CancelJobConfirmerResult
 }
 
@@ -72,15 +72,15 @@ func (r JobConfirmerCanceled) Type() JobConfirmerResultType {
 // Example:
 //
 //	return orbital.CancelJobConfirmer("resource not available"), nil
-func CancelJobConfirmer(reason string) JobConfirmerCanceled {
-	return JobConfirmerCanceled{reason: reason}
+func CancelJobConfirmer(reason string) jobConfirmerCanceled {
+	return jobConfirmerCanceled{reason: reason}
 }
 
-// JobConfirmerDone indicates the job confirmer should mark the job as confirmed and ready for resolving tasks.
-type JobConfirmerDone struct{}
+// jobConfirmerDone indicates the job confirmer should mark the job as confirmed and ready for resolving tasks.
+type jobConfirmerDone struct{}
 
 // Type returns the type of the job confirmer result.
-func (r JobConfirmerDone) Type() JobConfirmerResultType {
+func (r jobConfirmerDone) Type() JobConfirmerResultType {
 	return CompleteJobConfirmerResult
 }
 
@@ -89,6 +89,6 @@ func (r JobConfirmerDone) Type() JobConfirmerResultType {
 // Example:
 //
 //	return orbital.CompleteJobConfirmer(), nil
-func CompleteJobConfirmer() JobConfirmerDone {
-	return JobConfirmerDone{}
+func CompleteJobConfirmer() jobConfirmerDone {
+	return jobConfirmerDone{}
 }
