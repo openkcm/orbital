@@ -376,13 +376,13 @@ func (m *Manager) handleConfirmJob(ctx context.Context, repo Repository, job Job
 	}
 	slogctx.Debug(ctx, "job confirmation function executed successfully", "result type", res.Type())
 	switch r := res.(type) {
-	case JobConfirmerProcessing:
+	case jobConfirmerProcessing:
 		job.Status = JobStatusConfirming
-	case JobConfirmerCanceled:
+	case jobConfirmerCanceled:
 		job.Status = JobStatusConfirmCanceled
 		job.ErrorMessage = r.reason
 		return m.updateJobAndCreateJobEvent(ctx, repo, job)
-	case JobConfirmerDone:
+	case jobConfirmerDone:
 		job.Status = JobStatusConfirmed
 	default:
 		msg := "unknown job confirmer result type"
