@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 
 	slogctx "github.com/veqryn/slog-context"
+
+	"github.com/openkcm/orbital/internal/clock"
 )
 
 const (
@@ -264,8 +266,8 @@ func (o *Operator) handleRequest(ctx context.Context, req TaskRequest) (TaskResp
 		TaskID:               req.TaskID,
 		TaskType:             req.Type,
 		TaskData:             req.Data,
-		TaskCreatedAt:        time.Unix(0, req.TaskCreatedAt),
-		TaskLastReconciledAt: time.Unix(0, req.TaskLastReconciledAt),
+		TaskCreatedAt:        clock.TimeFromUnixNano(req.TaskCreatedAt),
+		TaskLastReconciledAt: clock.TimeFromUnixNano(req.TaskLastReconciledAt),
 	}
 	hResp := &HandlerResponse{
 		RawWorkingState: req.WorkingState,
