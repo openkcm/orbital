@@ -158,8 +158,10 @@ func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, stor
 				})
 
 				t.Logf("Handler called for task %s", req.TaskID)
-				assert.Equal(t, taskType, req.Type)
-				assert.Equal(t, []byte("task-data"), req.Data)
+				assert.Equal(t, taskType, req.TaskType)
+				assert.Equal(t, []byte("task-data"), req.TaskData)
+				assert.Positive(t, req.TaskCreatedAt.UnixNano())
+				assert.Positive(t, req.TaskLastReconciledAt.UnixNano())
 
 				time.Sleep(100 * time.Millisecond)
 
@@ -651,6 +653,8 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 					resp.ReconcileAfterSec = 1
 					return nil
 				}
+
+				assert.Positive(t, req.TaskLastReconciledAt)
 
 				close(operatorDone)
 

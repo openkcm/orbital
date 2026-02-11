@@ -50,9 +50,11 @@ type (
 	// HandlerRequest contains information extracted from orbital.TaskRequest
 	// that are relevant for the operator's processing.
 	HandlerRequest struct {
-		TaskID uuid.UUID
-		Type   string
-		Data   []byte
+		TaskID               uuid.UUID
+		TaskType             string
+		TaskData             []byte
+		TaskCreatedAt        time.Time
+		TaskLastReconciledAt time.Time
 	}
 
 	// HandlerResponse contains information that can be modified by the operator
@@ -259,9 +261,11 @@ func (o *Operator) handleRequest(ctx context.Context, req TaskRequest) (TaskResp
 	}
 
 	hReq := HandlerRequest{
-		TaskID: req.TaskID,
-		Type:   req.Type,
-		Data:   req.Data,
+		TaskID:               req.TaskID,
+		TaskType:             req.Type,
+		TaskData:             req.Data,
+		TaskCreatedAt:        time.Unix(0, req.TaskCreatedAt),
+		TaskLastReconciledAt: time.Unix(0, req.TaskLastReconciledAt),
 	}
 	hResp := &HandlerResponse{
 		RawWorkingState: req.WorkingState,

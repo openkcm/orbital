@@ -109,6 +109,7 @@ var (
 	ErrJobUnCancelable         = errors.New("job cannot be canceled in its current state")
 	ErrJobNotFound             = errors.New("job not found")
 	ErrJobAlreadyExists        = errors.New("job already exists")
+	ErrNoTargetManager         = errors.New("no target manager provided")
 	ErrNoClientForTarget       = errors.New("no client for task target")
 	ErrLoadingJob              = errors.New("failed to load job")
 	ErrUpdatingJob             = errors.New("failed to update job")
@@ -696,15 +697,12 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 		return
 	}
 
-	mgrTarget, ok := m.targets[task.Target]
-	// this is an additional safeguard, this should never happen as we check for the existence of targets while creating tasks.
-	if !ok || mgrTarget.Client == nil {
-		errLog := "no target manager found for task target, marking task as failed"
-		if mgrTarget.Client == nil {
-			errLog = "no initiator client found for task target, marking task as failed"
-		}
-		slogctx.Warn(ctx, errLog)
+	mgrTarget, err := m.getTargetManager(task.Target)
+	if err != nil {
+		slogctx.Error(ctx, "getting manager target", "error", err)
+		task.ETag = uuid.NewString()
 		task.Status = TaskStatusFailed
+		task.ErrorMessage = err.Error()
 		repo.updateTask(ctx, task) //nolint:errcheck
 		return
 	}
@@ -719,12 +717,14 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 	)
 
 	req := TaskRequest{
-		TaskID:       task.ID,
-		Type:         task.Type,
-		ExternalID:   job.ExternalID,
-		Data:         task.Data,
-		WorkingState: task.WorkingState,
-		ETag:         task.ETag,
+		TaskID:               task.ID,
+		Type:                 task.Type,
+		ExternalID:           job.ExternalID,
+		Data:                 task.Data,
+		WorkingState:         task.WorkingState,
+		ETag:                 task.ETag,
+		TaskCreatedAt:        task.CreatedAt,
+		TaskLastReconciledAt: task.LastReconciledAt,
 	}
 
 	if mgrTarget.Signer != nil {
@@ -748,6 +748,17 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 	task.TotalSentCount++
 
 	repo.updateTask(ctx, task) //nolint:errcheck
+}
+
+func (m *Manager) getTargetManager(target string) (TargetManager, error) {
+	mgrTarget, ok := m.targets[target]
+	if !ok {
+		return TargetManager{}, fmt.Errorf("%w: %s", ErrNoTargetManager, target)
+	}
+	if mgrTarget.Client == nil {
+		return TargetManager{}, fmt.Errorf("%w: %s", ErrNoClientForTarget, target)
+	}
+	return mgrTarget, nil
 }
 
 // updateJobAndCreateJobEvent updates the given job in the repository and records a job event.

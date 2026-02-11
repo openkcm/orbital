@@ -46,7 +46,7 @@ func main() {
 
 func handlerExample(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
 	log.Printf("Received handler request:\n \tTaskID: %s\n \tType: %s\n \tData: %s\n",
-		req.TaskID, req.Type, string(req.Data))
+		req.TaskID, req.TaskType, string(req.TaskData))
 
 	log.Printf("Handler response default:\n \tResult: %s\n \t ReconcileAfterSec%d\n \tRawWorkingState%s\n",
 		resp.Result, resp.ReconcileAfterSec, string(resp.RawWorkingState))

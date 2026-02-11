@@ -153,16 +153,17 @@ func TestReconcile(t *testing.T) {
 		expWorkingState := []byte("initial-state")
 		expTarget := "target-1"
 		expETag := "etag"
+		expTaskCreatedAt := int64(123)
 		ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
 			{
-				JobID:            job.ID,
-				Type:             expType,
-				Data:             expData,
-				WorkingState:     expWorkingState,
-				ETag:             expETag,
-				Status:           orbital.TaskStatusCreated,
-				Target:           expTarget,
-				LastReconciledAt: 0,
+				JobID:        job.ID,
+				Type:         expType,
+				Data:         expData,
+				WorkingState: expWorkingState,
+				ETag:         expETag,
+				Status:       orbital.TaskStatusCreated,
+				Target:       expTarget,
+				CreatedAt:    expTaskCreatedAt,
 			},
 		})
 		assert.NoError(t, err)
@@ -175,6 +176,8 @@ func TestReconcile(t *testing.T) {
 			assert.Equal(t, expData, req.Data)
 			assert.Equal(t, expWorkingState, req.WorkingState)
 			assert.Equal(t, expETag, req.ETag)
+			assert.Equal(t, expTaskCreatedAt, req.TaskCreatedAt)
+			assert.Positive(t, req.TaskLastReconciledAt)
 			return orbital.TaskResponse{}, nil
 		})
 		assert.NoError(t, err)

@@ -9,13 +9,15 @@ import (
 
 // TaskRequest is the request object that will be sent to the operator.
 type TaskRequest struct {
-	TaskID       uuid.UUID `json:"taskId"`       // TaskID is used to identify the task.
-	Type         string    `json:"type"`         // Type is the type of the task.
-	ExternalID   string    `json:"externalId"`   // External ID serves as an identifier for a Job
-	Data         []byte    `json:"data"`         // Data is the static context for the task.
-	WorkingState []byte    `json:"workingState"` // WorkingState is the current state of the task that the operator works upon.
-	ETag         string    `json:"eTag"`         // ETag is used to identify the version of the TaskRequest.
-	MetaData     MetaData  `json:"metaData"`     // MetaData contains additional information about the TaskRequest.
+	TaskID               uuid.UUID `json:"taskId"`               // TaskID is used to identify the task.
+	Type                 string    `json:"type"`                 // Type is the type of the task.
+	ExternalID           string    `json:"externalId"`           // External ID serves as an identifier for a Job
+	Data                 []byte    `json:"data"`                 // Data is the static context for the task.
+	WorkingState         []byte    `json:"workingState"`         // WorkingState is the current state of the task that the operator works upon.
+	ETag                 string    `json:"eTag"`                 // ETag is used to identify the version of the TaskRequest.
+	MetaData             MetaData  `json:"metaData"`             // MetaData contains additional information about the TaskRequest.
+	TaskCreatedAt        int64     `json:"taskCreatedAt"`        // TaskCreatedAt is the timestamp when the task was created, represented as Unix time in seconds.
+	TaskLastReconciledAt int64     `json:"taskLastReconciledAt"` // TaskLastReconciledAt is the timestamp when the task was last reconciled, represented as Unix time in seconds.
 }
 
 // TaskResponse is the response object received from the operator.

@@ -271,11 +271,13 @@ func TestListenAndRespond(t *testing.T) {
 	o.ListenAndRespond(t.Context())
 
 	taskReq := orbital.TaskRequest{
-		TaskID:     uuid.New(),
-		Type:       "success",
-		ExternalID: "external-id",
-		ETag:       "etag",
-		Data:       []byte("test data"),
+		TaskID:               uuid.New(),
+		Type:                 "success",
+		ExternalID:           "external-id",
+		ETag:                 "etag",
+		Data:                 []byte("test data"),
+		TaskCreatedAt:        123,
+		TaskLastReconciledAt: 456,
 	}
 
 	expState := orbital.ResultDone
@@ -283,8 +285,10 @@ func TestListenAndRespond(t *testing.T) {
 
 	h := func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
 		assert.Equal(t, taskReq.TaskID, req.TaskID)
-		assert.Equal(t, taskReq.Type, req.Type)
-		assert.Equal(t, taskReq.Data, req.Data)
+		assert.Equal(t, taskReq.Type, req.TaskType)
+		assert.Equal(t, taskReq.Data, req.TaskData)
+		assert.Equal(t, taskReq.TaskCreatedAt, req.TaskCreatedAt.UnixNano())
+		assert.Equal(t, taskReq.TaskLastReconciledAt, req.TaskLastReconciledAt.UnixNano())
 
 		resp.Result = expState
 		resp.ReconcileAfterSec = expReconcileAfterSec
@@ -389,7 +393,7 @@ func TestListenAndRespond_WorkingState(t *testing.T) {
 
 			h := func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
 				assert.Equal(t, taskReq.TaskID, req.TaskID)
-				assert.Equal(t, taskReq.Type, req.Type)
+				assert.Equal(t, taskReq.Type, req.TaskType)
 
 				if tt.customWorkingState != nil {
 					resp.RawWorkingState = tt.customWorkingState

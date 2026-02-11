@@ -26,13 +26,15 @@ func (p Proto) DecodeTaskRequest(bytes []byte) (orbital.TaskRequest, error) {
 		return empty, err
 	}
 	req := orbital.TaskRequest{
-		TaskID:       id,
-		Type:         pReq.GetType(),
-		ExternalID:   pReq.GetExternalId(),
-		WorkingState: pReq.GetWorkingState(),
-		ETag:         pReq.GetEtag(),
-		Data:         pReq.GetData(),
-		MetaData:     pReq.GetMetaData(),
+		TaskID:               id,
+		Type:                 pReq.GetType(),
+		ExternalID:           pReq.GetExternalId(),
+		WorkingState:         pReq.GetWorkingState(),
+		ETag:                 pReq.GetEtag(),
+		Data:                 pReq.GetData(),
+		MetaData:             pReq.GetMetaData(),
+		TaskCreatedAt:        pReq.GetTaskCreatedAt(),
+		TaskLastReconciledAt: pReq.GetTaskLastReconciledAt(),
 	}
 	return req, nil
 }
@@ -40,13 +42,15 @@ func (p Proto) DecodeTaskRequest(bytes []byte) (orbital.TaskRequest, error) {
 // EncodeTaskRequest encodes a TaskRequest into Protobuf format.
 func (p Proto) EncodeTaskRequest(request orbital.TaskRequest) ([]byte, error) {
 	return proto.Marshal(&orbitalpb.TaskRequest{
-		TaskId:       request.TaskID.String(),
-		Type:         request.Type,
-		ExternalId:   request.ExternalID,
-		WorkingState: request.WorkingState,
-		Etag:         request.ETag,
-		Data:         request.Data,
-		MetaData:     request.MetaData,
+		TaskId:               request.TaskID.String(),
+		Type:                 request.Type,
+		ExternalId:           request.ExternalID,
+		WorkingState:         request.WorkingState,
+		Etag:                 request.ETag,
+		Data:                 request.Data,
+		MetaData:             request.MetaData,
+		TaskCreatedAt:        request.TaskCreatedAt,
+		TaskLastReconciledAt: request.TaskLastReconciledAt,
 	})
 }
 
