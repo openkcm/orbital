@@ -101,8 +101,8 @@ func listTasks(ctx context.Context, manager *orbital.Manager, query orbital.List
 	return nil
 }
 
-func jobConfirmFunc(_ context.Context, _ orbital.Job) (orbital.JobConfirmResult, error) {
-	return orbital.JobConfirmResult{Done: true}, nil
+func jobConfirmFunc(_ context.Context, _ orbital.Job) (orbital.JobConfirmerResult, error) {
+	return orbital.CompleteJobConfirmer(), nil
 }
 
 func jobDoneEventFunc(_ context.Context, job orbital.Job) error {
