@@ -16,3 +16,8 @@ func NowUnixNano() int64 {
 func ToUnixNano(t time.Time) int64 {
 	return t.UnixNano()
 }
+
+// TimeFromUnixNano converts a Unix timestamp in nanoseconds to a time.Time value in UTC.
+func TimeFromUnixNano(nano int64) time.Time {
+	return time.Unix(0, nano).UTC()
+}

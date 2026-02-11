@@ -12,4 +12,6 @@ message TaskRequest {
   bytes workingState = 40; // Current state of the task
   string etag = 50; // Versioning tag
   map<string, string> metaData = 60; // MetaData contains additional information about the message
+  int64 taskCreatedAt = 70; // Unix timestamp in nanoseconds of when the task was created
+  int64 taskLastReconciledAt = 80; // Unix timestamp in nanoseconds of when the task was last reconciled
 }

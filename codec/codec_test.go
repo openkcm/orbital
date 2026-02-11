@@ -7,23 +7,27 @@ import (
 )
 
 var expTaskRequest = orbital.TaskRequest{
-	TaskID:       uuid.New(),
-	Type:         "test",
-	ExternalID:   "external-id",
-	Data:         []byte("test data"),
-	WorkingState: []byte("prev state"),
-	ETag:         "etag",
-	MetaData:     orbital.MetaData{"key1": "value1", "key2": "value"},
+	TaskID:               uuid.New(),
+	Type:                 "test",
+	ExternalID:           "external-id",
+	Data:                 []byte("test data"),
+	WorkingState:         []byte("prev state"),
+	ETag:                 "etag",
+	MetaData:             orbital.MetaData{"key1": "value1", "key2": "value"},
+	TaskCreatedAt:        123,
+	TaskLastReconciledAt: 456,
 }
 
 var expTaskRequestWithoutMeta = orbital.TaskRequest{
-	TaskID:       uuid.New(),
-	Type:         "test",
-	ExternalID:   "external-id",
-	Data:         []byte("test data"),
-	WorkingState: []byte("prev state"),
-	ETag:         "etag",
-	MetaData:     nil,
+	TaskID:               uuid.New(),
+	Type:                 "test",
+	ExternalID:           "external-id",
+	Data:                 []byte("test data"),
+	WorkingState:         []byte("prev state"),
+	ETag:                 "etag",
+	MetaData:             nil,
+	TaskCreatedAt:        123,
+	TaskLastReconciledAt: 456,
 }
 
 var expTaskResponse = orbital.TaskResponse{

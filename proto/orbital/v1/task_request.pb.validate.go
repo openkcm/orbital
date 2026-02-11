@@ -69,6 +69,10 @@ func (m *TaskRequest) validate(all bool) error {
 
 	// no validation rules for MetaData
 
+	// no validation rules for TaskCreatedAt
+
+	// no validation rules for TaskLastReconciledAt
+
 	if m.Data != nil {
 		// no validation rules for Data
 	}

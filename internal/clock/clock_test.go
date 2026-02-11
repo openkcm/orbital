@@ -30,3 +30,10 @@ func TestToUnixNano(t *testing.T) {
 	assert.NotZero(t, unixNano, "should return a non-zero timestamp")
 	assert.Equal(t, now.UnixNano(), unixNano, "should convert time to UnixNano correctly")
 }
+
+func TestTimeFromUnixNano(t *testing.T) {
+	unixNano := time.Now().UnixNano()
+	convertedTime := clock.TimeFromUnixNano(unixNano)
+	assert.Equal(t, time.UTC, convertedTime.Location())
+	assert.Equal(t, unixNano, convertedTime.UnixNano())
+}

@@ -120,7 +120,7 @@ func assertOperatorMetrics(t *testing.T, optTrackers []*OperatorTracker, noOfJob
 		jobIDs := map[string]struct{}{}
 		for _, taskProcessed := range optTracker.noOfTaskProcessed.value {
 			assert.GreaterOrEqual(t, len(taskProcessed), 1)
-			jobID, operatorName, err := extractJobIDAndOperator(string(taskProcessed[0].Data))
+			jobID, operatorName, err := extractJobIDAndOperator(string(taskProcessed[0].TaskData))
 			assert.NoError(t, err)
 			jobIDs[jobID] = struct{}{}
 			assert.Equal(t, optTracker.name, operatorName)
