@@ -88,14 +88,11 @@ func TestOperatorFuncError(t *testing.T) {
 	ctx := t.Context()
 
 	err = client.SendTaskRequest(ctx, orbital.TaskRequest{})
-	assert.NoError(t, err)
-
-	resp, err := client.ReceiveTaskResponse(ctx)
+	assert.Error(t, err)
 	assert.Equal(t, assert.AnError, err)
-	assert.Equal(t, orbital.TaskResponse{}, resp)
 }
 
-func TestContextCancelled(t *testing.T) {
+func TestReceiveTaskResponse_ContextCancelled(t *testing.T) {
 	f := func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
 		return orbital.TaskResponse{}, nil
 	}
@@ -104,11 +101,39 @@ func TestContextCancelled(t *testing.T) {
 	assert.NotNil(t, client)
 	defer client.Close(t.Context())
 
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
+	done := make(chan struct{})
 
-	resp, err := client.ReceiveTaskResponse(ctx)
-	assert.Error(t, err)
-	assert.Equal(t, context.Canceled, err)
-	assert.Equal(t, orbital.TaskResponse{}, resp)
+	ctx, cancel := context.WithCancel(t.Context())
+	go func() {
+		resp, err := client.ReceiveTaskResponse(ctx)
+		assert.Error(t, err)
+		assert.Equal(t, context.Canceled, err)
+		assert.Equal(t, orbital.TaskResponse{}, resp)
+		close(done)
+	}()
+	cancel()
+	<-done
+}
+
+func TestSendTaskRequest_ContextCancelled(t *testing.T) {
+	f := func(ctx context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
+		<-ctx.Done()
+		return orbital.TaskResponse{}, ctx.Err()
+	}
+	client, err := embedded.NewClient(f)
+	assert.NoError(t, err)
+	assert.NotNil(t, client)
+	defer client.Close(t.Context())
+
+	done := make(chan struct{})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	go func() {
+		err := client.SendTaskRequest(ctx, orbital.TaskRequest{})
+		assert.Error(t, err)
+		assert.Equal(t, context.Canceled, err)
+		close(done)
+	}()
+	cancel()
+	<-done
 }

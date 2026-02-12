@@ -12,7 +12,7 @@ type (
 	// Client is a implementation of the orbital.Initiator interface.
 	Client struct {
 		operatorFunc OperatorFunc
-		link         chan orbital.TaskRequest
+		link         chan orbital.TaskResponse
 		close        chan struct{}
 		closeOnce    sync.Once
 	}
@@ -54,39 +54,50 @@ func NewClient(f OperatorFunc, opts ...Option) (*Client, error) {
 
 	return &Client{
 		operatorFunc: f,
-		link:         make(chan orbital.TaskRequest, config.BufferSize),
+		link:         make(chan orbital.TaskResponse, config.BufferSize),
 		close:        make(chan struct{}),
 	}, nil
 }
 
-// SendTaskRequest sends the task request to the link channel.
+// SendTaskRequest passes the task request to the operator function and sends the task response to the link channel.
 func (c *Client) SendTaskRequest(ctx context.Context, request orbital.TaskRequest) error {
+	errCh := make(chan error, 1)
+	respCh := make(chan orbital.TaskResponse, 1)
+	go func() {
+		resp, err := c.operatorFunc(ctx, request)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		resp.TaskID = request.TaskID
+		resp.ETag = request.ETag
+		resp.Type = request.Type
+		resp.ExternalID = request.ExternalID
+		respCh <- resp
+	}()
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-c.close:
 		return ErrClientClosed
-	case c.link <- request:
+	case err := <-errCh:
+		return err
+	case resp := <-respCh:
+		c.link <- resp
 		return nil
 	}
 }
 
-// ReceiveTaskResponse waits for a task request from the link channel,
-// passes the task request to the operator function,
-// and returns the task response.
+// ReceiveTaskResponse waits for a task response from the link channel and returns it.
 func (c *Client) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse, error) {
 	select {
 	case <-ctx.Done():
 		return orbital.TaskResponse{}, ctx.Err()
 	case <-c.close:
 		return orbital.TaskResponse{}, ErrClientClosed
-	case req := <-c.link:
-		resp, err := c.operatorFunc(ctx, req)
-		resp.TaskID = req.TaskID
-		resp.ETag = req.ETag
-		resp.Type = req.Type
-		resp.ExternalID = req.ExternalID
-		return resp, err
+	case resp := <-c.link:
+		return resp, nil
 	}
 }
 
