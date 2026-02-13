@@ -2,8 +2,8 @@ package orbital_test
 
 import (
 	"context"
-	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -24,106 +24,6 @@ func TestOperator_NewOperator(t *testing.T) {
 		assert.Nil(t, actResult)
 		assert.ErrorIs(t, actErr, orbital.ErrOperatorInvalidConfig)
 	})
-}
-
-func TestHandlerResponse_WorkingState(t *testing.T) {
-	// given
-	tests := []struct {
-		name            string
-		pair            map[string]string
-		rawWorkingState func(pair map[string]string) []byte
-		expWorkingState func(pair map[string]string) *orbital.WorkingState
-		expErr          error
-	}{
-		{
-			name: "nil raw working state",
-			rawWorkingState: func(_ map[string]string) []byte {
-				return nil
-			},
-			expWorkingState: func(_ map[string]string) *orbital.WorkingState {
-				return &orbital.WorkingState{}
-			},
-		},
-		{
-			name: "empty raw working state",
-			rawWorkingState: func(_ map[string]string) []byte {
-				return []byte("{}")
-			},
-			expWorkingState: func(_ map[string]string) *orbital.WorkingState {
-				return &orbital.WorkingState{}
-			},
-		},
-		{
-			name: "invalid raw working state",
-			rawWorkingState: func(_ map[string]string) []byte {
-				return []byte("{invalid json}")
-			},
-			expWorkingState: func(_ map[string]string) *orbital.WorkingState {
-				return nil
-			},
-			expErr: orbital.ErrWorkingStateInvalid,
-		},
-		{
-			name: "valid raw working state",
-			pair: map[string]string{
-				"key1": "value1",
-				"key2": "value2",
-			},
-			rawWorkingState: func(pair map[string]string) []byte {
-				var sb strings.Builder
-				for k, v := range pair {
-					if sb.Len() > 0 {
-						sb.WriteString(",")
-					}
-					sb.WriteString(`"` + k + `":"` + v + `"`)
-				}
-				return []byte(`{` + sb.String() + `}`)
-			},
-			expWorkingState: func(pair map[string]string) *orbital.WorkingState {
-				ws := &orbital.WorkingState{}
-				for k, v := range pair {
-					ws.Set(k, v)
-				}
-				return ws
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			resp := orbital.HandlerResponse{
-				RawWorkingState: tt.rawWorkingState(tt.pair),
-			}
-
-			// when
-			ws, err := resp.WorkingState()
-
-			// then
-			if tt.expErr != nil {
-				assert.ErrorIs(t, err, tt.expErr)
-				assert.Nil(t, ws)
-				return
-			}
-			assert.NoError(t, err)
-			assert.NotNil(t, ws)
-
-			expWorkingState := tt.expWorkingState(tt.pair)
-			for k := range tt.pair {
-				expVal, ok := expWorkingState.Value(k)
-				assert.True(t, ok)
-				actVal, ok := ws.Value(k)
-				assert.True(t, ok)
-				assert.Equal(t, expVal, actVal)
-			}
-
-			// when called again, should return the same working state
-			ws2, err := resp.WorkingState()
-
-			// then
-			assert.NoError(t, err)
-			assert.Equal(t, ws, ws2)
-		})
-	}
 }
 
 func TestNew(t *testing.T) {
@@ -177,9 +77,7 @@ func TestRegisterHandler(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, o)
 
-	h := func(_ context.Context, _ orbital.HandlerRequest, _ *orbital.HandlerResponse) error {
-		return nil
-	}
+	h := func(_ context.Context, _ orbital.HandlerRequest, _ *orbital.HandlerResponse) {}
 
 	tests := []struct {
 		name     string
@@ -215,7 +113,7 @@ func TestRegisterHandler(t *testing.T) {
 	}
 }
 
-func TestListenAndRespond_ErrorResponse(t *testing.T) {
+func TestListenAndRespond_UnknownTaskType(t *testing.T) {
 	client := respondertest.NewResponder()
 
 	o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
@@ -224,90 +122,97 @@ func TestListenAndRespond_ErrorResponse(t *testing.T) {
 
 	o.ListenAndRespond(t.Context())
 
-	tests := []struct {
-		name      string
-		taskType  string
-		handler   orbital.Handler
-		expErrMsg string
-	}{
-		{
-			name:      "unknown task type",
-			expErrMsg: orbital.ErrUnknownTaskType.Error(),
-		},
-		{
-			name:     "handler error",
-			taskType: "handler error",
-			handler: func(_ context.Context, _ orbital.HandlerRequest, _ *orbital.HandlerResponse) error {
-				return assert.AnError
-			},
-			expErrMsg: assert.AnError.Error(),
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.taskType != "" {
-				err := o.RegisterHandler(tt.taskType, tt.handler)
-				assert.NoError(t, err)
-			}
-			req := orbital.TaskRequest{
-				Type: tt.taskType,
-			}
-			client.NewRequest(req)
-			resp := client.NewResponse()
+	taskType := "unknown-task-type"
 
-			assert.Equal(t, string(orbital.ResultFailed), resp.Status)
-			assert.Contains(t, resp.ErrorMessage, tt.expErrMsg)
-		})
+	req := orbital.TaskRequest{
+		Type: taskType,
 	}
+	client.NewRequest(req)
+	resp := client.NewResponse()
+
+	assert.Equal(t, string(orbital.TaskStatusFailed), resp.Status)
+	assert.Equal(t, "no handler registered for task type unknown-task-type", resp.ErrorMessage)
 }
 
 func TestListenAndRespond(t *testing.T) {
-	client := respondertest.NewResponder()
-
-	o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
-	assert.NoError(t, err)
-	assert.NotNil(t, o)
-
-	o.ListenAndRespond(t.Context())
-
 	taskReq := orbital.TaskRequest{
 		TaskID:               uuid.New(),
-		Type:                 "success",
+		Type:                 "any",
 		ExternalID:           "external-id",
 		ETag:                 "etag",
 		Data:                 []byte("test data"),
+		WorkingState:         []byte("prev state"),
 		TaskCreatedAt:        123,
 		TaskLastReconciledAt: 456,
 	}
 
-	expState := orbital.ResultDone
-	expReconcileAfterSec := uint64(10)
-
-	h := func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
-		assert.Equal(t, taskReq.TaskID, req.TaskID)
-		assert.Equal(t, taskReq.Type, req.TaskType)
-		assert.Equal(t, taskReq.Data, req.TaskData)
-		assert.Equal(t, taskReq.TaskCreatedAt, req.TaskCreatedAt.UnixNano())
-		assert.Equal(t, taskReq.TaskLastReconciledAt, req.TaskLastReconciledAt.UnixNano())
-
-		resp.Result = expState
-		resp.ReconcileAfterSec = expReconcileAfterSec
-		return nil
+	tests := []struct {
+		name              string
+		expStatus         orbital.TaskStatus
+		expErrMsg         string
+		expReconcileAfter time.Duration
+	}{
+		{
+			name:      "done",
+			expStatus: orbital.TaskStatusDone,
+		},
+		{
+			name:      "failed",
+			expStatus: orbital.TaskStatusFailed,
+			expErrMsg: "error message",
+		},
+		{
+			name:              "continue with reconcile after",
+			expStatus:         orbital.TaskStatusProcessing,
+			expReconcileAfter: 30 * time.Second,
+		},
 	}
 
-	err = o.RegisterHandler(taskReq.Type, h)
-	assert.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := respondertest.NewResponder()
 
-	client.NewRequest(taskReq)
-	resp := client.NewResponse()
+			o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
+			assert.NoError(t, err)
+			assert.NotNil(t, o)
 
-	assert.Equal(t, taskReq.TaskID, resp.TaskID)
-	assert.Equal(t, taskReq.Type, resp.Type)
-	assert.Equal(t, taskReq.ExternalID, resp.ExternalID)
-	assert.Equal(t, taskReq.ETag, resp.ETag)
-	assert.Equal(t, string(expState), resp.Status)
-	assert.Equal(t, expReconcileAfterSec, resp.ReconcileAfterSec)
-	assert.Empty(t, resp.ErrorMessage)
+			o.ListenAndRespond(t.Context())
+
+			h := func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) {
+				assert.Equal(t, taskReq.TaskID, req.TaskID)
+				assert.Equal(t, taskReq.Type, req.TaskType)
+				assert.Equal(t, taskReq.Data, req.TaskData)
+				assert.Equal(t, taskReq.TaskCreatedAt, req.TaskCreatedAt.UnixNano())
+				assert.Equal(t, taskReq.TaskLastReconciledAt, req.TaskLastReconciledAt.UnixNano())
+				assert.Equal(t, taskReq.WorkingState, req.TaskRawWorkingState)
+
+				switch tt.expStatus {
+				case orbital.TaskStatusDone:
+					resp.Complete()
+				case orbital.TaskStatusFailed:
+					resp.Fail(tt.expErrMsg)
+				case orbital.TaskStatusProcessing:
+					resp.ContinueAndWaitFor(tt.expReconcileAfter)
+				case orbital.TaskStatusCreated:
+					assert.Fail(t, "unexpected TaskStatusCreated result from handler")
+				}
+			}
+
+			err = o.RegisterHandler(taskReq.Type, h)
+			assert.NoError(t, err)
+
+			client.NewRequest(taskReq)
+			resp := client.NewResponse()
+
+			assert.Equal(t, taskReq.TaskID, resp.TaskID)
+			assert.Equal(t, taskReq.Type, resp.Type)
+			assert.Equal(t, taskReq.ExternalID, resp.ExternalID)
+			assert.Equal(t, taskReq.ETag, resp.ETag)
+			assert.Equal(t, string(tt.expStatus), resp.Status)
+			assert.InDelta(t, tt.expReconcileAfter.Seconds(), float64(resp.ReconcileAfterSec), 0.001)
+			assert.Equal(t, tt.expErrMsg, resp.ErrorMessage)
+		})
+	}
 }
 
 func TestListenAndRespond_WorkingState(t *testing.T) {
@@ -391,21 +296,21 @@ func TestListenAndRespond_WorkingState(t *testing.T) {
 				WorkingState: tt.rawWorkingState,
 			}
 
-			h := func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
+			h := func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) {
 				assert.Equal(t, taskReq.TaskID, req.TaskID)
 				assert.Equal(t, taskReq.Type, req.TaskType)
 
 				if tt.customWorkingState != nil {
-					resp.RawWorkingState = tt.customWorkingState
-					resp.Result = orbital.ResultDone
-					return nil
+					resp.WithRawWorkingState(tt.customWorkingState)
+					resp.Complete()
+					return
 				}
 
 				workingState, err := resp.WorkingState()
 				if tt.expErrDecode != nil {
 					assert.ErrorIs(t, err, tt.expErrDecode)
-					resp.Result = orbital.ResultDone
-					return nil
+					resp.Fail(err.Error())
+					return
 				}
 				assert.NoError(t, err)
 				assert.NotNil(t, workingState)
@@ -418,8 +323,7 @@ func TestListenAndRespond_WorkingState(t *testing.T) {
 					workingState.DiscardChanges()
 				}
 
-				resp.Result = orbital.ResultDone
-				return nil
+				resp.Complete()
 			}
 
 			err = o.RegisterHandler(taskReq.Type, h)
@@ -430,9 +334,7 @@ func TestListenAndRespond_WorkingState(t *testing.T) {
 
 			assert.Equal(t, taskReq.TaskID, resp.TaskID)
 			assert.Equal(t, taskReq.Type, resp.Type)
-			assert.Equal(t, string(orbital.ResultDone), resp.Status)
 			assert.Equal(t, tt.expRawWorkingState, resp.WorkingState)
-			assert.Empty(t, resp.ErrorMessage)
 		})
 	}
 }

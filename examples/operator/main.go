@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -44,31 +45,25 @@ func main() {
 	sendAndReceive(ctx)
 }
 
-func handlerExample(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
-	log.Printf("Received handler request:\n \tTaskID: %s\n \tType: %s\n \tData: %s\n",
-		req.TaskID, req.TaskType, string(req.TaskData))
-
-	log.Printf("Handler response default:\n \tResult: %s\n \t ReconcileAfterSec%d\n \tRawWorkingState%s\n",
-		resp.Result, resp.ReconcileAfterSec, string(resp.RawWorkingState))
+func handlerExample(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) {
+	log.Printf("Received handler request:\n \tTaskID: %s\n \tType: %s\n \tData: %s\n \tWorkingState: %s\n \tTaskCreatedAt: %s\n \tTaskLastReconciledAt: %s\n",
+		req.TaskID, req.TaskType, string(req.TaskData), string(req.TaskRawWorkingState), req.TaskCreatedAt, req.TaskLastReconciledAt)
 
 	workingState, err := resp.WorkingState() // decode existing working state
-	handleErr("decoding working state", err)
+	if err != nil {
+		resp.Fail("invalid working state")
+		return
+	}
 
 	counter := workingState.Inc("attempts")
 	if counter > 3 {
-		resp.Result = orbital.ResultDone
-		return nil
+		resp.Fail("too many attempts")
+		return
 	}
 
 	workingState.Set("motivation", "keep trying")
 
-	resp.Result = orbital.ResultProcessing
-	resp.ReconcileAfterSec = 10
-
-	log.Printf("Handler response after update:\n \tResult: %s\n \t ReconcileAfterSec%d\n \tRawWorkingState%s\n",
-		resp.Result, resp.ReconcileAfterSec, string(resp.RawWorkingState))
-
-	return nil
+	resp.ContinueAndWaitFor(5 * time.Second) // ask the manager to reconcile after 5 seconds
 }
 
 func sendAndReceive(ctx context.Context) {
