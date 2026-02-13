@@ -282,8 +282,8 @@ func TestOperator_Signing(t *testing.T) {
 			"type":  "jwt",
 		}
 
-		expStatus := string(orbital.ResultDone)
-		expReconcileAfterSec := uint64(19)
+		expStatus := string(orbital.TaskStatusProcessing)
+		expReconcileAfter := 19 * time.Second
 		expWorkingState := []byte("{}")
 
 		taskReq := orbital.TaskRequest{
@@ -301,7 +301,7 @@ func TestOperator_Signing(t *testing.T) {
 			ETag:              taskReq.ETag,
 			WorkingState:      expWorkingState,
 			Status:            expStatus,
-			ReconcileAfterSec: expReconcileAfterSec,
+			ReconcileAfterSec: uint64(expReconcileAfter.Seconds()),
 		}
 
 		var actSignTaskResponseCalls atomic.Int32
@@ -371,11 +371,10 @@ func TestOperator_Signing(t *testing.T) {
 				ctx := t.Context()
 				o.ListenAndRespond(ctx)
 
-				h := func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
+				h := func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) {
 					assert.Equal(t, taskReq.TaskID, req.TaskID)
-					resp.Result = orbital.Result(expStatus)
-					resp.ReconcileAfterSec = expReconcileAfterSec
-					return nil
+
+					resp.ContinueAndWaitFor(expReconcileAfter)
 				}
 
 				err = o.RegisterHandler(taskReq.Type, h)
@@ -504,14 +503,12 @@ func TestOperator_Verification(t *testing.T) {
 
 				var actHandlerCalls atomic.Int32
 				actHandlerCallChan := make(chan struct{})
-				h := func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
+				h := func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) {
 					assert.Equal(t, taskReq.TaskID, req.TaskID)
 					actHandlerCalls.Add(1)
 					actHandlerCallChan <- struct{}{}
 
-					resp.Result = orbital.ResultDone
-					resp.ReconcileAfterSec = uint64(10)
-					return nil
+					resp.ContinueAndWaitFor(10 * time.Second)
 				}
 
 				err = o.RegisterHandler(taskReq.Type, h)

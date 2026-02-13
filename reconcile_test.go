@@ -663,7 +663,7 @@ func TestProcessResponse(t *testing.T) {
 						Type:              "task-type",
 						WorkingState:      []byte("updated-state"),
 						ETag:              "etag-123",
-						Status:            string(orbital.ResultDone),
+						Status:            string(orbital.TaskStatusDone),
 						ReconcileAfterSec: 300,
 					}
 				},
@@ -693,7 +693,7 @@ func TestProcessResponse(t *testing.T) {
 						Type:              "task-type",
 						WorkingState:      []byte("updated-state"),
 						ETag:              "etag-123",
-						Status:            string(orbital.ResultDone),
+						Status:            string(orbital.TaskStatusDone),
 						ReconcileAfterSec: 300,
 						ErrorMessage:      "some-error-message",
 					}
@@ -725,7 +725,7 @@ func TestProcessResponse(t *testing.T) {
 						Type:         "task-type",
 						WorkingState: []byte("should-not-update"),
 						ETag:         "stale-etag",
-						Status:       string(orbital.ResultDone),
+						Status:       string(orbital.TaskStatusDone),
 					}
 				},
 				expTaskStatus:          orbital.TaskStatusProcessing,
@@ -828,37 +828,37 @@ func TestProcessResponse(t *testing.T) {
 				name:               "should be regenerated if Task and Taskresponse ETag are the same and TaskResponse status is DONE",
 				taskETag:           "etag",
 				taskResponseETag:   "etag",
-				taskResponseStatus: string(orbital.ResultDone),
+				taskResponseStatus: string(orbital.TaskStatusDone),
 			},
 			{
 				name:               "should be regenerated if Task and Taskresponse ETag are the same and TaskResponse status is FAILED",
 				taskETag:           "etag",
 				taskResponseETag:   "etag",
-				taskResponseStatus: string(orbital.ResultFailed),
+				taskResponseStatus: string(orbital.TaskStatusFailed),
 			},
 			{
-				name:               "should be regenerated if Task and Taskresponse ETag are the same and TaskResponse status is CONTINUE",
+				name:               "should be regenerated if Task and Taskresponse ETag are the same and TaskResponse status is PROCESSING",
 				taskETag:           "etag",
 				taskResponseETag:   "etag",
-				taskResponseStatus: string(orbital.ResultProcessing),
+				taskResponseStatus: string(orbital.TaskStatusProcessing),
 			},
 			{
 				name:               "should not be regenerated if Task and Taskresponse Etag are different and TaskResponse status is DONE",
 				taskETag:           "etag",
 				taskResponseETag:   "different-etag",
-				taskResponseStatus: string(orbital.ResultDone),
+				taskResponseStatus: string(orbital.TaskStatusDone),
 			},
 			{
 				name:               "should not be regenerated if Task and Taskresponse ETag are different and TaskResponse status is FAILED",
 				taskETag:           "etag",
 				taskResponseETag:   "different-etag",
-				taskResponseStatus: string(orbital.ResultFailed),
+				taskResponseStatus: string(orbital.TaskStatusFailed),
 			},
 			{
-				name:               "should not be regenerated if Task and Taskresponse ETag are different and TaskResponse status is CONTINUE",
+				name:               "should not be regenerated if Task and Taskresponse ETag are different and TaskResponse status is PROCESSING",
 				taskETag:           "etag",
 				taskResponseETag:   "different-etag",
-				taskResponseStatus: string(orbital.ResultProcessing),
+				taskResponseStatus: string(orbital.TaskStatusProcessing),
 			},
 		}
 		for _, tc := range tt {
@@ -935,7 +935,7 @@ func TestProcessResponse(t *testing.T) {
 					TaskID: taskID,
 					Type:   "task-type",
 					ETag:   etag,
-					Status: string(orbital.ResultDone),
+					Status: string(orbital.TaskStatusDone),
 				}
 				processFunc := orbital.ProcessResponse(mgr)
 				err = processFunc(ctx, response)
@@ -972,7 +972,7 @@ func TestProcessResponse(t *testing.T) {
 				TaskID: taskID,
 				Type:   "task-type",
 				ETag:   "non-matching-etag",
-				Status: string(orbital.ResultDone),
+				Status: string(orbital.TaskStatusDone),
 			}
 			processFunc := orbital.ProcessResponse(mgr)
 			err = processFunc(ctx, response)
@@ -1040,7 +1040,7 @@ func TestReconciliationRaceCondition(t *testing.T) {
 			TaskID: taskID,
 			Type:   "task-type",
 			ETag:   "etag",
-			Status: string(orbital.ResultDone),
+			Status: string(orbital.TaskStatusDone),
 		}
 
 		responseStartChan := make(chan string)
