@@ -47,7 +47,7 @@ type (
 )
 
 // WorkingState returns the WorkingState from the HandlerResponse.
-// It returns an error if the decoding of the RawWorkingState fails.
+// It returns an error if the decoding of the rawWorkingState fails.
 //
 // The WorkingState is automatically encoded back into the orbital.TaskResponse.
 // If the working state is not decoded,
@@ -76,17 +76,19 @@ func (r *HandlerResponse) WorkingState() (*WorkingState, error) {
 	return workingState, nil
 }
 
-// WithRawWorkingState allows the handler to set the rawWorkingState directly.
+// UseRawWorkingState allows the handler to set the rawWorkingState directly.
 //
 // Note: If the WorkingState is used in the handler,
 // the changes in the WorkingState take precedence over the rawWorkingState.
-func (r *HandlerResponse) WithRawWorkingState(raw []byte) {
+func (r *HandlerResponse) UseRawWorkingState(raw []byte) {
 	r.rawWorkingState = raw
 }
 
 // ContinueAndWaitFor indicates that the handler has processed the request and wants to continue processing after a defined duration.
-func (r *HandlerResponse) ContinueAndWaitFor(reconcileAfter time.Duration) {
-	r.reconcileAfterSec = uint64(reconcileAfter.Seconds())
+//
+// Note: Duration will be converted to seconds and rounded down.
+func (r *HandlerResponse) ContinueAndWaitFor(duration time.Duration) {
+	r.reconcileAfterSec = uint64(duration.Seconds())
 	r.result = handlerResultProcessing
 }
 

@@ -301,7 +301,7 @@ func TestListenAndRespond_WorkingState(t *testing.T) {
 				assert.Equal(t, taskReq.Type, req.TaskType)
 
 				if tt.customWorkingState != nil {
-					resp.WithRawWorkingState(tt.customWorkingState)
+					resp.UseRawWorkingState(tt.customWorkingState)
 					resp.Complete()
 					return
 				}
