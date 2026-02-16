@@ -3,23 +3,10 @@ package orbital
 import (
 	"context"
 	"errors"
-	"fmt"
-	"log"
 	"log/slog"
 	"sync"
-	"time"
-
-	"github.com/google/uuid"
 
 	slogctx "github.com/veqryn/slog-context"
-
-	"github.com/openkcm/orbital/internal/clock"
-)
-
-const (
-	ResultFailed     Result = "FAILED"
-	ResultProcessing Result = "PROCESSING"
-	ResultDone       Result = "DONE"
 )
 
 type (
@@ -40,68 +27,9 @@ type (
 
 	handlerRegistry struct {
 		mu sync.RWMutex
-		r  map[string]Handler
+		r  map[string]HandlerFunc
 	}
 )
-
-type (
-	// Handler processes task requests and populates the response.
-	// It returns an error if the task cannot be processed successfully.
-	Handler func(ctx context.Context, request HandlerRequest, response *HandlerResponse) error
-
-	// HandlerRequest contains information extracted from orbital.TaskRequest
-	// that are relevant for the operator's processing.
-	HandlerRequest struct {
-		TaskID               uuid.UUID
-		TaskType             string
-		TaskData             []byte
-		TaskCreatedAt        time.Time
-		TaskLastReconciledAt time.Time
-	}
-
-	// HandlerResponse contains information that can be modified by the operator
-	// and will be populated to the orbital.TaskResponse.
-	HandlerResponse struct {
-		RawWorkingState   []byte
-		Result            Result
-		ReconcileAfterSec uint64
-
-		workingState *WorkingState
-	}
-
-	// Result represents the result of the operator's processing.
-	Result string
-)
-
-// WorkingState returns the WorkingState from the HandlerResponse.
-// It returns an error if the decoding of the RawWorkingState fails.
-//
-// The WorkingState is automatically encoded back into the orbital.TaskResponse.
-// If the working state is not decoded,
-// if the changes are discarded,
-// or if there is an error during encoding,
-// the RawWorkingState field will take precedence.
-func (r *HandlerResponse) WorkingState() (*WorkingState, error) {
-	if r.workingState != nil {
-		return r.workingState, nil
-	}
-
-	if len(r.RawWorkingState) == 0 {
-		workingState := &WorkingState{
-			s: make(map[string]any),
-		}
-		r.workingState = workingState
-		return workingState, nil
-	}
-
-	workingState, err := decodeWorkingState(r.RawWorkingState)
-	if err != nil {
-		return nil, err
-	}
-	r.workingState = workingState
-
-	return workingState, nil
-}
 
 var (
 	ErrOperatorInvalidConfig      = errors.New("invalid operator configuration")
@@ -131,7 +59,7 @@ func NewOperator(target TargetOperator, opts ...Option) (*Operator, error) {
 
 	return &Operator{
 		target:          target,
-		handlerRegistry: handlerRegistry{r: make(map[string]Handler)},
+		handlerRegistry: handlerRegistry{r: make(map[string]HandlerFunc)},
 		requests:        make(chan TaskRequest, c.bufferSize),
 		numberOfWorkers: c.numberOfWorkers,
 	}, nil
@@ -163,7 +91,7 @@ func WithNumberOfWorkers(num int) Option {
 
 // RegisterHandler registers a handler for a specific task type.
 // It returns an error if the handler is nil.
-func (o *Operator) RegisterHandler(taskType string, h Handler) error {
+func (o *Operator) RegisterHandler(taskType string, h HandlerFunc) error {
 	if h == nil {
 		return ErrHandlerNil
 	}
@@ -187,7 +115,7 @@ func (o *Operator) startListening(ctx context.Context) {
 		default:
 			req, err := o.target.Client.ReceiveTaskRequest(ctx)
 			if err != nil {
-				log.Printf("ERROR: receiving task request, %v", err)
+				slogctx.Error(ctx, "failed to receive task request", "error", err)
 				continue
 			}
 			o.requests <- req
@@ -211,10 +139,16 @@ func (o *Operator) startResponding(ctx context.Context) {
 						continue
 					}
 
-					resp, err := o.handleRequest(logCtx, req)
-					if err != nil {
-						o.sendErrorResponse(logCtx, resp, err)
-						continue
+					var resp TaskResponse
+
+					h, ok := o.handlerRegistry.r[req.Type]
+					if !ok {
+						slogctx.Error(logCtx, "no handler registered for task type", "taskType", req.Type)
+						resp = req.prepareResponse()
+						resp.Status = string(TaskStatusFailed)
+						resp.ErrorMessage = "no handler registered for task type " + req.Type
+					} else {
+						resp = executeHandler(logCtx, h, req)
 					}
 
 					signature, err := o.createSignature(logCtx, resp)
@@ -223,9 +157,13 @@ func (o *Operator) startResponding(ctx context.Context) {
 					}
 					resp.addMeta(signature)
 
-					slogctx.Debug(logCtx, "sending task response", slog.Any("response", resp))
+					logCtx = slogctx.With(logCtx, slog.Any("response", resp))
 					err = o.target.Client.SendTaskResponse(logCtx, resp)
-					handleError(logCtx, "sending task response", err)
+					if err != nil {
+						slogctx.Error(logCtx, "failed to send task response", "error", err)
+						continue
+					}
+					slogctx.Debug(logCtx, "sent task response")
 				}
 			}
 		}()
@@ -249,52 +187,6 @@ func (o *Operator) isValidSignature(ctx context.Context, req TaskRequest) bool {
 	return true
 }
 
-func (o *Operator) handleRequest(ctx context.Context, req TaskRequest) (TaskResponse, error) {
-	resp := TaskResponse{
-		TaskID:     req.TaskID,
-		Type:       req.Type,
-		ExternalID: req.ExternalID,
-		ETag:       req.ETag,
-	}
-
-	h, ok := o.handlerRegistry.r[req.Type]
-	if !ok {
-		return resp, fmt.Errorf("%w: %s", ErrUnknownTaskType, req.Type)
-	}
-
-	hReq := HandlerRequest{
-		TaskID:               req.TaskID,
-		TaskType:             req.Type,
-		TaskData:             req.Data,
-		TaskCreatedAt:        clock.TimeFromUnixNano(req.TaskCreatedAt),
-		TaskLastReconciledAt: clock.TimeFromUnixNano(req.TaskLastReconciledAt),
-	}
-	hResp := &HandlerResponse{
-		RawWorkingState: req.WorkingState,
-		Result:          ResultProcessing,
-	}
-	start := time.Now()
-	err := h(ctx, hReq, hResp)
-	slogctx.Debug(ctx, "task handler finished", "processingTime", time.Since(start))
-	if err != nil {
-		return resp, err
-	}
-
-	resp.Status = string(hResp.Result)
-	resp.ReconcileAfterSec = hResp.ReconcileAfterSec
-	resp.WorkingState = hResp.RawWorkingState
-	if hResp.workingState != nil && hResp.workingState.s != nil {
-		encodedState, err := hResp.workingState.encode()
-		if err != nil {
-			slogctx.Warn(ctx, "encoding working state", "error", err)
-			return resp, nil
-		}
-		resp.WorkingState = encodedState
-	}
-
-	return resp, nil
-}
-
 func (o *Operator) createSignature(ctx context.Context, resp TaskResponse) (Signature, error) {
 	signer := o.target.Signer
 	if signer != nil {
@@ -305,20 +197,4 @@ func (o *Operator) createSignature(ctx context.Context, resp TaskResponse) (Sign
 		return signature, err
 	}
 	return Signature{}, nil
-}
-
-func (o *Operator) sendErrorResponse(ctx context.Context, resp TaskResponse, err error) {
-	slogctx.Error(ctx, "handling task request", "error", err)
-	resp.Status = string(ResultFailed)
-	resp.ErrorMessage = err.Error()
-	err = o.target.Client.SendTaskResponse(ctx, resp)
-	handleError(ctx, "sending task response", err)
-}
-
-func handleError(ctx context.Context, msg string, err error) {
-	if err != nil {
-		slogctx.Error(ctx, msg, "error", err)
-		return
-	}
-	slogctx.Debug(ctx, msg)
 }

@@ -407,15 +407,15 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, initiatorHand
 	require.NoError(t, err)
 
 	operatorConfig := operatorConfig{
-		handlers: map[string]orbital.Handler{
-			taskType: func(_ context.Context, request orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
+		handlers: map[string]orbital.HandlerFunc{
+			taskType: func(_ context.Context, request orbital.HandlerRequest, resp *orbital.HandlerResponse) {
 				t.Logf("Handler called for task %s", request.TaskID)
-				resp.Result = orbital.ResultDone
 				workingState, err := resp.WorkingState()
 				assert.NoError(t, err)
 				assert.NotNil(t, workingState)
 				workingState.Set("progress", "100%")
-				return nil
+
+				resp.Complete()
 			},
 		},
 	}

@@ -116,6 +116,15 @@ type Codec interface {
 	DecodeTaskResponse(bytes []byte) (TaskResponse, error)
 }
 
+func (req *TaskRequest) prepareResponse() TaskResponse {
+	return TaskResponse{
+		TaskID:     req.TaskID,
+		Type:       req.Type,
+		ExternalID: req.ExternalID,
+		ETag:       req.ETag,
+	}
+}
+
 func (req *TaskRequest) addMeta(m map[string]string) {
 	if req.MetaData == nil {
 		req.MetaData = make(MetaData)
