@@ -58,7 +58,7 @@ type managerConfig struct {
 
 // operatorConfig holds configuration for the operator.
 type operatorConfig struct {
-	handlers map[string]orbital.Handler
+	handlers map[string]orbital.HandlerFunc
 }
 
 // setupTestEnvironment creates all necessary containers for testing.

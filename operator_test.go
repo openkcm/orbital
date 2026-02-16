@@ -82,7 +82,7 @@ func TestRegisterHandler(t *testing.T) {
 	tests := []struct {
 		name     string
 		taskType string
-		handler  orbital.Handler
+		handler  orbital.HandlerFunc
 		expErr   error
 	}{
 		{

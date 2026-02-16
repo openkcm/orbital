@@ -27,7 +27,7 @@ type (
 
 	handlerRegistry struct {
 		mu sync.RWMutex
-		r  map[string]Handler
+		r  map[string]HandlerFunc
 	}
 )
 
@@ -59,7 +59,7 @@ func NewOperator(target TargetOperator, opts ...Option) (*Operator, error) {
 
 	return &Operator{
 		target:          target,
-		handlerRegistry: handlerRegistry{r: make(map[string]Handler)},
+		handlerRegistry: handlerRegistry{r: make(map[string]HandlerFunc)},
 		requests:        make(chan TaskRequest, c.bufferSize),
 		numberOfWorkers: c.numberOfWorkers,
 	}, nil
@@ -91,7 +91,7 @@ func WithNumberOfWorkers(num int) Option {
 
 // RegisterHandler registers a handler for a specific task type.
 // It returns an error if the handler is nil.
-func (o *Operator) RegisterHandler(taskType string, h Handler) error {
+func (o *Operator) RegisterHandler(taskType string, h HandlerFunc) error {
 	if h == nil {
 		return ErrHandlerNil
 	}

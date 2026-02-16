@@ -18,9 +18,9 @@ const (
 )
 
 type (
-	// Handler processes a handler request and populates the handler response.
+	// HandlerFunc processes a handler request and populates the handler response.
 	// Per default, the handler response will continue processing and the working state will be preserved.
-	Handler func(ctx context.Context, request HandlerRequest, resp *HandlerResponse)
+	HandlerFunc func(ctx context.Context, request HandlerRequest, resp *HandlerResponse)
 
 	// HandlerRequest contains information extracted from orbital.TaskRequest
 	// that are relevant for the operator's processing.
@@ -107,7 +107,7 @@ func (r *HandlerResponse) Complete() {
 	r.result = handlerResultDone
 }
 
-func executeHandler(ctx context.Context, h Handler, req TaskRequest) TaskResponse {
+func executeHandler(ctx context.Context, h HandlerFunc, req TaskRequest) TaskResponse {
 	resp := req.prepareResponse()
 
 	hReq := HandlerRequest{

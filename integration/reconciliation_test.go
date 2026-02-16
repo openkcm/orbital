@@ -151,7 +151,7 @@ func testReconcile(ctx context.Context, t *testing.T, env *testEnvironment, stor
 	assert.NoError(t, err)
 
 	operatorConfig := operatorConfig{
-		handlers: map[string]orbital.Handler{
+		handlers: map[string]orbital.HandlerFunc{
 			taskType: func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) {
 				operatorOnce.Do(func() {
 					close(operatorDone)
@@ -316,7 +316,7 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 	assert.NoError(t, err)
 
 	operatorConfig1 := operatorConfig{
-		handlers: map[string]orbital.Handler{
+		handlers: map[string]orbital.HandlerFunc{
 			taskType1: func(_ context.Context, _ orbital.HandlerRequest, resp *orbital.HandlerResponse) {
 				operator1Once.Do(func() {
 					close(operator1Done)
@@ -339,7 +339,7 @@ func testReconcileWithMultipleTasks(ctx context.Context, t *testing.T, env *test
 	assert.NoError(t, err)
 
 	operatorConfig2 := operatorConfig{
-		handlers: map[string]orbital.Handler{
+		handlers: map[string]orbital.HandlerFunc{
 			taskType2: func(_ context.Context, _ orbital.HandlerRequest, resp *orbital.HandlerResponse) {
 				operator2Once.Do(func() {
 					close(operator2Done)
@@ -495,7 +495,7 @@ func testTaskFailureScenario(ctx context.Context, t *testing.T, env *testEnviron
 	assert.NoError(t, err)
 
 	operatorConfig := operatorConfig{
-		handlers: map[string]orbital.Handler{
+		handlers: map[string]orbital.HandlerFunc{
 			taskType: func(_ context.Context, _ orbital.HandlerRequest, resp *orbital.HandlerResponse) {
 				operatorOnce.Do(func() {
 					close(operatorDone)
@@ -633,7 +633,7 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 	var mu sync.Mutex
 
 	operatorConfig := operatorConfig{
-		handlers: map[string]orbital.Handler{
+		handlers: map[string]orbital.HandlerFunc{
 			taskType: func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) {
 				mu.Lock()
 				defer mu.Unlock()
