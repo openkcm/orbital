@@ -46,20 +46,6 @@ type (
 	// ManagerOptsFunc is a function type to configure Manager options.
 	ManagerOptsFunc func(mgr *Manager)
 
-	// JobConfirmFunc defines a function that determines whether a job can be confirmed.
-	// It returns a ConfirmResult struct with the confirmation result and an error if the process fails.
-	JobConfirmFunc func(ctx context.Context, job Job) (JobConfirmResult, error)
-
-	// JobConfirmResult represents the result of a job confirmation operation.
-	JobConfirmResult struct {
-		// Done indicates whether the confirming process is complete.
-		Done bool
-		// IsCanceled indicates whether the job needs to be canceled.
-		IsCanceled bool
-		// CanceledErrorMessage provides an error message if the job is canceled.
-		CanceledErrorMessage string
-	}
-
 	// Config contains configuration for job processing.
 	Config struct {
 		// TaskLimitNum is the maximum number of tasks to process at once.
@@ -151,10 +137,8 @@ func NewManager(repo *Repository, taskResolver TaskResolveFunc, optFuncs ...Mana
 			BackoffMaxIntervalSec:  defBackoffMaxInterval,
 			MaxReconcileCount:      defMaxReconcileCount,
 		},
-		jobConfirmFunc: func(_ context.Context, _ Job) (JobConfirmResult, error) {
-			return JobConfirmResult{
-				Done: true,
-			}, nil
+		jobConfirmFunc: func(_ context.Context, _ Job) (JobConfirmerResult, error) {
+			return CompleteJobConfirmer(), nil
 		},
 		closed: make(chan struct{}),
 	}
@@ -352,7 +336,7 @@ func (m *Manager) confirmJob(ctx context.Context) error {
 	return m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
 		now := clock.Now()
 		jobs, err := repo.listJobs(ctx, ListJobsQuery{
-			Status:             JobStatusCreated,
+			StatusIn:           []JobStatus{JobStatusCreated, JobStatusConfirming},
 			CreatedAt:          clock.ToUnixNano(now.Add(-m.Config.ConfirmJobAfter)),
 			Limit:              1,
 			RetrievalModeQueue: true,
@@ -375,7 +359,6 @@ func (m *Manager) confirmJob(ctx context.Context) error {
 		if err != nil {
 			slogctx.Error(ctx, "failed to confirm job", "error", err)
 		}
-
 		slogctx.Debug(ctx, "job confirmed", "status", job.Status)
 
 		return err
@@ -391,15 +374,22 @@ func (m *Manager) handleConfirmJob(ctx context.Context, repo Repository, job Job
 		// NOTE: here we update the job to change the updated_at timestamp in order to spread the fetching of jobs.
 		return repo.updateJob(ctx, job)
 	}
-	if res.IsCanceled {
-		slogctx.Debug(ctx, "job canceled by job confirmation function")
+	slogctx.Debug(ctx, "job confirmation function executed successfully", "result type", res.Type())
+	switch r := res.(type) {
+	case jobConfirmerProcessing:
+		job.Status = JobStatusConfirming
+	case jobConfirmerCanceled:
 		job.Status = JobStatusConfirmCanceled
-		job.ErrorMessage = res.CanceledErrorMessage
+		job.ErrorMessage = r.reason
 		return m.updateJobAndCreateJobEvent(ctx, repo, job)
-	}
-	job.Status = JobStatusConfirming
-	if res.Done {
+	case jobConfirmerDone:
 		job.Status = JobStatusConfirmed
+	default:
+		msg := "unknown job confirmer result type"
+		slogctx.Error(ctx, msg, "result type", res.Type())
+		job.Status = JobStatusConfirmCanceled
+		job.ErrorMessage = msg
+		return m.updateJobAndCreateJobEvent(ctx, repo, job)
 	}
 	return repo.updateJob(ctx, job)
 }
