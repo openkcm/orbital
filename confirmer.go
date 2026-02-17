@@ -5,9 +5,9 @@ import (
 )
 
 const (
-	ContinueJobConfirmerResult JobConfirmerResultType = iota
-	CancelJobConfirmerResult
-	CompleteJobConfirmerResult
+	continueJobConfirmerResult JobConfirmerResultType = iota
+	cancelJobConfirmerResult
+	completeJobConfirmerResult
 )
 
 type (
@@ -45,7 +45,7 @@ type jobConfirmerProcessing struct{}
 
 // Type returns the type of the job confirmer result.
 func (r jobConfirmerProcessing) Type() JobConfirmerResultType {
-	return ContinueJobConfirmerResult
+	return continueJobConfirmerResult
 }
 
 // ContinueJobConfirmer creates a result indicating that the job confirmer should continue confirming the job.
@@ -64,7 +64,7 @@ type jobConfirmerCanceled struct {
 
 // Type returns the type of the job confirmer result.
 func (r jobConfirmerCanceled) Type() JobConfirmerResultType {
-	return CancelJobConfirmerResult
+	return cancelJobConfirmerResult
 }
 
 // CancelJobConfirmer creates a result indicating that the job confirmer should cancel the job with a reason.
@@ -81,7 +81,7 @@ type jobConfirmerDone struct{}
 
 // Type returns the type of the job confirmer result.
 func (r jobConfirmerDone) Type() JobConfirmerResultType {
-	return CompleteJobConfirmerResult
+	return completeJobConfirmerResult
 }
 
 // CompleteJobConfirmer creates a result indicating that the job confirmer should mark the job as confirmed and ready for resolving tasks.
