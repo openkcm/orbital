@@ -107,7 +107,8 @@ func (r *HandlerResponse) Complete() {
 	r.result = handlerResultDone
 }
 
-func executeHandler(ctx context.Context, h HandlerFunc, req TaskRequest) TaskResponse {
+// ExecuteHandler transforms the TaskRequest into a HandlerRequest, executes the handler, and transforms the HandlerResponse back into a TaskResponse.
+func ExecuteHandler(ctx context.Context, h HandlerFunc, req TaskRequest) TaskResponse {
 	resp := req.prepareResponse()
 
 	hReq := HandlerRequest{

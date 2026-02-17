@@ -45,11 +45,11 @@ func main() {
 	targets := map[string]orbital.TargetManager{}
 	var err error
 
-	// Create embedded clients with operator functions
-	client1, err := embedded.NewClient(operatorFunc1)
+	// Create embedded clients with handlers
+	client1, err := embedded.NewClient(handler1)
 	handleErr("Failed to create client1", err)
 	targets[target1] = orbital.TargetManager{Client: client1}
-	client2, err := embedded.NewClient(operatorFunc2)
+	client2, err := embedded.NewClient(handler2)
 	handleErr("Failed to create client2", err)
 	targets[target2] = orbital.TargetManager{Client: client2}
 
@@ -68,6 +68,7 @@ func main() {
 
 	repo := orbital.NewRepository(store)
 
+	// Declare termination function and channel to receive terminated jobs
 	terminated := make(chan orbital.Job)
 	terminateFunc := func(_ context.Context, job orbital.Job) error {
 		terminated <- job
@@ -129,28 +130,24 @@ func resolveTask(_ context.Context, job orbital.Job, _ orbital.TaskResolverCurso
 		}), nil
 }
 
-func operatorFunc1(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
+func handler1(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) {
 	count := target1Called.Add(1)
-	status := orbital.TaskStatusProcessing
 	if count == 5 {
-		status = orbital.TaskStatusDone
+		resp.Complete()
+		return
 	}
-	log.Printf("Task with type %s, status: %s", req.Type, status)
-	return orbital.TaskResponse{
-		Status: string(status),
-	}, nil
+	log.Printf("Handling task with type %s, count: %d", req.TaskType, count)
+	// default: resp.ContinueAndWaitFor(0) to continue immediately
 }
 
-func operatorFunc2(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
+func handler2(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) {
 	count := target2Called.Add(1)
-	status := orbital.TaskStatusProcessing
 	if count == 5 {
-		status = orbital.TaskStatusFailed
+		resp.Fail("failed at count 5")
+		return
 	}
-	log.Printf("Task with type %s, status: %s", req.Type, status)
-	return orbital.TaskResponse{
-		Status: string(status),
-	}, nil
+	log.Printf("Handling task with type %s, count: %d", req.TaskType, count)
+	// default: resp.ContinueAndWaitFor(0) to continue immediately
 }
 
 func handleErr(msg string, err error) {
