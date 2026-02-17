@@ -104,12 +104,10 @@ func NewManagerTracker(ctx context.Context,
 
 	// initializes the terminal functions
 	opts := []orbital.ManagerOptsFunc{
-		orbital.WithJobConfirmFunc(func(ctx context.Context, job orbital.Job) (orbital.JobConfirmResult, error) {
+		orbital.WithJobConfirmFunc(func(ctx context.Context, job orbital.Job) (orbital.JobConfirmerResult, error) {
 			tracker.noOfJobConfirmed.Add(job.ID.String(), job)
 			slogctx.Info(ctx, "confirmFunc", "managerName", tracker.name)
-			return orbital.JobConfirmResult{
-				Done: true,
-			}, nil
+			return orbital.CompleteJobConfirmer(), nil
 		}),
 		orbital.WithJobDoneEventFunc(func(ctx context.Context, job orbital.Job) error {
 			tracker.noOfJobDone.Add(job.ID.String(), job)
@@ -182,11 +180,10 @@ func NewOperatorTracker(ctx context.Context, env *testEnvironment, name string) 
 	}
 	tracker.operator = operator
 
-	handler := func(ctx context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) error {
+	handler := func(ctx context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) {
 		tracker.noOfTaskProcessed.Add(req.TaskID.String(), req)
 		slogctx.Info(ctx, "processing task", "operatorName", tracker.name, "data", string(req.TaskData))
-		resp.Result = orbital.ResultDone
-		return nil
+		resp.Complete()
 	}
 
 	taskType := deriveTaskType(name)
