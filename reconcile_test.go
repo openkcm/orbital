@@ -169,16 +169,13 @@ func TestReconcile(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, ids, 1)
 
-		client, err := embedded.NewClient(func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
+		client, err := embedded.NewClient(func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) {
 			assert.Equal(t, ids[0], req.TaskID)
-			assert.Equal(t, expType, req.Type)
-			assert.Equal(t, job.ExternalID, req.ExternalID)
-			assert.Equal(t, expData, req.Data)
-			assert.Equal(t, expWorkingState, req.WorkingState)
-			assert.Equal(t, expETag, req.ETag)
-			assert.Equal(t, expTaskCreatedAt, req.TaskCreatedAt)
+			assert.Equal(t, expType, req.TaskType)
+			assert.Equal(t, expData, req.TaskData)
+			assert.Equal(t, expWorkingState, req.TaskRawWorkingState)
+			assert.Equal(t, expTaskCreatedAt, req.TaskCreatedAt.UnixNano())
 			assert.Positive(t, req.TaskLastReconciledAt)
-			return orbital.TaskResponse{}, nil
 		})
 		assert.NoError(t, err)
 
@@ -309,10 +306,8 @@ func TestReconcile(t *testing.T) {
 		assert.Len(t, ids, 1)
 
 		operatorCalled := 0
-		client, err := embedded.NewClient(func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
+		client, err := embedded.NewClient(func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) {
 			operatorCalled++
-			assert.Equal(t, expETag, req.ETag)
-			return orbital.TaskResponse{}, nil
 		})
 		assert.NoError(t, err)
 
@@ -331,8 +326,10 @@ func TestReconcile(t *testing.T) {
 		for range 2 {
 			err = orbital.Reconcile(subj)(ctx)
 			assert.NoError(t, err)
-			_, err = client.ReceiveTaskResponse(ctx)
+
+			resp, err := client.ReceiveTaskResponse(ctx)
 			assert.NoError(t, err)
+			assert.Equal(t, expETag, resp.ETag)
 		}
 
 		// then
@@ -343,7 +340,6 @@ func TestReconcile(t *testing.T) {
 		assert.True(t, ok)
 		assert.Equal(t, uint64(2), actTask.ReconcileCount)
 		assert.Equal(t, uint64(2), actTask.TotalSentCount)
-		assert.Equal(t, expETag, actTask.ETag)
 	})
 
 	t.Run("should send a task request only after the defined reconcile_after_sec", func(t *testing.T) {
@@ -375,9 +371,7 @@ func TestReconcile(t *testing.T) {
 		assert.Len(t, ids, 1)
 		taskID := ids[0]
 
-		initiator, err := embedded.NewClient(func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
-			return orbital.TaskResponse{}, nil
-		})
+		initiator, err := embedded.NewClient(func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) {})
 		assert.NoError(t, err)
 
 		subj, err := orbital.NewManager(repo,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/openkcm/orbital"
 )
@@ -11,82 +12,122 @@ import (
 type (
 	// Client is a implementation of the orbital.Initiator interface.
 	Client struct {
-		operatorFunc OperatorFunc
-		link         chan orbital.TaskRequest
-		close        chan struct{}
-		closeOnce    sync.Once
+		handler   orbital.HandlerFunc
+		link      chan orbital.TaskResponse
+		config    config
+		close     chan struct{}
+		closeOnce sync.Once
 	}
 
-	// OperatorFunc is a function type that processes a TaskRequest and returns a TaskResponse.
-	OperatorFunc func(context.Context, orbital.TaskRequest) (orbital.TaskResponse, error)
-
 	// Option is a function type that modifies the configuration of the Client.
-	Option func(*config)
+	Option func(*config) error
 	config struct {
-		BufferSize int
+		bufferSize     int
+		handlerTimeout time.Duration
 	}
 )
 
 var _ orbital.Initiator = &Client{}
 
 var (
-	ErrMissingOperatorFunc = errors.New("missing operator function")
-	ErrClientClosed        = errors.New("client closed")
+	ErrMissingHandler            = errors.New("missing handler")
+	ErrClientClosed              = errors.New("client closed")
+	ErrNegativeBufferSize        = errors.New("buffer size cannot be negative")
+	ErrNonPositiveHandlerTimeout = errors.New("handler timeout must be greater than 0")
 )
 
-var defaultBufferSize = 10
+const (
+	defaultBufferSize     = 10
+	defaultHandlerTimeout = 10 * time.Second
+)
 
 // NewClient creates a new embedded Client instance.
-// It expects an OperatorFunc which is used to process the task requests.
-// It allows options to configure the buffer size of the link channel.
-func NewClient(f OperatorFunc, opts ...Option) (*Client, error) {
-	if f == nil {
-		return nil, ErrMissingOperatorFunc
+// It expects a handler which is used to process task requests and generate task responses.
+// It allows options to configure the buffer size of the link channel and the timeout for the handler.
+func NewClient(h orbital.HandlerFunc, opts ...Option) (*Client, error) {
+	if h == nil {
+		return nil, ErrMissingHandler
 	}
 
-	config := config{
-		BufferSize: defaultBufferSize,
+	cfg := config{
+		bufferSize:     defaultBufferSize,
+		handlerTimeout: defaultHandlerTimeout,
 	}
 
 	for _, opt := range opts {
-		opt(&config)
+		err := opt(&cfg)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &Client{
-		operatorFunc: f,
-		link:         make(chan orbital.TaskRequest, config.BufferSize),
-		close:        make(chan struct{}),
+		handler: h,
+		link:    make(chan orbital.TaskResponse, cfg.bufferSize),
+		config:  cfg,
+		close:   make(chan struct{}),
 	}, nil
 }
 
-// SendTaskRequest sends the task request to the link channel.
+// WithBufferSize sets the buffer size of the link channel.
+func WithBufferSize(size int) Option {
+	return func(c *config) error {
+		if size < 0 {
+			return ErrNegativeBufferSize
+		}
+		c.bufferSize = size
+		return nil
+	}
+}
+
+// WithHandlerTimeout sets the timeout for the handler.
+func WithHandlerTimeout(timeout time.Duration) Option {
+	return func(c *config) error {
+		if timeout <= 0 {
+			return ErrNonPositiveHandlerTimeout
+		}
+		c.handlerTimeout = timeout
+		return nil
+	}
+}
+
+// SendTaskRequest passes the task request to the handler which processes the request asynchronously.
 func (c *Client) SendTaskRequest(ctx context.Context, request orbital.TaskRequest) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-c.close:
 		return ErrClientClosed
-	case c.link <- request:
-		return nil
+	default:
 	}
+
+	// process the request asynchronously with its own context
+	//nolint:contextcheck
+	go func() {
+		ctxTimeout, cancel := context.WithTimeout(context.Background(), c.config.handlerTimeout)
+		defer cancel()
+
+		resp := orbital.ExecuteHandler(ctxTimeout, c.handler, request)
+		select {
+		case <-c.close:
+			return
+		default:
+			c.link <- resp
+		}
+	}()
+
+	return nil
 }
 
-// ReceiveTaskResponse waits for a task request from the link channel,
-// passes the task request to the operator function,
-// and returns the task response.
+// ReceiveTaskResponse waits for a task response.
 func (c *Client) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse, error) {
 	select {
 	case <-ctx.Done():
 		return orbital.TaskResponse{}, ctx.Err()
 	case <-c.close:
 		return orbital.TaskResponse{}, ErrClientClosed
-	case req := <-c.link:
-		resp, err := c.operatorFunc(ctx, req)
-		resp.TaskID = req.TaskID
-		resp.ETag = req.ETag
-		resp.Type = req.Type
-		resp.ExternalID = req.ExternalID
-		return resp, err
+	case resp := <-c.link:
+		return resp, nil
 	}
 }
 
