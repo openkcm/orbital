@@ -744,6 +744,13 @@ func TestCreateTasks(t *testing.T) {
 				expErrMsg:      "resolution canceled",
 				expEvent:       true,
 			},
+			{
+				name:           "to RESOLVE_CANCELED if the resolver result type is unknown",
+				resolverResult: TaskResolveUnknown{},
+				expStatus:      orbital.JobStatusResolveCanceled,
+				expErrMsg:      "unknown task resolver result type",
+				expEvent:       true,
+			},
 		}
 		for _, tt := range tts {
 			t.Run(tt.name, func(t *testing.T) {
@@ -1464,4 +1471,10 @@ type JobConfirmUnknown struct{}
 
 func (j JobConfirmUnknown) Type() orbital.JobConfirmerResultType {
 	return orbital.JobConfirmerResultType(42)
+}
+
+type TaskResolveUnknown struct{}
+
+func (t TaskResolveUnknown) Type() orbital.TaskResolverResultType {
+	return orbital.TaskResolverResultType(42)
 }

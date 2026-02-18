@@ -433,7 +433,7 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 	slogctx.Debug(ctx, "task resolver function executed successfully", "type", resolverResult.Type())
 
 	switch r := resolverResult.(type) {
-	case TaskResolverProcessing:
+	case taskResolverProcessing:
 		err = m.handleTaskInfo(ctx, repo, job.ID, r.taskInfo)
 		if err != nil {
 			if errors.Is(err, ErrNoClientForTarget) {
@@ -454,11 +454,11 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 			slogctx.Error(ctx, "failed to create/update tasks cursor for job", "error", err)
 			return err
 		}
-	case TaskResolverCanceled:
+	case taskResolverCanceled:
 		job.Status = JobStatusResolveCanceled
 		job.ErrorMessage = r.reason
 		return m.updateJobAndCreateJobEvent(ctx, repo, job)
-	case TaskResolverDone:
+	case taskResolverDone:
 		err = m.handleTaskInfo(ctx, repo, job.ID, r.taskInfo)
 		if err != nil {
 			if errors.Is(err, ErrNoClientForTarget) {
@@ -470,8 +470,11 @@ func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Jo
 		}
 		job.Status = JobStatusReady
 	default:
-		slogctx.Error(ctx, "unknown task resolver result type", "type", resolverResult.Type())
-		return ErrUnknownTaskResolverType
+		msg := "unknown task resolver result type"
+		job.Status = JobStatusResolveCanceled
+		job.ErrorMessage = msg
+		slogctx.Error(ctx, msg, "type", resolverResult.Type())
+		return m.updateJobAndCreateJobEvent(ctx, repo, job)
 	}
 
 	return repo.updateJob(ctx, job)
