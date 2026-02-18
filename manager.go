@@ -66,23 +66,23 @@ type (
 		// BackoffMaxIntervalSec is the maximum interval for exponential backoff in seconds.
 		// Default is 10240 seconds (2 hours and 50 minutes).
 		BackoffMaxIntervalSec uint64
-		// MaxReconcileCount is the maximum number of times a task can be reconciled.
+		// MaxPendingReconciles is the maximum number of pending reconciles for a task before marking it as failed.
 		// Default is 10.
-		MaxReconcileCount uint64
+		MaxPendingReconciles uint64
 	}
 )
 
 // Default values for configs.
 const (
-	defConfirmJobAfter     = 0
-	defNoOfWorker          = 5
-	defWorkTimeout         = 5 * time.Second
-	defTaskLimitNum        = 500
-	defWorkExecInterval    = 10 * time.Second
-	defReconcileInterval   = 5 * time.Second
-	defBackoffBaseInterval = 10
-	defBackoffMaxInterval  = 10240
-	defMaxReconcileCount   = 10
+	defConfirmJobAfter      = 0
+	defNoOfWorker           = 5
+	defWorkTimeout          = 5 * time.Second
+	defTaskLimitNum         = 500
+	defWorkExecInterval     = 10 * time.Second
+	defReconcileInterval    = 5 * time.Second
+	defBackoffBaseInterval  = 10
+	defBackoffMaxInterval   = 10240
+	defMaxPendingReconciles = 10
 )
 
 var (
@@ -135,7 +135,7 @@ func NewManager(repo *Repository, taskResolver TaskResolveFunc, optFuncs ...Mana
 			TaskLimitNum:           defTaskLimitNum,
 			BackoffBaseIntervalSec: defBackoffBaseInterval,
 			BackoffMaxIntervalSec:  defBackoffMaxInterval,
-			MaxReconcileCount:      defMaxReconcileCount,
+			MaxPendingReconciles:   defMaxPendingReconciles,
 		},
 		jobConfirmFunc: func(_ context.Context, _ Job) (JobConfirmerResult, error) {
 			return CompleteJobConfirmer(), nil
@@ -682,7 +682,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 		task.Target, "status", task.Status, "reconcileCount", task.ReconcileCount,
 		"reconcileAfterSec", task.ReconcileAfterSec)
 
-	if task.ReconcileCount >= m.Config.MaxReconcileCount {
+	if task.ReconcileCount >= m.Config.MaxPendingReconciles {
 		slogctx.Debug(ctx, "max reconcile count for task exceeded")
 		task.ETag = uuid.NewString()
 		task.Status = TaskStatusFailed
