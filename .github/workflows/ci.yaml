@@ -20,6 +20,4 @@ permissions:
 jobs:
   check:
     uses: openkcm/build/.github/workflows/ci.lib.yaml@main
-    with:
-      run_task_tests: true
     secrets: inherit

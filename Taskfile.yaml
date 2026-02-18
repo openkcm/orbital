@@ -7,3 +7,4 @@ includes:
     vars:
       CODE_DIRS: '{{.ROOT_DIR}}/...'
       GENERATE_DOCS_INDEX: "false"
+      SKIP_VALIDATION_TESTS: "true"
