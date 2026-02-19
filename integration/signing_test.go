@@ -28,8 +28,8 @@ const (
 )
 
 var (
-	mgrMaxReconcileCount = uint(3)
-	validSubject         = pkix.Name{
+	mgrMaxPendingReconciles = uint(3)
+	validSubject            = pkix.Name{
 		CommonName: "CA", Organization: []string{"SE"}, Country: []string{"US"}, Locality: []string{"Canary"},
 		OrganizationalUnit: []string{"Clients"},
 	}
@@ -89,8 +89,8 @@ func TestTaskSigningAndVerification(t *testing.T) {
 				responderVerifier:       jwksVerifier2,
 				expJobStatus:            orbital.JobStatusFailed,
 				expTaskStatus:           orbital.TaskStatusFailed,
-				expInitiatorSignCalls:   mgrMaxReconcileCount,
-				expResponderVerifyCalls: mgrMaxReconcileCount,
+				expInitiatorSignCalls:   mgrMaxPendingReconciles,
+				expResponderVerifyCalls: mgrMaxPendingReconciles,
 			},
 			{
 				name:                    "task response should sign and verify",
@@ -107,8 +107,8 @@ func TestTaskSigningAndVerification(t *testing.T) {
 				responderSigner:         jwksSigner2,
 				expJobStatus:            orbital.JobStatusFailed,
 				expTaskStatus:           orbital.TaskStatusFailed,
-				expInitiatorVerifyCalls: mgrMaxReconcileCount,
-				expResponderSignCalls:   mgrMaxReconcileCount,
+				expInitiatorVerifyCalls: mgrMaxPendingReconciles,
+				expResponderSignCalls:   mgrMaxPendingReconciles,
 			},
 		}
 
@@ -154,8 +154,8 @@ func TestTaskSigningAndVerification(t *testing.T) {
 				issuer:                  "http://localhost:9999/wrong-issuer",
 				expJobStatus:            orbital.JobStatusFailed,
 				expTaskStatus:           orbital.TaskStatusFailed,
-				expInitiatorSignCalls:   mgrMaxReconcileCount,
-				expResponderVerifyCalls: mgrMaxReconcileCount,
+				expInitiatorSignCalls:   mgrMaxPendingReconciles,
+				expResponderVerifyCalls: mgrMaxPendingReconciles,
 				expResponderVerifyErr:   jwtsigning.ErrJWTParseFailed,
 			},
 			{
@@ -163,8 +163,8 @@ func TestTaskSigningAndVerification(t *testing.T) {
 				rootCA:                  wrongRootCA,
 				expJobStatus:            orbital.JobStatusFailed,
 				expTaskStatus:           orbital.TaskStatusFailed,
-				expInitiatorSignCalls:   mgrMaxReconcileCount,
-				expResponderVerifyCalls: mgrMaxReconcileCount,
+				expInitiatorSignCalls:   mgrMaxPendingReconciles,
+				expResponderVerifyCalls: mgrMaxPendingReconciles,
 				expResponderVerifyErr:   jwtsigning.ErrKidNoPublicKeyFound,
 			},
 			{
@@ -172,8 +172,8 @@ func TestTaskSigningAndVerification(t *testing.T) {
 				subject:                 "wrong-subject-value",
 				expJobStatus:            orbital.JobStatusFailed,
 				expTaskStatus:           orbital.TaskStatusFailed,
-				expInitiatorSignCalls:   mgrMaxReconcileCount,
-				expResponderVerifyCalls: mgrMaxReconcileCount,
+				expInitiatorSignCalls:   mgrMaxPendingReconciles,
+				expResponderVerifyCalls: mgrMaxPendingReconciles,
 				expResponderVerifyErr:   jwtsigning.ErrKidNoPublicKeyFound,
 			},
 			{
@@ -181,8 +181,8 @@ func TestTaskSigningAndVerification(t *testing.T) {
 				hasher:                  &fakeHasher{},
 				expJobStatus:            orbital.JobStatusFailed,
 				expTaskStatus:           orbital.TaskStatusFailed,
-				expInitiatorSignCalls:   mgrMaxReconcileCount,
-				expResponderVerifyCalls: mgrMaxReconcileCount,
+				expInitiatorSignCalls:   mgrMaxPendingReconciles,
+				expResponderVerifyCalls: mgrMaxPendingReconciles,
 				expResponderVerifyErr:   jwtsigning.ErrUnsupportedHashAlgorithm,
 			},
 		}
@@ -240,8 +240,8 @@ func TestTaskSigningAndVerification(t *testing.T) {
 				issuer:                  "http://localhost:9999/wrong-issuer",
 				expJobStatus:            orbital.JobStatusFailed,
 				expTaskStatus:           orbital.TaskStatusFailed,
-				expResponderSignCalls:   mgrMaxReconcileCount,
-				expInitiatorVerifyCalls: mgrMaxReconcileCount,
+				expResponderSignCalls:   mgrMaxPendingReconciles,
+				expInitiatorVerifyCalls: mgrMaxPendingReconciles,
 				expInitiatorVerifyErr:   jwtsigning.ErrJWTParseFailed,
 			},
 			{
@@ -249,8 +249,8 @@ func TestTaskSigningAndVerification(t *testing.T) {
 				rootCA:                  wrongRootCA,
 				expJobStatus:            orbital.JobStatusFailed,
 				expTaskStatus:           orbital.TaskStatusFailed,
-				expResponderSignCalls:   mgrMaxReconcileCount,
-				expInitiatorVerifyCalls: mgrMaxReconcileCount,
+				expResponderSignCalls:   mgrMaxPendingReconciles,
+				expInitiatorVerifyCalls: mgrMaxPendingReconciles,
 				expInitiatorVerifyErr:   jwtsigning.ErrKidNoPublicKeyFound,
 			},
 			{
@@ -258,8 +258,8 @@ func TestTaskSigningAndVerification(t *testing.T) {
 				subject:                 "wrong-subject-value",
 				expJobStatus:            orbital.JobStatusFailed,
 				expTaskStatus:           orbital.TaskStatusFailed,
-				expResponderSignCalls:   mgrMaxReconcileCount,
-				expInitiatorVerifyCalls: mgrMaxReconcileCount,
+				expResponderSignCalls:   mgrMaxPendingReconciles,
+				expInitiatorVerifyCalls: mgrMaxPendingReconciles,
 				expInitiatorVerifyErr:   jwtsigning.ErrKidNoPublicKeyFound,
 			},
 			{
@@ -267,8 +267,8 @@ func TestTaskSigningAndVerification(t *testing.T) {
 				hasher:                  &fakeHasher{},
 				expJobStatus:            orbital.JobStatusFailed,
 				expTaskStatus:           orbital.TaskStatusFailed,
-				expResponderSignCalls:   mgrMaxReconcileCount,
-				expInitiatorVerifyCalls: mgrMaxReconcileCount,
+				expResponderSignCalls:   mgrMaxPendingReconciles,
+				expInitiatorVerifyCalls: mgrMaxPendingReconciles,
 				expInitiatorVerifyErr:   jwtsigning.ErrUnsupportedHashAlgorithm,
 			},
 		}
@@ -397,7 +397,7 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, initiatorHand
 			terminationDone <- job
 			return nil
 		},
-		maxReconcileCount:     uint64(mgrMaxReconcileCount),
+		maxPendingReconciles:  uint64(mgrMaxPendingReconciles),
 		backoffMaxIntervalSec: 1,
 	}
 

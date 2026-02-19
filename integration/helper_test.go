@@ -52,7 +52,7 @@ type managerConfig struct {
 	jobDoneEventFunc      orbital.JobTerminatedEventFunc
 	jobCanceledEventFunc  orbital.JobTerminatedEventFunc
 	jobFailedEventFunc    orbital.JobTerminatedEventFunc
-	maxReconcileCount     uint64
+	maxPendingReconciles  uint64
 	backoffMaxIntervalSec uint64
 }
 
@@ -221,8 +221,8 @@ func createAndStartManager(ctx context.Context, t *testing.T, store *sql.SQL, co
 	if config.backoffMaxIntervalSec != 0 {
 		manager.Config.BackoffMaxIntervalSec = config.backoffMaxIntervalSec
 	}
-	if config.maxReconcileCount != 0 {
-		manager.Config.MaxReconcileCount = config.maxReconcileCount
+	if config.maxPendingReconciles != 0 {
+		manager.Config.MaxPendingReconciles = config.maxPendingReconciles
 	}
 
 	err = manager.Start(ctx)

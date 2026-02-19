@@ -489,7 +489,7 @@ func TestReconcile(t *testing.T) {
 		)
 		assert.NoError(t, err)
 
-		subj.Config.MaxReconcileCount = 0 // set max sent count to 1 to simulate the case
+		subj.Config.MaxPendingReconciles = 0 // set max pending reconciles to 0 to simulate that the task has reached its max sent count
 
 		// when
 		err = orbital.Reconcile(subj)(ctx)
