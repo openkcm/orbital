@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0](https://github.com/openkcm/orbital/compare/v0.4.0...v0.5.0) (2026-02-19)
+
+
+### Features
+
+* pass task timestamps to operator handler ([477167f](https://github.com/openkcm/orbital/commit/477167f77e6f3e24b1db4986a0747be14bdb6f76)), closes [#140](https://github.com/openkcm/orbital/issues/140)
+
+
+### Bug Fixes
+
+* handler signature and handler response methods ([997d139](https://github.com/openkcm/orbital/commit/997d139633fa8d6e69a83ec9bbaf81d9f55176c8)), closes [#143](https://github.com/openkcm/orbital/issues/143)
+* job confirmer result ([d639a0d](https://github.com/openkcm/orbital/commit/d639a0dcb783b54faa26b03466b2d3af59702ba8)), closes [#139](https://github.com/openkcm/orbital/issues/139)
+* query builder lint issue ([#147](https://github.com/openkcm/orbital/issues/147)) ([0d7b920](https://github.com/openkcm/orbital/commit/0d7b920fba48eedb2a586e7211ef0f576c020909))
+* rename MaxReconcileCount ([fa3953b](https://github.com/openkcm/orbital/commit/fa3953ba56c8700223109f8a8f1404762196b780)), closes [#148](https://github.com/openkcm/orbital/issues/148)
+* unexport status types and structs ([b77a738](https://github.com/openkcm/orbital/commit/b77a7380eebadc0aa962a0b062503aa72b10e168)), closes [#146](https://github.com/openkcm/orbital/issues/146)
+* use handler in embedded client ([e0dcac5](https://github.com/openkcm/orbital/commit/e0dcac51780e2c49ed328e761acf90f382bcd0dd)), closes [#144](https://github.com/openkcm/orbital/issues/144)
+
 ## [0.4.0](https://github.com/openkcm/orbital/compare/v0.3.1...v0.4.0) (2026-02-04)
 
 
