@@ -148,7 +148,7 @@ func (o *Operator) startResponding(ctx context.Context) {
 						resp.Status = string(TaskStatusFailed)
 						resp.ErrorMessage = "no handler registered for task type " + req.Type
 					} else {
-						resp = executeHandler(logCtx, h, req)
+						resp = ExecuteHandler(logCtx, h, req)
 					}
 
 					signature, err := o.createSignature(logCtx, resp)

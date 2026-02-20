@@ -45,7 +45,8 @@ func newSelectQueryBuilder() *selectQueryBuilder {
 // build constructs the complete SELECT query.
 func (sqb *selectQueryBuilder) build(q query.Query) (string, []any) {
 	parts := []string{
-		"SELECT * FROM " + string(q.EntityName),
+		"SELECT * FROM",
+		string(q.EntityName),
 		sqb.buildWhere(q),
 		sqb.buildOrderBy(q),
 		sqb.buildLocking(q),
