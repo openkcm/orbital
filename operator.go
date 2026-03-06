@@ -131,7 +131,7 @@ func (o *Operator) startResponding(ctx context.Context) {
 				case <-ctx.Done():
 					return
 				case req := <-o.requests:
-					logCtx := slogctx.With(ctx, "externalID", req.ExternalID, "taskID", req.TaskID, "etag", req.ETag, "taskType", req.Type)
+					logCtx := slogctx.With(ctx, "externalId", req.ExternalID, "taskId", req.TaskID, "etag", req.ETag, "taskType", req.Type)
 					slogctx.Debug(logCtx, "received task request")
 
 					isValid := o.isValidSignature(logCtx, req)

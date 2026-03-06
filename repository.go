@@ -100,7 +100,7 @@ func (r *Repository) getJob(ctx context.Context, id uuid.UUID) (Job, bool, error
 func (r *Repository) updateJob(ctx context.Context, job Job) error {
 	err := updateEntity(ctx, job, r)
 	if err != nil {
-		slogctx.Error(ctx, "failed to update job", "error", err, "jobID", job.ID)
+		slogctx.Error(ctx, "failed to update job", "error", err, "jobId", job.ID)
 	}
 	return err
 }
@@ -204,7 +204,7 @@ func (r *Repository) getTaskForUpdate(ctx context.Context, id uuid.UUID) (Task, 
 func (r *Repository) updateTask(ctx context.Context, task Task) error {
 	err := updateEntity(ctx, task, r)
 	if err != nil {
-		slogctx.Error(ctx, "failed to update task", "error", err, "taskID", task.ID)
+		slogctx.Error(ctx, "failed to update task", "error", err, "taskId", task.ID)
 	}
 	return err
 }

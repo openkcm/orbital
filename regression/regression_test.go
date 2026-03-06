@@ -78,7 +78,7 @@ func TestNewRegression(t *testing.T) {
 			mgr := mgrTrackers[i%len(mgrTrackers)]
 			job, err := mgr.manager.PrepareJob(ctxCancel, orbital.NewJob("jobtype", []byte("")))
 			require.NoError(t, err)
-			slogctx.Info(ctx, "created job with", "managerName", mgr.name, "JobID", job.ID)
+			slogctx.Info(ctx, "created job with", "managerName", mgr.name, "jobId", job.ID)
 			expJobIDs[job.ID.String()] = struct{}{}
 		}
 

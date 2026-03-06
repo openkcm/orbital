@@ -98,7 +98,7 @@ func (m *Manager) eventFunc(job Job) JobTerminatedEventFunc {
 	case JobStatusFailed:
 		return m.jobFailedEventFunc
 	default:
-		slog.Debug("no job event function set for job status", slog.String("jobID", job.ID.String()), slog.String("status", string(job.Status)))
+		slog.Debug("no job event function set for job status", slog.String("jobId", job.ID.String()), slog.String("status", string(job.Status)))
 		return nil
 	}
 }
@@ -115,7 +115,7 @@ func (m *Manager) sendAndUpdateEvent(ctx context.Context, repo Repository, jobEv
 	err := jobEventFunc(ctx, job)
 	if err != nil {
 		slogctx.Error(ctx, "failed to send job event",
-			slog.String("jobID", job.ID.String()),
+			slog.String("jobId", job.ID.String()),
 			slog.String("status", string(job.Status)),
 			slog.Any("error", err))
 	}
