@@ -111,19 +111,19 @@ func NewManagerTracker(ctx context.Context,
 		}),
 		orbital.WithJobDoneEventFunc(func(ctx context.Context, job orbital.Job) error {
 			tracker.noOfJobDone.Add(job.ID.String(), job)
-			slogctx.Info(ctx, "jobDone", "managerName", tracker.name, "jobID", job.ID)
+			slogctx.Info(ctx, "jobDone", "managerName", tracker.name, "jobId", job.ID)
 			terminalEventChan <- struct{}{}
 			return nil
 		}),
 		orbital.WithJobFailedEventFunc(func(ctx context.Context, job orbital.Job) error {
 			tracker.noOfJobFailed.Add(job.ID.String(), job)
-			slogctx.Info(ctx, "jobFailed", "managerName", tracker.name, "jobID", job.ID)
+			slogctx.Info(ctx, "jobFailed", "managerName", tracker.name, "jobId", job.ID)
 			terminalEventChan <- struct{}{}
 			return nil
 		}),
 		orbital.WithJobCanceledEventFunc(func(ctx context.Context, job orbital.Job) error {
 			tracker.noOfJobCanceled.Add(job.ID.String(), job)
-			slogctx.Info(ctx, "jobCanceled", "managerName", tracker.name, "jobID", job.ID)
+			slogctx.Info(ctx, "jobCanceled", "managerName", tracker.name, "jobId", job.ID)
 			terminalEventChan <- struct{}{}
 			return nil
 		}),
