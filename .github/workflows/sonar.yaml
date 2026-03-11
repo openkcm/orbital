@@ -1,0 +1,16 @@
+name: Sonar Analysis Secure
+
+on:
+  workflow_run:
+    workflows: ["Quality"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  check:
+    uses: openkcm/build/.github/workflows/sonar.yaml@main
+    secrets: inherit
