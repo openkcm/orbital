@@ -91,11 +91,11 @@ func WithExternalMTLS(certFile, keyFile, caFile, serverName string) ClientOption
 	return func(o *amqp.ConnOptions) error {
 		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 		if err != nil {
-			return fmt.Errorf("%w: %w", ErrTLSPairLoad, err)
+			return errors.Join(ErrTLSPairLoad, err)
 		}
 		caPEM, err := os.ReadFile(caFile)
 		if err != nil {
-			return fmt.Errorf("%w: %w", ErrCARead, err)
+			return errors.Join(ErrCARead, err)
 		}
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(caPEM) {
@@ -143,7 +143,7 @@ func NewClient(ctx context.Context, codec orbital.Codec, connInfo ConnectionInfo
 	}
 	for _, opt := range opts {
 		if err := opt(connOpts); err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrApplyOption, err)
+			return nil, errors.Join(ErrApplyOption, err)
 		}
 	}
 
@@ -333,7 +333,7 @@ func (c *Client) retryOnConnError(ctx context.Context, f func() error) error {
 
 		err = c.connect(ctx, c.connInfo, c.connOpts)
 		if err != nil {
-			return fmt.Errorf("%w: %w: %w", ErrReconnectFailed, err, connErr)
+			return errors.Join(ErrReconnectFailed, err, connErr)
 		}
 
 		err = c.withRLock(f)
