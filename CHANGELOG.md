@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.1](https://github.com/openkcm/orbital/compare/v0.5.0...v0.5.1) (2026-03-20)
+
+
+### Bug Fixes
+
+* **amqp:** remove reference to RemoteErr in log ([eb9fcd2](https://github.com/openkcm/orbital/commit/eb9fcd2d7238a198b09d0a7b17d7af1df18a9098)), closes [#158](https://github.com/openkcm/orbital/issues/158)
+* improve dependabot config ([#154](https://github.com/openkcm/orbital/issues/154)) ([f7aba09](https://github.com/openkcm/orbital/commit/f7aba092d1d33aa1977e146ff15451201a1e7528))
+
 ## [0.5.0](https://github.com/openkcm/orbital/compare/v0.4.0...v0.5.0) (2026-02-19)
 
 
