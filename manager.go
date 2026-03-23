@@ -290,7 +290,7 @@ func (m *Manager) PrepareJob(ctx context.Context, job Job) (Job, error) {
 		return job, err
 	}
 
-	slogctx.Debug(ctx, "new job prepared", "jobID", job.ID, "externalID", job.ExternalID, "type", job.Type)
+	slogctx.Debug(ctx, "new job prepared", "jobId", job.ID, "externalId", job.ExternalID, "type", job.Type)
 	return job, nil
 }
 
@@ -307,7 +307,7 @@ func (m *Manager) ListTasks(ctx context.Context, query ListTasksQuery) ([]Task, 
 // CancelJob cancels a job and associated running tasks. It updates the job status to "USER_CANCEL".
 func (m *Manager) CancelJob(ctx context.Context, jobID uuid.UUID) error {
 	return m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
-		slogctx.Debug(ctx, "canceling job", "jobID", jobID)
+		slogctx.Debug(ctx, "canceling job", "jobId", jobID)
 		job, ok, err := repo.getJobForUpdate(ctx, jobID)
 		if err != nil {
 			return fmt.Errorf("%w: %w", ErrLoadingJob, err)
@@ -352,7 +352,7 @@ func (m *Manager) confirmJob(ctx context.Context) error {
 		}
 		job := jobs[0]
 
-		ctx = slogctx.With(ctx, "jobID", job.ID, "externalID", job.ExternalID, "type", job.Type)
+		ctx = slogctx.With(ctx, "jobId", job.ID, "externalId", job.ExternalID, "type", job.Type)
 		slogctx.Debug(ctx, "confirming job")
 
 		err = m.handleConfirmJob(ctx, repo, job)
@@ -415,7 +415,7 @@ func (m *Manager) createTask(ctx context.Context) error {
 
 //nolint:cyclop,funlen
 func (m *Manager) createTasksForJob(ctx context.Context, repo Repository, job Job) error {
-	ctx = slogctx.With(ctx, "jobID", job.ID, "externalID", job.ExternalID, "type", job.Type)
+	ctx = slogctx.With(ctx, "jobId", job.ID, "externalId", job.ExternalID, "type", job.Type)
 	slogctx.Debug(ctx, "creating tasks for job")
 
 	jobCursor, found, err := m.getJobCursor(ctx, repo, job.ID)
@@ -573,7 +573,7 @@ func (m *Manager) reconcile(ctx context.Context) error {
 			return nil
 		}
 
-		ctx = slogctx.With(ctx, "jobID", job.ID, "externalID", job.ExternalID, "type", job.Type)
+		ctx = slogctx.With(ctx, "jobId", job.ID, "externalId", job.ExternalID, "type", job.Type)
 
 		job.Status = JobStatusProcessing
 
@@ -678,7 +678,7 @@ func (m *Manager) handleTasks(ctx context.Context, repo Repository, job Job, tas
 func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repository, job Job, task Task) {
 	defer wg.Done()
 
-	ctx = slogctx.With(ctx, "externalID", job.ExternalID, "taskID", task.ID, "etag", task.ETag, "target",
+	ctx = slogctx.With(ctx, "externalId", job.ExternalID, "taskId", task.ID, "etag", task.ETag, "target",
 		task.Target, "status", task.Status, "reconcileCount", task.ReconcileCount,
 		"reconcileAfterSec", task.ReconcileAfterSec)
 
@@ -797,7 +797,7 @@ func (m *Manager) handleResponses(ctx context.Context, mgrTarget TargetManager, 
 				continue
 			}
 
-			newCtx := slogctx.With(ctx, "target", target, "externalID", resp.ExternalID, "taskID", resp.TaskID.String(), "etag", resp.ETag)
+			newCtx := slogctx.With(ctx, "target", target, "externalId", resp.ExternalID, "taskId", resp.TaskID.String(), "etag", resp.ETag)
 			slogctx.Debug(newCtx, "received task response")
 
 			isValid := isValidSignature(newCtx, mgrTarget, resp)
@@ -825,7 +825,7 @@ func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error 
 			return fmt.Errorf("%w, taskID: %s", ErrTaskNotFound, resp.TaskID)
 		}
 
-		txCtx = slogctx.With(txCtx, "externalID", resp.ExternalID, "taskID", task.ID, "etag", task.ETag)
+		txCtx = slogctx.With(txCtx, "externalId", resp.ExternalID, "taskId", task.ID, "etag", task.ETag)
 
 		if resp.ETag != task.ETag {
 			slogctx.Debug(txCtx, "discarding stale response")
