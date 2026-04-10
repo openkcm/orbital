@@ -139,7 +139,7 @@ func TestTransformToEntities(t *testing.T) {
 					"id": "wrong-uuid",
 				},
 			},
-			expectErr: orbital.ErrMandatoryFields,
+			expectErr: orbital.ErrInvalidEntityValue,
 		},
 	}
 
@@ -846,4 +846,110 @@ func TestDecodeValueVariants(t *testing.T) {
 		_, err := orbital.Decode[orbital.Job](e)
 		assert.ErrorIs(t, errors.Unwrap(err), orbital.ErrInvalidEntityType)
 	})
+}
+
+func TestResolveOptionalUUID(t *testing.T) {
+	validID := uuid.New()
+	var nilPtr *uuid.UUID
+
+	tests := []struct {
+		name   string
+		maps   map[string]any
+		key    string
+		expPtr *uuid.UUID
+		expErr error
+	}{
+		{
+			name:   "should return nil when key is not found",
+			maps:   map[string]any{},
+			key:    "group_id",
+			expPtr: nil,
+			expErr: nil,
+		},
+		{
+			name:   "should return nil when value is nil",
+			maps:   map[string]any{"group_id": nil},
+			key:    "group_id",
+			expPtr: nil,
+			expErr: nil,
+		},
+		{
+			name:   "should return pointer directly when value is *uuid.UUID",
+			maps:   map[string]any{"group_id": &validID},
+			key:    "group_id",
+			expPtr: &validID,
+			expErr: nil,
+		},
+		{
+			name:   "should return nil when value is nil *uuid.UUID",
+			maps:   map[string]any{"group_id": nilPtr},
+			key:    "group_id",
+			expPtr: nil,
+			expErr: nil,
+		},
+		{
+			name:   "should return pointer when value is uuid.UUID",
+			maps:   map[string]any{"group_id": validID},
+			key:    "group_id",
+			expPtr: &validID,
+			expErr: nil,
+		},
+		{
+			name:   "should parse and return pointer when value is valid string",
+			maps:   map[string]any{"group_id": validID.String()},
+			key:    "group_id",
+			expPtr: &validID,
+			expErr: nil,
+		},
+		{
+			name:   "should return error when value is invalid string",
+			maps:   map[string]any{"group_id": "not-a-valid-uuid"},
+			key:    "group_id",
+			expPtr: nil,
+			expErr: orbital.ErrInvalidEntityValue,
+		},
+		{
+			name:   "should parse and return pointer when value is valid []uint8",
+			maps:   map[string]any{"group_id": []uint8(validID.String())},
+			key:    "group_id",
+			expPtr: &validID,
+			expErr: nil,
+		},
+		{
+			name:   "should return error when value is invalid []uint8",
+			maps:   map[string]any{"group_id": []uint8("invalid-uuid")},
+			key:    "group_id",
+			expPtr: nil,
+			expErr: orbital.ErrInvalidEntityValue,
+		},
+		{
+			name:   "should return error when value is unsupported type",
+			maps:   map[string]any{"group_id": 12345},
+			key:    "group_id",
+			expPtr: nil,
+			expErr: orbital.ErrInvalidEntityType,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// when
+			result, err := orbital.ResolveOptionalUUID(tt.maps, tt.key)
+
+			// then
+			if tt.expErr != nil {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, tt.expErr)
+				assert.Nil(t, result)
+				return
+			}
+			assert.NoError(t, err)
+			if tt.expPtr == nil {
+				assert.Nil(t, result)
+			} else {
+				assert.NotNil(t, result)
+				assert.Equal(t, *tt.expPtr, *result)
+			}
+		})
+	}
 }

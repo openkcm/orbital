@@ -110,3 +110,7 @@ func GetRepoJobForUpdate(r *Repository) func(ctx context.Context, id uuid.UUID) 
 func ToCanonicalData[T TaskRequest | TaskResponse](in T) ([]byte, error) {
 	return toCanonicalData(in)
 }
+
+func ResolveOptionalUUID(maps map[string]any, key string) (*uuid.UUID, error) {
+	return resolveOptionalUUID(maps, key)
+}

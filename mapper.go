@@ -11,8 +11,9 @@ import (
 )
 
 var (
-	ErrInvalidEntityType = errors.New("invalid entity type")
-	ErrMandatoryFields   = errors.New("mandatory fields")
+	ErrInvalidEntityType  = errors.New("invalid entity type")
+	ErrInvalidEntityValue = errors.New("invalid entity value")
+	ErrMandatoryFields    = errors.New("mandatory fields")
 )
 
 // TransformToEntities transforms a list of maps into domain entities based on the provided entity name.
@@ -353,7 +354,7 @@ func resolveUUID(maps map[string]any, key string) (uuid.UUID, error) {
 		return uID, fmt.Errorf("%w `%s` not supported: (type %T)", ErrInvalidEntityType, key, val)
 	}
 	if err != nil {
-		return uID, fmt.Errorf("%w %s uuid parsing failed: %w", ErrMandatoryFields, key, err)
+		return uID, fmt.Errorf("%w %s uuid parsing failed: %w", ErrInvalidEntityValue, key, err)
 	}
 	return uID, nil
 }
