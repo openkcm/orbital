@@ -24,6 +24,7 @@ type (
 	Job struct {
 		ID           uuid.UUID
 		ExternalID   string
+		GroupID      *uuid.UUID
 		Data         []byte
 		Type         string
 		Status       JobStatus

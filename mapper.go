@@ -11,8 +11,9 @@ import (
 )
 
 var (
-	ErrInvalidEntityType = errors.New("invalid entity type")
-	ErrMandatoryFields   = errors.New("mandatory fields")
+	ErrInvalidEntityType  = errors.New("invalid entity type")
+	ErrInvalidEntityValue = errors.New("invalid entity value")
+	ErrMandatoryFields    = errors.New("mandatory fields")
 )
 
 // TransformToEntities transforms a list of maps into domain entities based on the provided entity name.
@@ -120,6 +121,7 @@ func Encode[T EntityTypes](entityType T) (Entity, error) {
 			Values: map[string]any{
 				"id":            obj.ID,
 				"external_id":   obj.ExternalID,
+				"group_id":      obj.GroupID,
 				"data":          obj.Data,
 				"type":          obj.Type,
 				"status":        obj.Status,
@@ -316,6 +318,9 @@ func decodeJob[T EntityTypes](e Entity) (T, error) {
 	if j.ExternalID, err = resolve[string](vals, "external_id"); err != nil {
 		return empty, err
 	}
+	if j.GroupID, err = resolveOptionalUUID(vals, "group_id"); err != nil {
+		return empty, err
+	}
 	if j.Type, err = resolve[string](vals, "type"); err != nil {
 		return empty, err
 	}
@@ -349,9 +354,25 @@ func resolveUUID(maps map[string]any, key string) (uuid.UUID, error) {
 		return uID, fmt.Errorf("%w `%s` not supported: (type %T)", ErrInvalidEntityType, key, val)
 	}
 	if err != nil {
-		return uID, fmt.Errorf("%w %s uuid parsing failed: %w", ErrMandatoryFields, key, err)
+		return uID, fmt.Errorf("%w %s uuid parsing failed: %w", ErrInvalidEntityValue, key, err)
 	}
 	return uID, nil
+}
+
+func resolveOptionalUUID(maps map[string]any, key string) (*uuid.UUID, error) {
+	keyVal, ok := maps[key]
+	if !ok || keyVal == nil {
+		// optional field is missing or explicitly set to nil, return nil without error
+		return nil, nil //nolint:nilnil
+	}
+	if val, ok := keyVal.(*uuid.UUID); ok {
+		return val, nil
+	}
+	uID, err := resolveUUID(maps, key)
+	if err != nil {
+		return nil, err
+	}
+	return &uID, nil
 }
 
 func resolve[T any](values map[string]any, key string) (T, error) {
