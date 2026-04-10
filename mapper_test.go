@@ -275,6 +275,7 @@ func TestEncodes(t *testing.T) {
 					"status":        orbital.JobStatusCreated,
 					"type":          "baz-type",
 					"external_id":   "ext-id",
+					"group_id":      (*uuid.UUID)(nil),
 				},
 			},
 		}
@@ -426,6 +427,58 @@ func TestDecodes(t *testing.T) {
 			assert.Equal(t, job1, result[0])
 			assert.Equal(t, job2, result[1])
 		})
+		t.Run("success with nil GroupID", func(t *testing.T) {
+			// given
+			job := orbital.Job{
+				ID:           uuid.New(),
+				ExternalID:   "ext-1",
+				GroupID:      nil,
+				Data:         []byte("data"),
+				Type:         "type",
+				Status:       orbital.JobStatusCreated,
+				ErrorMessage: "",
+				UpdatedAt:    clock.NowUnixNano(),
+				CreatedAt:    clock.NowUnixNano(),
+			}
+
+			in, _ := orbital.Encodes(job)
+
+			// when
+			result, err := orbital.Decodes[orbital.Job](in...)
+
+			// then
+			assert.NoError(t, err)
+			assert.Len(t, result, 1)
+			assert.Nil(t, result[0].GroupID)
+			assert.Equal(t, job, result[0])
+		})
+		t.Run("success with non-nil GroupID", func(t *testing.T) {
+			// given
+			groupID := uuid.New()
+			job := orbital.Job{
+				ID:           uuid.New(),
+				ExternalID:   "ext-1",
+				GroupID:      &groupID,
+				Data:         []byte("data"),
+				Type:         "type",
+				Status:       orbital.JobStatusCreated,
+				ErrorMessage: "",
+				UpdatedAt:    clock.NowUnixNano(),
+				CreatedAt:    clock.NowUnixNano(),
+			}
+
+			in, _ := orbital.Encodes(job)
+
+			// when
+			result, err := orbital.Decodes[orbital.Job](in...)
+
+			// then
+			assert.NoError(t, err)
+			assert.Len(t, result, 1)
+			assert.NotNil(t, result[0].GroupID)
+			assert.Equal(t, groupID, *result[0].GroupID)
+			assert.Equal(t, job, result[0])
+		})
 		t.Run("error for missing fields in values for the key", func(t *testing.T) {
 			keysToDelete := []string{
 				"data",
@@ -444,6 +497,8 @@ func TestDecodes(t *testing.T) {
 						UpdatedAt: 0,
 						Values: map[string]any{
 							"id":            id,
+							"external_id":   "ext-id",
+							"group_id":      (*uuid.UUID)(nil),
 							"data":          []byte("data"),
 							"type":          "type",
 							"status":        "status",
@@ -692,6 +747,7 @@ func TestDecodeValueVariants(t *testing.T) {
 			UpdatedAt: now,
 			Values: map[string]any{
 				"external_id":   "ext-id",
+				"group_id":      (*uuid.UUID)(nil),
 				"type":          "foo",
 				"status":        orbital.JobStatusConfirmCanceled,
 				"data":          []byte("x"),
@@ -710,6 +766,7 @@ func TestDecodeValueVariants(t *testing.T) {
 			UpdatedAt: now,
 			Values: map[string]any{
 				"external_id":   "ext-id",
+				"group_id":      (*uuid.UUID)(nil),
 				"type":          "foo",
 				"status":        "CONFIRMED",
 				"data":          []byte("x"),
@@ -728,6 +785,7 @@ func TestDecodeValueVariants(t *testing.T) {
 			UpdatedAt: now,
 			Values: map[string]any{
 				"external_id":   "ext-id",
+				"group_id":      (*uuid.UUID)(nil),
 				"type":          "foo",
 				"status":        "CREATED",
 				"data":          nil,
@@ -759,10 +817,12 @@ func TestDecodeValueVariants(t *testing.T) {
 			CreatedAt: now,
 			UpdatedAt: now,
 			Values: map[string]any{
-				"external_id": "ext-id",
-				"type":        "foo",
-				"status":      "CREATED",
-				"data":        "not-bytes",
+				"external_id":   "ext-id",
+				"group_id":      (*uuid.UUID)(nil),
+				"type":          "foo",
+				"status":        "CREATED",
+				"data":          "not-bytes",
+				"error_message": "error",
 			},
 		}
 		_, err := orbital.Decode[orbital.Job](e)
@@ -775,10 +835,12 @@ func TestDecodeValueVariants(t *testing.T) {
 			CreatedAt: now,
 			UpdatedAt: now,
 			Values: map[string]any{
-				"external_id": "ext-id",
-				"type":        "foo",
-				"status":      10,
-				"data":        "not-bytes",
+				"external_id":   "ext-id",
+				"group_id":      (*uuid.UUID)(nil),
+				"type":          "foo",
+				"status":        10,
+				"data":          "not-bytes",
+				"error_message": "error",
 			},
 		}
 		_, err := orbital.Decode[orbital.Job](e)
