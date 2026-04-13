@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -652,8 +652,8 @@ func withPortBinding(port string) containerOpts {
 			if existingModifier != nil {
 				existingModifier(hc)
 			}
-			hc.PortBindings = nat.PortMap{
-				"5672/tcp": []nat.PortBinding{{HostPort: port}},
+			hc.PortBindings = network.PortMap{
+				network.MustParsePort("5672/tcp"): []network.PortBinding{{HostPort: port}},
 			}
 		}
 		return nil
@@ -774,7 +774,7 @@ func getURL(ctx context.Context, container testcontainers.Container, protocol, p
 	if err != nil {
 		return "", err
 	}
-	p, err := container.MappedPort(ctx, nat.Port(port))
+	p, err := container.MappedPort(ctx, port)
 	if err != nil {
 		return "", err
 	}

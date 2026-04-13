@@ -571,7 +571,7 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 		taskTarget = "target"
 	)
 
-	var handlerCalls int32
+	var handlerCalls atomic.Int32
 	operatorDone := make(chan struct{})
 	expectedCycles := float64(3)
 
@@ -638,7 +638,7 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 				mu.Lock()
 				defer mu.Unlock()
 
-				calls := atomic.AddInt32(&handlerCalls, 1)
+				calls := handlerCalls.Add(1)
 				t.Logf("Handler called for task %s (call #%d)", req.TaskID, calls)
 
 				workingState, err := resp.WorkingState()
@@ -685,7 +685,7 @@ func testMultipleRequestResponseCycles(ctx context.Context, t *testing.T, env *t
 		t.Fatal("Termination event function was not called within timeout")
 	}
 
-	finalCalls := atomic.LoadInt32(&handlerCalls)
+	finalCalls := handlerCalls.Load()
 	assert.Equal(t, int64(expectedCycles), int64(finalCalls), "handler should be called exactly %d times", expectedCycles)
 
 	job, found, err := manager.GetJob(ctx, job.ID)
