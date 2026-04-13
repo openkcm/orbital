@@ -328,6 +328,7 @@ func TestRepoCreateTasks(t *testing.T) {
 			assert.Equal(t, jobID, fetchedTask.JobID)
 			assert.Equal(t, taskType, fetchedTask.Type)
 			assert.Equal(t, fmt.Sprintf("working-state-%v", index), string(fetchedTask.WorkingState))
+			//nolint:gosec
 			assert.Equal(t, uint64(index), fetchedTask.ReconcileCount)
 			assert.Equal(t, fmt.Sprintf("etag-%v", index), fetchedTask.ETag)
 			assert.Equal(t, fmt.Sprintf("error-message-%v", index), fetchedTask.ErrorMessage)
