@@ -10,6 +10,7 @@ const (
 	// OperatorLessThanEqual is the operator for less than or equal to.
 	operatorLessThanEqual                     Operator   = "<="
 	operatorIn                                Operator   = "IN"
+	operatorContains                          Operator   = "CONTAINS"
 	fieldID                                   Field      = "id"
 	fieldJobID                                Field      = "job_id"
 	fieldStatus                               Field      = "status"
@@ -17,6 +18,7 @@ const (
 	fieldUpdatedAt                            Field      = "updated_at"
 	fieldSumLastReconciledAtAndReconcileAfter Field      = "(reconcile_after_sec * 1000000000::numeric + last_reconciled_at)"
 	fieldIsNotified                           Field      = "is_notified"
+	fieldLabels                               Field      = "labels"
 	EntityNameJobs                            EntityName = "jobs"
 	EntityNameTasks                           EntityName = "tasks"
 	EntityNameJobCursor                       EntityName = "job_cursor"
@@ -131,4 +133,10 @@ func OrderByUpdatedAtAscending() OrderBy {
 // the isNotified field equals the specified value.
 func ClauseWithIsNotified(isNotified bool) Clause {
 	return Clause{Field: fieldIsNotified, Operator: operatorEqual, Value: isNotified}
+}
+
+// ClauseWithLabels creates a Clause that filters results by labels.
+// All provided labels must match.
+func ClauseWithLabels(labels map[string]string) Clause {
+	return Clause{Field: fieldLabels, Operator: operatorContains, Value: labels}
 }

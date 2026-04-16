@@ -279,8 +279,14 @@ func (m *Manager) Stop(ctx context.Context) error {
 }
 
 // PrepareJob prepares a job by creating it in the repository with status CREATED.
+// It validates the job labels before creating the job.
 // It returns an error if a job with the same type and external ID in a non-terminal status already exists.
 func (m *Manager) PrepareJob(ctx context.Context, job Job) (Job, error) {
+	if job.Labels != nil {
+		if err := job.Labels.Validate(); err != nil {
+			return Job{}, err
+		}
+	}
 	job.Status = JobStatusCreated
 	job, err := m.repo.createJob(ctx, job)
 	if err != nil {

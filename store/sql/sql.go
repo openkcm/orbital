@@ -45,7 +45,7 @@ func New(ctx context.Context, db *sql.DB) (*SQL, error) {
    		);
 		ALTER TABLE jobs 
 			ADD COLUMN IF NOT EXISTS external_id VARCHAR(100),
-			ADD COLUMN IF NOT EXISTS group_id UUID;
+			ADD COLUMN IF NOT EXISTS labels JSONB;
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_job
 			ON jobs (external_id, type)
 			WHERE status IN ('` + strings.Join(orbital.TransientStatuses().StringSlice(), "', '") + `');

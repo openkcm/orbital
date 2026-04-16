@@ -1,6 +1,7 @@
 package orbital
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -113,6 +114,14 @@ func Encodes[T EntityTypes](entityTypes ...T) ([]Entity, error) {
 func Encode[T EntityTypes](entityType T) (Entity, error) {
 	switch obj := any(entityType).(type) {
 	case Job:
+		var labelsJSON []byte
+		if obj.Labels != nil {
+			var err error
+			labelsJSON, err = json.Marshal(obj.Labels)
+			if err != nil {
+				return Entity{}, err
+			}
+		}
 		return Entity{
 			Name:      query.EntityNameJobs,
 			ID:        obj.ID,
@@ -121,13 +130,13 @@ func Encode[T EntityTypes](entityType T) (Entity, error) {
 			Values: map[string]any{
 				"id":            obj.ID,
 				"external_id":   obj.ExternalID,
-				"group_id":      obj.GroupID,
 				"data":          obj.Data,
 				"type":          obj.Type,
 				"status":        obj.Status,
 				"error_message": obj.ErrorMessage,
 				"updated_at":    obj.UpdatedAt,
 				"created_at":    obj.CreatedAt,
+				"labels":        labelsJSON,
 			},
 		}, nil
 	case Task:
@@ -318,9 +327,6 @@ func decodeJob[T EntityTypes](e Entity) (T, error) {
 	if j.ExternalID, err = resolve[string](vals, "external_id"); err != nil {
 		return empty, err
 	}
-	if j.GroupID, err = resolveOptionalUUID(vals, "group_id"); err != nil {
-		return empty, err
-	}
 	if j.Type, err = resolve[string](vals, "type"); err != nil {
 		return empty, err
 	}
@@ -331,6 +337,9 @@ func decodeJob[T EntityTypes](e Entity) (T, error) {
 		return empty, err
 	}
 	if j.ErrorMessage, err = resolve[string](vals, "error_message"); err != nil {
+		return empty, err
+	}
+	if j.Labels, err = resolveLabels(vals, "labels"); err != nil {
 		return empty, err
 	}
 	return out, nil
@@ -357,22 +366,6 @@ func resolveUUID(maps map[string]any, key string) (uuid.UUID, error) {
 		return uID, fmt.Errorf("%w %s uuid parsing failed: %w", ErrInvalidEntityValue, key, err)
 	}
 	return uID, nil
-}
-
-func resolveOptionalUUID(maps map[string]any, key string) (*uuid.UUID, error) {
-	keyVal, ok := maps[key]
-	if !ok || keyVal == nil {
-		// optional field is missing or explicitly set to nil, return nil without error
-		return nil, nil //nolint:nilnil
-	}
-	if val, ok := keyVal.(*uuid.UUID); ok {
-		return val, nil
-	}
-	uID, err := resolveUUID(maps, key)
-	if err != nil {
-		return nil, err
-	}
-	return &uID, nil
 }
 
 func resolve[T any](values map[string]any, key string) (T, error) {
@@ -425,5 +418,45 @@ func resolveUint64(values map[string]any, key string) (uint64, error) {
 		return uint64(v), nil
 	default:
 		return 0, fmt.Errorf("%w '%s' not supported: (type %T)", ErrInvalidEntityType, key, raw)
+	}
+}
+
+//nolint:cyclop
+func resolveLabels(values map[string]any, key string) (Labels, error) {
+	raw, ok := values[key]
+	if !ok {
+		return nil, fmt.Errorf("%w '%s' not found", ErrMandatoryFields, key)
+	}
+	if raw == nil {
+		// Labels can be nil or empty, both are treated as no labels.
+		return nil, nil //nolint:nilnil
+	}
+	switch v := raw.(type) {
+	case Labels:
+		return v, nil
+	case map[string]string:
+		return Labels(v), nil
+	case map[string]any:
+		labels := make(Labels, len(v))
+		for k, val := range v {
+			if strVal, ok := val.(string); ok {
+				labels[k] = strVal
+			} else {
+				return nil, fmt.Errorf("%w '%s' contains non-string value for key '%s'", ErrInvalidEntityType, key, k)
+			}
+		}
+		return labels, nil
+	case []byte:
+		if len(v) == 0 {
+			// Empty byte slice is treated as no labels.
+			return nil, nil //nolint:nilnil
+		}
+		var labels Labels
+		if err := json.Unmarshal(v, &labels); err != nil {
+			return nil, fmt.Errorf("%w '%s' failed to unmarshal JSON: %w", ErrInvalidEntityValue, key, err)
+		}
+		return labels, nil
+	default:
+		return nil, fmt.Errorf("%w `%s` not supported: (type %T)", ErrInvalidEntityType, key, raw)
 	}
 }

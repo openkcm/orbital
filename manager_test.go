@@ -192,6 +192,48 @@ func TestPrepareJob(t *testing.T) {
 			},
 			expErr: nil,
 		},
+		{
+			name: "should prepare job with valid labels",
+			existJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id-existing",
+				Status:     orbital.JobStatusDone,
+			},
+			prepJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id-with-labels",
+				Labels:     orbital.Labels{"tenant": "acme", "env": "prod"},
+			},
+			expErr: nil,
+		},
+		{
+			name: "should return error when preparing job with reserved label prefix",
+			existJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id-existing",
+				Status:     orbital.JobStatusDone,
+			},
+			prepJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id-reserved",
+				Labels:     orbital.Labels{"orbital/group-id": "123"},
+			},
+			expErr: orbital.ErrReservedLabelPrefix,
+		},
+		{
+			name: "should return error when job has any reserved label key",
+			existJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id-existing",
+				Status:     orbital.JobStatusDone,
+			},
+			prepJob: orbital.Job{
+				Type:       "type",
+				ExternalID: "ext-id-mixed",
+				Labels:     orbital.Labels{"tenant": "acme", "orbital/custom": "value"},
+			},
+			expErr: orbital.ErrReservedLabelPrefix,
+		},
 	}
 
 	for _, tt := range tests {

@@ -46,6 +46,7 @@ type (
 		Limit              int         // Maximum number of jobs to return.
 		RetrievalModeQueue bool        // If true, enables queue-like retrieval mode.
 		OrderByUpdatedAt   bool        // If true, orders jobs by updated_at in descending order.
+		Labels             Labels      // Filter jobs by labels (AND logic - all labels must match).
 	}
 
 	// ListTasksQuery defines the parameters for querying tasks from the repository.
@@ -130,6 +131,10 @@ func (r *Repository) listJobs(ctx context.Context, jobsQuery ListJobsQuery) ([]J
 
 	if jobsQuery.UpdatedAt > 0 {
 		q.Clauses = append(q.Clauses, query.ClauseWithUpdatedBefore(jobsQuery.UpdatedAt))
+	}
+
+	if len(jobsQuery.Labels) > 0 {
+		q.Clauses = append(q.Clauses, query.ClauseWithLabels(map[string]string(jobsQuery.Labels)))
 	}
 
 	q.RetrievalMode = query.RetrievalModeDefault

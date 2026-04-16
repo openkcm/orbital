@@ -1,6 +1,7 @@
 package sql
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"sort"
@@ -90,6 +91,8 @@ func (sqb *selectQueryBuilder) buildClauseCondition(clause query.Clause) string 
 	switch clause.Operator {
 	case "IN":
 		return sqb.buildInCondition(clause)
+	case "CONTAINS":
+		return sqb.buildContainsCondition(clause)
 	default:
 		return sqb.buildSimpleCondition(clause)
 	}
@@ -114,6 +117,22 @@ func (sqb *selectQueryBuilder) buildInCondition(clause query.Clause) string {
 	}
 
 	return fmt.Sprintf("%s IN (%s)", clause.Field, strings.Join(placeholders, ", "))
+}
+
+// buildContainsCondition builds the JSONB containment (@>) condition.
+func (sqb *selectQueryBuilder) buildContainsCondition(clause query.Clause) string {
+	labels, ok := clause.Value.(map[string]string)
+	if !ok || len(labels) == 0 {
+		return ""
+	}
+
+	jsonBytes, err := json.Marshal(labels)
+	if err != nil {
+		return ""
+	}
+
+	placeholder := sqb.addParam(string(jsonBytes))
+	return fmt.Sprintf("%s @> %s::jsonb", clause.Field, placeholder)
 }
 
 // buildCursorCondition builds the cursor-based pagination condition.

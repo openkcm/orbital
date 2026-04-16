@@ -275,7 +275,7 @@ func TestEncodes(t *testing.T) {
 					"status":        orbital.JobStatusCreated,
 					"type":          "baz-type",
 					"external_id":   "ext-id",
-					"group_id":      (*uuid.UUID)(nil),
+					"labels":        []byte(nil),
 				},
 			},
 		}
@@ -427,12 +427,12 @@ func TestDecodes(t *testing.T) {
 			assert.Equal(t, job1, result[0])
 			assert.Equal(t, job2, result[1])
 		})
-		t.Run("success with nil GroupID", func(t *testing.T) {
+		t.Run("success with nil Labels", func(t *testing.T) {
 			// given
 			job := orbital.Job{
 				ID:           uuid.New(),
 				ExternalID:   "ext-1",
-				GroupID:      nil,
+				Labels:       nil,
 				Data:         []byte("data"),
 				Type:         "type",
 				Status:       orbital.JobStatusCreated,
@@ -449,22 +449,24 @@ func TestDecodes(t *testing.T) {
 			// then
 			assert.NoError(t, err)
 			assert.Len(t, result, 1)
-			assert.Nil(t, result[0].GroupID)
+			assert.Nil(t, result[0].Labels)
 			assert.Equal(t, job, result[0])
 		})
-		t.Run("success with non-nil GroupID", func(t *testing.T) {
+		t.Run("success with non-nil Labels", func(t *testing.T) {
 			// given
-			groupID := uuid.New()
 			job := orbital.Job{
 				ID:           uuid.New(),
 				ExternalID:   "ext-1",
-				GroupID:      &groupID,
 				Data:         []byte("data"),
 				Type:         "type",
 				Status:       orbital.JobStatusCreated,
 				ErrorMessage: "",
 				UpdatedAt:    clock.NowUnixNano(),
 				CreatedAt:    clock.NowUnixNano(),
+				Labels: orbital.Labels{
+					"orbital/group-id":    uuid.New().String(),
+					"orbital/group-index": "0",
+				},
 			}
 
 			in, _ := orbital.Encodes(job)
@@ -475,8 +477,6 @@ func TestDecodes(t *testing.T) {
 			// then
 			assert.NoError(t, err)
 			assert.Len(t, result, 1)
-			assert.NotNil(t, result[0].GroupID)
-			assert.Equal(t, groupID, *result[0].GroupID)
 			assert.Equal(t, job, result[0])
 		})
 		t.Run("error for missing fields in values for the key", func(t *testing.T) {
@@ -498,7 +498,7 @@ func TestDecodes(t *testing.T) {
 						Values: map[string]any{
 							"id":            id,
 							"external_id":   "ext-id",
-							"group_id":      (*uuid.UUID)(nil),
+							"labels":        orbital.Labels(nil),
 							"data":          []byte("data"),
 							"type":          "type",
 							"status":        "status",
@@ -747,7 +747,7 @@ func TestDecodeValueVariants(t *testing.T) {
 			UpdatedAt: now,
 			Values: map[string]any{
 				"external_id":   "ext-id",
-				"group_id":      (*uuid.UUID)(nil),
+				"labels":        orbital.Labels(nil),
 				"type":          "foo",
 				"status":        orbital.JobStatusConfirmCanceled,
 				"data":          []byte("x"),
@@ -766,7 +766,7 @@ func TestDecodeValueVariants(t *testing.T) {
 			UpdatedAt: now,
 			Values: map[string]any{
 				"external_id":   "ext-id",
-				"group_id":      (*uuid.UUID)(nil),
+				"labels":        orbital.Labels(nil),
 				"type":          "foo",
 				"status":        "CONFIRMED",
 				"data":          []byte("x"),
@@ -785,7 +785,7 @@ func TestDecodeValueVariants(t *testing.T) {
 			UpdatedAt: now,
 			Values: map[string]any{
 				"external_id":   "ext-id",
-				"group_id":      (*uuid.UUID)(nil),
+				"labels":        orbital.Labels(nil),
 				"type":          "foo",
 				"status":        "CREATED",
 				"data":          nil,
@@ -818,7 +818,7 @@ func TestDecodeValueVariants(t *testing.T) {
 			UpdatedAt: now,
 			Values: map[string]any{
 				"external_id":   "ext-id",
-				"group_id":      (*uuid.UUID)(nil),
+				"labels":        orbital.Labels(nil),
 				"type":          "foo",
 				"status":        "CREATED",
 				"data":          "not-bytes",
@@ -836,7 +836,7 @@ func TestDecodeValueVariants(t *testing.T) {
 			UpdatedAt: now,
 			Values: map[string]any{
 				"external_id":   "ext-id",
-				"group_id":      (*uuid.UUID)(nil),
+				"labels":        orbital.Labels(nil),
 				"type":          "foo",
 				"status":        10,
 				"data":          "not-bytes",
@@ -848,108 +848,99 @@ func TestDecodeValueVariants(t *testing.T) {
 	})
 }
 
-func TestResolveOptionalUUID(t *testing.T) {
-	validID := uuid.New()
-	var nilPtr *uuid.UUID
-
+func TestResolveLabels(t *testing.T) {
 	tests := []struct {
-		name   string
-		maps   map[string]any
-		key    string
-		expPtr *uuid.UUID
-		expErr error
+		name      string
+		values    map[string]any
+		key       string
+		expected  orbital.Labels
+		expectErr error
 	}{
 		{
-			name:   "should return nil when key is not found",
-			maps:   map[string]any{},
-			key:    "group_id",
-			expPtr: nil,
-			expErr: nil,
+			name:      "should return error when key not found",
+			values:    map[string]any{},
+			key:       "labels",
+			expected:  nil,
+			expectErr: orbital.ErrMandatoryFields,
 		},
 		{
-			name:   "should return nil when value is nil",
-			maps:   map[string]any{"group_id": nil},
-			key:    "group_id",
-			expPtr: nil,
-			expErr: nil,
+			name:      "should return nil when value is nil",
+			values:    map[string]any{"labels": nil},
+			key:       "labels",
+			expected:  nil,
+			expectErr: nil,
 		},
 		{
-			name:   "should return pointer directly when value is *uuid.UUID",
-			maps:   map[string]any{"group_id": &validID},
-			key:    "group_id",
-			expPtr: &validID,
-			expErr: nil,
+			name:      "should return Labels directly when value is Labels type",
+			values:    map[string]any{"labels": orbital.Labels{"key": "value"}},
+			key:       "labels",
+			expected:  orbital.Labels{"key": "value"},
+			expectErr: nil,
 		},
 		{
-			name:   "should return nil when value is nil *uuid.UUID",
-			maps:   map[string]any{"group_id": nilPtr},
-			key:    "group_id",
-			expPtr: nil,
-			expErr: nil,
+			name:      "should convert map[string]string to Labels",
+			values:    map[string]any{"labels": map[string]string{"key": "value"}},
+			key:       "labels",
+			expected:  orbital.Labels{"key": "value"},
+			expectErr: nil,
 		},
 		{
-			name:   "should return pointer when value is uuid.UUID",
-			maps:   map[string]any{"group_id": validID},
-			key:    "group_id",
-			expPtr: &validID,
-			expErr: nil,
+			name:      "should convert map[string]any with string values to Labels",
+			values:    map[string]any{"labels": map[string]any{"key": "value", "key2": "value2"}},
+			key:       "labels",
+			expected:  orbital.Labels{"key": "value", "key2": "value2"},
+			expectErr: nil,
 		},
 		{
-			name:   "should parse and return pointer when value is valid string",
-			maps:   map[string]any{"group_id": validID.String()},
-			key:    "group_id",
-			expPtr: &validID,
-			expErr: nil,
+			name:      "should return error when map[string]any contains non-string value",
+			values:    map[string]any{"labels": map[string]any{"key": 123}},
+			key:       "labels",
+			expected:  nil,
+			expectErr: orbital.ErrInvalidEntityType,
 		},
 		{
-			name:   "should return error when value is invalid string",
-			maps:   map[string]any{"group_id": "not-a-valid-uuid"},
-			key:    "group_id",
-			expPtr: nil,
-			expErr: orbital.ErrInvalidEntityValue,
+			name:      "should return nil when value is empty []byte",
+			values:    map[string]any{"labels": []byte{}},
+			key:       "labels",
+			expected:  nil,
+			expectErr: nil,
 		},
 		{
-			name:   "should parse and return pointer when value is valid []uint8",
-			maps:   map[string]any{"group_id": []uint8(validID.String())},
-			key:    "group_id",
-			expPtr: &validID,
-			expErr: nil,
+			name:      "should unmarshal []byte JSON to Labels",
+			values:    map[string]any{"labels": []byte(`{"key":"value","key2":"value2"}`)},
+			key:       "labels",
+			expected:  orbital.Labels{"key": "value", "key2": "value2"},
+			expectErr: nil,
 		},
 		{
-			name:   "should return error when value is invalid []uint8",
-			maps:   map[string]any{"group_id": []uint8("invalid-uuid")},
-			key:    "group_id",
-			expPtr: nil,
-			expErr: orbital.ErrInvalidEntityValue,
+			name:      "should return error when []byte contains invalid JSON",
+			values:    map[string]any{"labels": []byte(`{invalid json}`)},
+			key:       "labels",
+			expected:  nil,
+			expectErr: orbital.ErrInvalidEntityValue,
 		},
 		{
-			name:   "should return error when value is unsupported type",
-			maps:   map[string]any{"group_id": 12345},
-			key:    "group_id",
-			expPtr: nil,
-			expErr: orbital.ErrInvalidEntityType,
+			name:      "should return error for unsupported type",
+			values:    map[string]any{"labels": 12345},
+			key:       "labels",
+			expected:  nil,
+			expectErr: orbital.ErrInvalidEntityType,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// when
-			result, err := orbital.ResolveOptionalUUID(tt.maps, tt.key)
+			result, err := orbital.ResolveLabels(tt.values, tt.key)
 
-			// then
-			if tt.expErr != nil {
+			if tt.expectErr != nil {
 				assert.Error(t, err)
-				assert.ErrorIs(t, err, tt.expErr)
+				assert.ErrorIs(t, err, tt.expectErr)
 				assert.Nil(t, result)
 				return
 			}
+
 			assert.NoError(t, err)
-			if tt.expPtr == nil {
-				assert.Nil(t, result)
-			} else {
-				assert.NotNil(t, result)
-				assert.Equal(t, *tt.expPtr, *result)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

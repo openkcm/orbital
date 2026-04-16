@@ -293,6 +293,211 @@ func TestRepoListJobs(t *testing.T) {
 	})
 }
 
+func TestRepoListJobsWithLabels(t *testing.T) {
+	ctx := t.Context()
+	db, store := createSQLStore(t)
+	defer clearTables(t, db)
+	repo := orbital.NewRepository(store)
+
+	now := clock.NowUnixNano()
+
+	// Create test jobs with different labels
+	jobNoLabels, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+		Type:      "type-a",
+		Status:    orbital.JobStatusCreated,
+		CreatedAt: now,
+		Data:      []byte("no-labels"),
+	})
+	assert.NoError(t, err)
+
+	jobWithLabels, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+		Type:      "type-a",
+		Status:    orbital.JobStatusCreated,
+		CreatedAt: now,
+		Data:      []byte("with-labels"),
+		Labels:    orbital.Labels{"tenant": "acme"},
+	})
+	assert.NoError(t, err)
+
+	jobWithMultipleLabels, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+		Type:      "type-a",
+		Status:    orbital.JobStatusCreated,
+		CreatedAt: now,
+		Data:      []byte("with-multiple-labels"),
+		Labels:    orbital.Labels{"tenant": "acme", "env": "prod"},
+	})
+	assert.NoError(t, err)
+
+	jobWithDifferentLabels, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+		Type:      "type-a",
+		Status:    orbital.JobStatusCreated,
+		CreatedAt: now,
+		Data:      []byte("different-labels"),
+		Labels:    orbital.Labels{"tenant": "other"},
+	})
+	assert.NoError(t, err)
+
+	jobConfirmedWithLabels, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{
+		Type:      "type-a",
+		Status:    orbital.JobStatusConfirmed,
+		CreatedAt: now,
+		Data:      []byte("confirmed-with-labels"),
+		Labels:    orbital.Labels{"tenant": "acme"},
+	})
+	assert.NoError(t, err)
+
+	t.Run("should return jobs matching single label", func(t *testing.T) {
+		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
+			CreatedAt: now,
+			Limit:     10,
+			Labels:    orbital.Labels{"tenant": "acme"},
+		})
+		assert.NoError(t, err)
+		assert.Len(t, jobs, 3)
+
+		ids := make(map[uuid.UUID]bool)
+		for _, j := range jobs {
+			ids[j.ID] = true
+		}
+		assert.True(t, ids[jobWithLabels.ID])
+		assert.True(t, ids[jobWithMultipleLabels.ID])
+		assert.True(t, ids[jobConfirmedWithLabels.ID])
+	})
+
+	t.Run("should return jobs matching multiple labels with AND logic", func(t *testing.T) {
+		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
+			CreatedAt: now,
+			Limit:     10,
+			Labels:    orbital.Labels{"tenant": "acme", "env": "prod"},
+		})
+		assert.NoError(t, err)
+		assert.Len(t, jobs, 1)
+		assert.Equal(t, jobWithMultipleLabels.ID, jobs[0].ID)
+	})
+
+	t.Run("should return empty when no jobs match labels", func(t *testing.T) {
+		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
+			CreatedAt: now,
+			Limit:     10,
+			Labels:    orbital.Labels{"tenant": "nonexistent"},
+		})
+		assert.NoError(t, err)
+		assert.Empty(t, jobs)
+	})
+
+	t.Run("should return empty when partial label match due to AND logic", func(t *testing.T) {
+		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
+			CreatedAt: now,
+			Limit:     10,
+			Labels:    orbital.Labels{"tenant": "acme", "env": "staging"},
+		})
+		assert.NoError(t, err)
+		assert.Empty(t, jobs)
+	})
+
+	t.Run("should return all jobs when labels query is nil", func(t *testing.T) {
+		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
+			CreatedAt: now,
+			Limit:     10,
+			Labels:    nil,
+		})
+		assert.NoError(t, err)
+		assert.Len(t, jobs, 5)
+	})
+
+	t.Run("should return all jobs when labels query is empty map", func(t *testing.T) {
+		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
+			CreatedAt: now,
+			Limit:     10,
+			Labels:    orbital.Labels{},
+		})
+		assert.NoError(t, err)
+		assert.Len(t, jobs, 5)
+	})
+
+	t.Run("should combine labels filter with status filter", func(t *testing.T) {
+		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
+			Status:    orbital.JobStatusCreated,
+			CreatedAt: now,
+			Limit:     10,
+			Labels:    orbital.Labels{"tenant": "acme"},
+		})
+		assert.NoError(t, err)
+		assert.Len(t, jobs, 2)
+
+		ids := make(map[uuid.UUID]bool)
+		for _, j := range jobs {
+			ids[j.ID] = true
+		}
+		assert.True(t, ids[jobWithLabels.ID])
+		assert.True(t, ids[jobWithMultipleLabels.ID])
+		assert.False(t, ids[jobConfirmedWithLabels.ID])
+	})
+
+	t.Run("should combine labels filter with limit", func(t *testing.T) {
+		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
+			CreatedAt: now,
+			Limit:     1,
+			Labels:    orbital.Labels{"tenant": "acme"},
+		})
+		assert.NoError(t, err)
+		assert.Len(t, jobs, 1)
+	})
+
+	t.Run("should return job with labels and verify labels are decoded correctly", func(t *testing.T) {
+		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
+			CreatedAt: now,
+			Limit:     10,
+			Labels:    orbital.Labels{"tenant": "acme", "env": "prod"},
+		})
+		assert.NoError(t, err)
+		assert.Len(t, jobs, 1)
+		assert.Equal(t, orbital.Labels{"tenant": "acme", "env": "prod"}, jobs[0].Labels)
+	})
+
+	t.Run("should not match jobs without labels when filtering by labels", func(t *testing.T) {
+		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
+			CreatedAt: now,
+			Limit:     10,
+			Labels:    orbital.Labels{"any": "label"},
+		})
+		assert.NoError(t, err)
+
+		for _, j := range jobs {
+			assert.NotEqual(t, jobNoLabels.ID, j.ID)
+		}
+	})
+
+	t.Run("should return jobs with different tenant label", func(t *testing.T) {
+		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
+			CreatedAt: now,
+			Limit:     10,
+			Labels:    orbital.Labels{"tenant": "other"},
+		})
+		assert.NoError(t, err)
+		assert.Len(t, jobs, 1)
+		assert.Equal(t, jobWithDifferentLabels.ID, jobs[0].ID)
+	})
+
+	t.Run("should return job without labels when not filtering by labels", func(t *testing.T) {
+		jobs, err := orbital.ListRepoJobs(repo)(ctx, orbital.ListJobsQuery{
+			CreatedAt: now,
+			Limit:     10,
+		})
+		assert.NoError(t, err)
+
+		var foundJobNoLabels *orbital.Job
+		for i, j := range jobs {
+			if j.ID == jobNoLabels.ID {
+				foundJobNoLabels = &jobs[i]
+				break
+			}
+		}
+		assert.NotNil(t, foundJobNoLabels)
+		assert.Nil(t, foundJobNoLabels.Labels)
+	})
+}
+
 func TestRepoCreateTasks(t *testing.T) {
 	t.Run("should create tasks", func(t *testing.T) {
 		ctx := t.Context()

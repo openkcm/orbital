@@ -111,6 +111,6 @@ func ToCanonicalData[T TaskRequest | TaskResponse](in T) ([]byte, error) {
 	return toCanonicalData(in)
 }
 
-func ResolveOptionalUUID(maps map[string]any, key string) (*uuid.UUID, error) {
-	return resolveOptionalUUID(maps, key)
+func ResolveLabels(values map[string]any, key string) (Labels, error) {
+	return resolveLabels(values, key)
 }
