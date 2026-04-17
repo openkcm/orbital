@@ -26,9 +26,6 @@ type (
 
 	// GroupStatus represents the possible statuses of a JobGroup.
 	GroupStatus string
-
-	// Labels is a map of string key-value pairs for arbitrary metadata.
-	Labels map[string]string
 )
 
 // NewJobGroup creates a new JobGroup with the provided type and jobs.

@@ -24,13 +24,13 @@ type (
 	Job struct {
 		ID           uuid.UUID
 		ExternalID   string
-		GroupID      *uuid.UUID
 		Data         []byte
 		Type         string
 		Status       JobStatus
 		ErrorMessage string
 		UpdatedAt    int64
 		CreatedAt    int64
+		Labels       Labels
 	}
 
 	// JobStatus represents the possible statuses of a Job.
@@ -48,6 +48,12 @@ func NewJob(jobType string, data []byte) Job {
 // WithExternalID allows to set an external identifier for the job.
 func (j Job) WithExternalID(id string) Job {
 	j.ExternalID = id
+	return j
+}
+
+// WithLabels sets labels on the Job and returns it for method chaining.
+func (j Job) WithLabels(labels Labels) Job {
+	j.Labels = labels
 	return j
 }
 
