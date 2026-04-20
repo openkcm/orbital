@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/codec"
@@ -43,7 +42,6 @@ type (
 
 	Client struct {
 		stub      orbitalv1.TaskServiceClient
-		codec     codec.Proto
 		responses chan orbital.TaskResponse
 		closeCh   chan struct{}
 		closeOnce sync.Once
@@ -116,15 +114,7 @@ func (c *Client) SendTaskRequest(ctx context.Context, request orbital.TaskReques
 	default:
 	}
 
-	encoded, err := c.codec.EncodeTaskRequest(request)
-	if err != nil {
-		return fmt.Errorf("grpc initiator: encode request: %w", err)
-	}
-
-	protoReq := new(orbitalv1.TaskRequest)
-	if err := proto.Unmarshal(encoded, protoReq); err != nil {
-		return fmt.Errorf("grpc initiator: unmarshal request: %w", err)
-	}
+	protoReq := codec.FromTaskRequestToProto(request)
 
 	//nolint:contextcheck
 	go c.dispatchRPC(request, protoReq)
@@ -161,9 +151,16 @@ func (c *Client) dispatchRPC(request orbital.TaskRequest, protoReq *orbitalv1.Ta
 	callCtx, cancel := context.WithTimeout(context.Background(), c.config.callTimeout)
 	defer cancel()
 
-	resp, err := c.callAndDecode(callCtx, protoReq)
+	protoResp, err := c.stub.SendTaskRequest(callCtx, protoReq)
+
+	var resp orbital.TaskResponse
 	if err != nil {
-		resp = failedResponse(request, err)
+		resp = failedResponse(request, fmt.Errorf("grpc call failed: %w", err))
+	} else {
+		resp, err = codec.FromProtoToTaskResponse(protoResp)
+		if err != nil {
+			resp = failedResponse(request, err)
+		}
 	}
 
 	select {
@@ -171,27 +168,6 @@ func (c *Client) dispatchRPC(request orbital.TaskRequest, protoReq *orbitalv1.Ta
 	default:
 		c.responses <- resp
 	}
-}
-
-// callAndDecode issues the unary RPC and decodes the proto response into a
-// domain TaskResponse using the codec.
-func (c *Client) callAndDecode(ctx context.Context, protoReq *orbitalv1.TaskRequest) (orbital.TaskResponse, error) {
-	protoResp, err := c.stub.SendTaskRequest(ctx, protoReq)
-	if err != nil {
-		return orbital.TaskResponse{}, fmt.Errorf("grpc call failed: %w", err)
-	}
-
-	b, err := proto.Marshal(protoResp)
-	if err != nil {
-		return orbital.TaskResponse{}, fmt.Errorf("marshal response: %w", err)
-	}
-
-	resp, err := c.codec.DecodeTaskResponse(b)
-	if err != nil {
-		return orbital.TaskResponse{}, fmt.Errorf("decode response: %w", err)
-	}
-
-	return resp, nil
 }
 
 // failedResponse builds a TaskResponse with FAILED status, copying the
