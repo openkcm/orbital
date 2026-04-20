@@ -1,6 +1,12 @@
 package orbital
 
-import "github.com/google/uuid"
+import (
+	"fmt"
+	"sort"
+	"strconv"
+
+	"github.com/google/uuid"
+)
 
 // Possible group statuses.
 const (
@@ -16,7 +22,7 @@ type (
 	JobGroup struct {
 		ID           uuid.UUID
 		Type         string
-		Jobs         []Job // Ordered list of jobs
+		Jobs         []Job // Jobs in the group, ordered by their position
 		CreatedAt    int64
 		UpdatedAt    int64
 		Status       GroupStatus
@@ -41,4 +47,22 @@ func NewJobGroup(groupType string, jobs ...Job) JobGroup {
 func (jg JobGroup) WithLabels(labels Labels) JobGroup {
 	jg.Labels = labels
 	return jg
+}
+
+// sortJobsByGroupOrder sorts jobs in-place by their group order key (ascending).
+// Returns an error if any job has an invalid or missing order key.
+func sortJobsByGroupOrder(jobs []Job) error {
+	for _, job := range jobs {
+		if _, err := strconv.Atoi(job.Labels[LabelKeyGroupOrderKey]); err != nil {
+			return fmt.Errorf("job %s has invalid or missing group order key: %w", job.ID, err)
+		}
+	}
+
+	sort.Slice(jobs, func(i, j int) bool {
+		orderI, _ := strconv.Atoi(jobs[i].Labels[LabelKeyGroupOrderKey])
+		orderJ, _ := strconv.Atoi(jobs[j].Labels[LabelKeyGroupOrderKey])
+		return orderI < orderJ
+	})
+
+	return nil
 }

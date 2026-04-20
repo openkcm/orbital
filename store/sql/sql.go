@@ -29,6 +29,8 @@ var (
 )
 
 // New initializes a new SQL store and sets up required tables.
+//
+//nolint:funlen
 func New(ctx context.Context, db *sql.DB) (*SQL, error) {
 	s := &SQL{
 		db: db,
@@ -80,7 +82,16 @@ func New(ctx context.Context, db *sql.DB) (*SQL, error) {
 			is_notified BOOLEAN NOT NULL,
 			updated_at BIGINT NOT NULL,
 			created_at BIGINT NOT NULL
-        );`
+        );
+		CREATE TABLE IF NOT EXISTS job_groups(
+			id UUID PRIMARY KEY,
+			type VARCHAR(100) NOT NULL,
+			status VARCHAR(100) NOT NULL,
+			error_message TEXT,
+			labels JSONB,
+			updated_at BIGINT NOT NULL,
+			created_at BIGINT NOT NULL
+		);`
 	return s, s.execContext(ctx, stmt)
 }
 

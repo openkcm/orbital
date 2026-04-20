@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -100,6 +101,7 @@ var (
 	ErrLoadingJob              = errors.New("failed to load job")
 	ErrUpdatingJob             = errors.New("failed to update job")
 	ErrTaskNotFound            = errors.New("task not found")
+	ErrJobGroupEmpty           = errors.New("at least one job is required")
 )
 
 // NewManager creates a new Manager instance.
@@ -334,6 +336,91 @@ func (m *Manager) CancelJob(ctx context.Context, jobID uuid.UUID) error {
 
 		return nil
 	})
+}
+
+// PrepareJobGroup creates a job group and all its jobs in a single transaction.
+// All jobs are created with SCHEDULED status and the group is created with CREATED status.
+// Returns an error if no jobs are provided or if any labels validation fails.
+//
+//nolint:cyclop // validation logic and transaction require multiple checks
+func (m *Manager) PrepareJobGroup(ctx context.Context, group JobGroup) (JobGroup, error) {
+	if len(group.Jobs) == 0 {
+		return JobGroup{}, ErrJobGroupEmpty
+	}
+
+	if group.Labels != nil {
+		if err := group.Labels.Validate(); err != nil {
+			return JobGroup{}, err
+		}
+	}
+
+	for _, job := range group.Jobs {
+		if job.Labels != nil {
+			if err := job.Labels.Validate(); err != nil {
+				return JobGroup{}, err
+			}
+		}
+	}
+
+	group.ID = uuid.New()
+	group.Status = GroupStatusCreated
+
+	var err error
+	err = m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
+		group, err = repo.createJobGroup(ctx, group)
+		if err != nil {
+			return err
+		}
+
+		jobs := make([]Job, 0, len(group.Jobs))
+		for i, job := range group.Jobs {
+			job.Labels = mergeLabels(job.Labels, Labels{
+				LabelKeyGroupID:       group.ID.String(),
+				LabelKeyGroupOrderKey: strconv.Itoa(i),
+			})
+			job.Status = JobStatusScheduled
+
+			createdJob, err := repo.createJob(ctx, job)
+			if err != nil {
+				return err
+			}
+			jobs = append(jobs, createdJob)
+		}
+		group.Jobs = jobs
+
+		return nil
+	})
+
+	if err != nil {
+		return JobGroup{}, err
+	}
+
+	slogctx.Debug(ctx, "new job group prepared", "jobGroupId", group.ID, "type", group.Type, "jobCount", len(group.Jobs))
+	return group, nil
+}
+
+// GetJobGroup retrieves a job group by its ID along with all its jobs.
+func (m *Manager) GetJobGroup(ctx context.Context, groupID uuid.UUID) (JobGroup, bool, error) {
+	group, found, err := m.repo.getJobGroup(ctx, groupID)
+	if err != nil {
+		return JobGroup{}, false, err
+	}
+	if !found {
+		return JobGroup{}, false, nil
+	}
+
+	jobs, err := m.repo.listJobsByGroupID(ctx, groupID)
+	if err != nil {
+		return JobGroup{}, false, err
+	}
+
+	if err := sortJobsByGroupOrder(jobs); err != nil {
+		return JobGroup{}, false, err
+	}
+
+	group.Jobs = jobs
+
+	return group, true, nil
 }
 
 // confirmJob processes jobs in the CREATED state that were created before a specified delay

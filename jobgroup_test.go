@@ -163,3 +163,87 @@ func TestGroupStatus(t *testing.T) {
 		assert.Len(t, seen, 5)
 	})
 }
+
+func TestSortJobsByGroupOrder(t *testing.T) {
+	tests := []struct {
+		name     string
+		jobs     []orbital.Job
+		expOrder []string
+		expErr   string
+	}{
+		{
+			name: "should sort jobs by order key ascending",
+			jobs: []orbital.Job{
+				{ID: uuid.New(), Labels: orbital.Labels{orbital.LabelKeyGroupOrderKey: "2"}},
+				{ID: uuid.New(), Labels: orbital.Labels{orbital.LabelKeyGroupOrderKey: "0"}},
+				{ID: uuid.New(), Labels: orbital.Labels{orbital.LabelKeyGroupOrderKey: "1"}},
+			},
+			expOrder: []string{"0", "1", "2"},
+		},
+		{
+			name:     "should handle empty slice",
+			jobs:     []orbital.Job{},
+			expOrder: []string{},
+		},
+		{
+			name: "should handle single job",
+			jobs: []orbital.Job{
+				{ID: uuid.New(), Labels: orbital.Labels{orbital.LabelKeyGroupOrderKey: "5"}},
+			},
+			expOrder: []string{"5"},
+		},
+		{
+			name: "should return error when order key is missing",
+			jobs: []orbital.Job{
+				{ID: uuid.New(), Labels: orbital.Labels{orbital.LabelKeyGroupOrderKey: "0"}},
+				{ID: uuid.New(), Labels: orbital.Labels{"other": "label"}},
+			},
+			expErr: "invalid or missing group order key",
+		},
+		{
+			name: "should return error when order key is not a number",
+			jobs: []orbital.Job{
+				{ID: uuid.New(), Labels: orbital.Labels{orbital.LabelKeyGroupOrderKey: "0"}},
+				{ID: uuid.New(), Labels: orbital.Labels{orbital.LabelKeyGroupOrderKey: "abc"}},
+			},
+			expErr: "invalid or missing group order key",
+		},
+		{
+			name: "should return error when labels are nil",
+			jobs: []orbital.Job{
+				{ID: uuid.New(), Labels: orbital.Labels{orbital.LabelKeyGroupOrderKey: "0"}},
+				{ID: uuid.New(), Labels: nil},
+			},
+			expErr: "invalid or missing group order key",
+		},
+		{
+			name: "should sort jobs with large order keys",
+			jobs: []orbital.Job{
+				{ID: uuid.New(), Labels: orbital.Labels{orbital.LabelKeyGroupOrderKey: "100"}},
+				{ID: uuid.New(), Labels: orbital.Labels{orbital.LabelKeyGroupOrderKey: "10"}},
+				{ID: uuid.New(), Labels: orbital.Labels{orbital.LabelKeyGroupOrderKey: "1"}},
+			},
+			expOrder: []string{"1", "10", "100"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// when
+			err := orbital.SortJobsByGroupOrder(tt.jobs)
+
+			// then
+			if tt.expErr != "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expErr)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Len(t, tt.jobs, len(tt.expOrder))
+			for i, expKey := range tt.expOrder {
+				assert.Equal(t, expKey, tt.jobs[i].Labels[orbital.LabelKeyGroupOrderKey])
+			}
+		})
+	}
+}

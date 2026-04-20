@@ -111,6 +111,20 @@ func ToCanonicalData[T TaskRequest | TaskResponse](in T) ([]byte, error) {
 	return toCanonicalData(in)
 }
 
-func ResolveLabels(values map[string]any, key string) (Labels, error) {
-	return resolveLabels(values, key)
+func CreateRepoJobGroup(r *Repository) func(ctx context.Context, jg JobGroup) (JobGroup, error) {
+	return r.createJobGroup
 }
+
+func GetRepoJobGroup(r *Repository) func(ctx context.Context, id uuid.UUID) (JobGroup, bool, error) {
+	return r.getJobGroup
+}
+
+func ListRepoJobsByGroupID(r *Repository) func(ctx context.Context, groupID uuid.UUID) ([]Job, error) {
+	return r.listJobsByGroupID
+}
+
+var (
+	ResolveLabels        = resolveLabels
+	MergeLabels          = mergeLabels
+	SortJobsByGroupOrder = sortJobsByGroupOrder
+)

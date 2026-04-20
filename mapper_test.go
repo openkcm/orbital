@@ -111,6 +111,28 @@ func TestTransformToEntities(t *testing.T) {
 			},
 		},
 		{
+			name:       "success case JobGroups",
+			entityName: query.EntityNameJobGroups,
+			input: []map[string]any{
+				{
+					"id":         uID.String(),
+					"created_at": now, "updated_at": now,
+					"type":          "batch-sync",
+					"status":        "CREATED",
+					"error_message": "",
+					"labels":        nil,
+				},
+			},
+			expected: []orbital.Entity{
+				{
+					Name:      query.EntityNameJobGroups,
+					ID:        uID,
+					CreatedAt: now,
+					UpdatedAt: now,
+				},
+			},
+		},
+		{
 			name:       "error case JobCursor for a mandatory field filed missing",
 			entityName: query.EntityNameJobCursor,
 			input: []map[string]any{
@@ -380,6 +402,80 @@ func TestEncodes(t *testing.T) {
 					"created_at":  unixTime,
 					"updated_at":  unixTime,
 					"is_notified": true,
+				},
+			},
+		}
+
+		// when
+		result, err := orbital.Encodes(input...)
+
+		// then
+		assert.NoError(t, err)
+		assert.Equal(t, expected, result)
+	})
+	t.Run("success JobGroup", func(t *testing.T) {
+		input := []orbital.JobGroup{
+			{
+				ID:           uID,
+				Type:         "batch-sync",
+				Status:       orbital.GroupStatusCreated,
+				ErrorMessage: "",
+				Labels:       orbital.Labels{"env": "prod"},
+				CreatedAt:    unixTime,
+				UpdatedAt:    unixTime,
+			},
+		}
+		expected := []orbital.Entity{
+			{
+				Name:      query.EntityNameJobGroups,
+				ID:        uID,
+				CreatedAt: unixTime,
+				UpdatedAt: unixTime,
+				Values: map[string]any{
+					"id":            uID,
+					"type":          "batch-sync",
+					"status":        orbital.GroupStatusCreated,
+					"error_message": "",
+					"created_at":    unixTime,
+					"updated_at":    unixTime,
+					"labels":        []byte(`{"env":"prod"}`),
+				},
+			},
+		}
+
+		// when
+		result, err := orbital.Encodes(input...)
+
+		// then
+		assert.NoError(t, err)
+		assert.Equal(t, expected, result)
+	})
+	t.Run("success JobGroup with nil labels", func(t *testing.T) {
+		input := []orbital.JobGroup{
+			{
+				ID:           uID,
+				Type:         "batch-sync",
+				Status:       orbital.GroupStatusCreated,
+				ErrorMessage: "",
+				Labels:       nil,
+				CreatedAt:    unixTime,
+				UpdatedAt:    unixTime,
+			},
+		}
+		expected := []orbital.Entity{
+			{
+				Name:      query.EntityNameJobGroups,
+				ID:        uID,
+				CreatedAt: unixTime,
+				UpdatedAt: unixTime,
+				Values: map[string]any{
+					"id":            uID,
+					"type":          "batch-sync",
+					"status":        orbital.GroupStatusCreated,
+					"error_message": "",
+					"created_at":    unixTime,
+					"updated_at":    unixTime,
+					"labels":        []byte("null"),
 				},
 			},
 		}
@@ -721,6 +817,96 @@ func TestDecodes(t *testing.T) {
 					delete(entity.Values, key)
 
 					_, err := orbital.Decodes[orbital.JobEvent](entity)
+					assert.Error(t, err)
+				})
+			}
+		})
+	})
+	t.Run("decodes JobGroup", func(t *testing.T) {
+		t.Run("success", func(t *testing.T) {
+			// given
+			group1 := orbital.JobGroup{
+				ID:           uuid.New(),
+				Type:         "batch-sync",
+				Status:       orbital.GroupStatusCreated,
+				ErrorMessage: "",
+				Labels:       orbital.Labels{"env": "prod"},
+				UpdatedAt:    clock.NowUnixNano(),
+				CreatedAt:    clock.NowUnixNano(),
+			}
+			group2 := orbital.JobGroup{
+				ID:           uuid.New(),
+				Type:         "full-sync",
+				Status:       orbital.GroupStatusFailed,
+				ErrorMessage: "something went wrong",
+				Labels:       orbital.Labels{"env": "dev"},
+				UpdatedAt:    clock.NowUnixNano(),
+				CreatedAt:    clock.NowUnixNano(),
+			}
+
+			in, _ := orbital.Encodes(group1, group2)
+
+			// when
+			result, err := orbital.Decodes[orbital.JobGroup](in...)
+
+			// then
+			assert.NoError(t, err)
+			assert.Len(t, result, 2)
+			assert.Equal(t, group1, result[0])
+			assert.Equal(t, group2, result[1])
+		})
+		t.Run("success with nil Labels", func(t *testing.T) {
+			// given
+			group := orbital.JobGroup{
+				ID:           uuid.New(),
+				Type:         "batch-sync",
+				Status:       orbital.GroupStatusCreated,
+				ErrorMessage: "",
+				Labels:       nil,
+				UpdatedAt:    clock.NowUnixNano(),
+				CreatedAt:    clock.NowUnixNano(),
+			}
+
+			in, _ := orbital.Encodes(group)
+
+			// when
+			result, err := orbital.Decodes[orbital.JobGroup](in...)
+
+			// then
+			assert.NoError(t, err)
+			assert.Len(t, result, 1)
+			assert.Nil(t, result[0].Labels)
+			assert.Equal(t, group, result[0])
+		})
+		t.Run("error for missing fields in values for the key", func(t *testing.T) {
+			keysToDelete := []string{
+				"type",
+				"status",
+				"error_message",
+				"labels",
+			}
+
+			for _, key := range keysToDelete {
+				t.Run(key, func(t *testing.T) {
+					id := uuid.New()
+					entity := orbital.Entity{
+						Name:      query.EntityNameJobGroups,
+						ID:        id,
+						CreatedAt: 0,
+						UpdatedAt: 0,
+						Values: map[string]any{
+							"id":            id,
+							"type":          "batch-sync",
+							"status":        "CREATED",
+							"error_message": "",
+							"labels":        orbital.Labels(nil),
+							"updated_at":    0,
+							"created_at":    0,
+						},
+					}
+					delete(entity.Values, key)
+
+					_, err := orbital.Decodes[orbital.JobGroup](entity)
 					assert.Error(t, err)
 				})
 			}
