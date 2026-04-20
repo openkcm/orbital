@@ -111,10 +111,12 @@ func (r *Repository) updateJob(ctx context.Context, job Job) error {
 func (r *Repository) listJobs(ctx context.Context, jobsQuery ListJobsQuery) ([]Job, error) {
 	q := query.Query{
 		EntityName: query.EntityNameJobs,
-		Clauses: []query.Clause{
-			query.ClauseWithCreatedBefore(jobsQuery.CreatedAt),
-		},
-		Limit: jobsQuery.Limit,
+		Clauses:    []query.Clause{},
+		Limit:      jobsQuery.Limit,
+	}
+
+	if jobsQuery.CreatedAt > 0 {
+		q.Clauses = append(q.Clauses, query.ClauseWithCreatedBefore(jobsQuery.CreatedAt))
 	}
 
 	if string(jobsQuery.Status) != "" {
