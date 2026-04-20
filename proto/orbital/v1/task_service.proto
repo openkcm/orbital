@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package orbital.v1;
+
+import "orbital/v1/task_request.proto";
+import "orbital/v1/task_response.proto";
+
+service TaskService {
+  rpc SendTaskRequest(TaskRequest) returns (TaskResponse);
+}
