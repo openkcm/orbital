@@ -1613,6 +1613,8 @@ func TestPrepareJobGroup(t *testing.T) {
 
 			assert.NoError(t, err)
 			assert.NotEqual(t, uuid.Nil, result.ID)
+			assert.NotZero(t, result.CreatedAt)
+			assert.NotZero(t, result.UpdatedAt)
 			assert.Equal(t, tt.expGroup.Type, result.Type)
 			assert.Equal(t, tt.expGroup.Status, result.Status)
 			assert.Equal(t, tt.expGroup.Labels, result.Labels)
@@ -1620,6 +1622,8 @@ func TestPrepareJobGroup(t *testing.T) {
 			assert.Len(t, result.Jobs, len(tt.expGroup.Jobs))
 			for i, job := range result.Jobs {
 				assert.NotEqual(t, uuid.Nil, job.ID)
+				assert.NotZero(t, job.CreatedAt)
+				assert.NotZero(t, job.UpdatedAt)
 				assert.Equal(t, tt.expGroup.Jobs[i].Type, job.Type)
 				assert.Equal(t, tt.expGroup.Jobs[i].Status, job.Status)
 				assert.Equal(t, result.ID.String(), job.Labels[orbital.LabelKeyGroupID])

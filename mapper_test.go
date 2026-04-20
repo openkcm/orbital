@@ -297,7 +297,7 @@ func TestEncodes(t *testing.T) {
 					"status":        orbital.JobStatusCreated,
 					"type":          "baz-type",
 					"external_id":   "ext-id",
-					"labels":        []byte(nil),
+					"labels":        []byte("null"),
 				},
 			},
 		}

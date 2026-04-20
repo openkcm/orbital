@@ -362,8 +362,8 @@ func (m *Manager) PrepareJobGroup(ctx context.Context, group JobGroup) (JobGroup
 		}
 	}
 
-	group.ID = uuid.New()
 	group.Status = GroupStatusCreated
+	jobs := group.Jobs
 
 	var err error
 	err = m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
@@ -372,8 +372,8 @@ func (m *Manager) PrepareJobGroup(ctx context.Context, group JobGroup) (JobGroup
 			return err
 		}
 
-		jobs := make([]Job, 0, len(group.Jobs))
-		for i, job := range group.Jobs {
+		createdJobs := make([]Job, 0, len(jobs))
+		for i, job := range jobs {
 			job.Labels = mergeLabels(job.Labels, Labels{
 				LabelKeyGroupID:       group.ID.String(),
 				LabelKeyGroupOrderKey: strconv.Itoa(i),
@@ -384,9 +384,9 @@ func (m *Manager) PrepareJobGroup(ctx context.Context, group JobGroup) (JobGroup
 			if err != nil {
 				return err
 			}
-			jobs = append(jobs, createdJob)
+			createdJobs = append(createdJobs, createdJob)
 		}
-		group.Jobs = jobs
+		group.Jobs = createdJobs
 
 		return nil
 	})
