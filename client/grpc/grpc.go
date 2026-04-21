@@ -118,8 +118,24 @@ func (c *Client) SendTaskRequest(ctx context.Context, request orbital.TaskReques
 	default:
 	}
 
-	//nolint:contextcheck
-	go c.dispatchRPC(request)
+	protoReq := codec.FromTaskRequestToProto(request)
+
+	callCtx, cancel := context.WithTimeout(ctx, c.config.callTimeout)
+	defer cancel()
+
+	protoResp, err := c.stub.SendTaskRequest(callCtx, protoReq)
+	if err != nil {
+		return err
+	}
+
+	var resp rpcResp
+	resp.taskRespose, resp.err = codec.FromProtoToTaskResponse(protoResp)
+
+	select {
+	case <-c.closeCh:
+	default:
+		c.responses <- resp
+	}
 
 	return nil
 }
@@ -144,31 +160,4 @@ func (c *Client) Close(_ context.Context) error {
 		close(c.closeCh)
 	})
 	return nil
-}
-
-// dispatchRPC performs the gRPC call with its own timeout context and delivers
-// the result to the responses channel. On transport or decoding failures it
-// synthesizes a FAILED TaskResponse preserving the original request identity.
-func (c *Client) dispatchRPC(request orbital.TaskRequest) {
-	protoReq := codec.FromTaskRequestToProto(request)
-
-	callCtx, cancel := context.WithTimeout(context.Background(), c.config.callTimeout)
-	defer cancel()
-
-	protoResp, err := c.stub.SendTaskRequest(callCtx, protoReq)
-	var resp rpcResp
-
-	if err != nil {
-		resp.err = err
-	} else {
-		taskResp, convErr := codec.FromProtoToTaskResponse(protoResp)
-		resp.err = convErr
-		resp.taskRespose = taskResp
-	}
-
-	select {
-	case <-c.closeCh:
-	default:
-		c.responses <- resp
-	}
 }

@@ -18,6 +18,7 @@ import (
 
 	"github.com/openkcm/orbital"
 	grpcclient "github.com/openkcm/orbital/client/grpc"
+	"github.com/openkcm/orbital/codec"
 	orbitalv1 "github.com/openkcm/orbital/proto/orbital/v1"
 )
 
@@ -185,12 +186,34 @@ func TestSendTaskRequest(t *testing.T) {
 		}
 
 		err = client.SendTaskRequest(t.Context(), req)
+		require.Error(t, err)
+		assert.Equal(t, codes.Internal, status.Code(err))
+		assert.Contains(t, err.Error(), "something broke")
+	})
+
+	t.Run("ProtoConversionError", func(t *testing.T) {
+		conn := startServer(t, func(_ context.Context, _ *orbitalv1.TaskRequest) (*orbitalv1.TaskResponse, error) {
+			return &orbitalv1.TaskResponse{
+				TaskId: "not-a-uuid",
+				Type:   "test",
+				Status: orbitalv1.TaskStatus_DONE,
+			}, nil
+		})
+
+		client, err := grpcclient.NewClient(conn, grpcclient.WithCallTimeout(5*time.Second))
+		require.NoError(t, err)
+		defer client.Close(t.Context())
+
+		err = client.SendTaskRequest(t.Context(), orbital.TaskRequest{
+			TaskID:     uuid.New(),
+			Type:       "test",
+			ExternalID: "ext-1",
+			ETag:       "etag-1",
+		})
 		require.NoError(t, err)
 
 		resp, err := client.ReceiveTaskResponse(t.Context())
-		assert.Error(t, err)
-		assert.Equal(t, codes.Internal, status.Code(err))
-		assert.Contains(t, err.Error(), "something broke")
+		assert.ErrorIs(t, err, codec.ErrInvalidTaskID)
 		assert.Equal(t, orbital.TaskResponse{}, resp)
 	})
 
