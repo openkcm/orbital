@@ -21,6 +21,7 @@ import (
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/client/amqp"
 	"github.com/openkcm/orbital/codec"
+	"github.com/openkcm/orbital/runner/async"
 	"github.com/openkcm/orbital/store/sql"
 )
 
@@ -237,7 +238,7 @@ func createAndStartManager(ctx context.Context, t *testing.T, store *sql.SQL, co
 func createAndStartOperator(ctx context.Context, t *testing.T, client orbital.Responder, config operatorConfig) error {
 	t.Helper()
 
-	runner, err := orbital.NewAsyncRunner(client)
+	runner, err := async.New(client)
 	if err != nil {
 		return err
 	}

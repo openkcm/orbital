@@ -10,11 +10,12 @@ import (
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/respondertest"
+	"github.com/openkcm/orbital/runner/async"
 )
 
 func newAsyncTarget(t *testing.T, client orbital.Responder) orbital.TargetOperator {
 	t.Helper()
-	runner, err := orbital.NewAsyncRunner(client)
+	runner, err := async.New(client)
 	assert.NoError(t, err)
 	return orbital.TargetOperator{Runner: runner}
 }
@@ -28,7 +29,7 @@ func TestOperator_NewOperator(t *testing.T) {
 	})
 
 	t.Run("should return error if signature checking is enabled and the verifier is nil set for the target", func(t *testing.T) {
-		runner, err := orbital.NewAsyncRunner(respondertest.NewResponder())
+		runner, err := async.New(respondertest.NewResponder())
 		assert.NoError(t, err)
 
 		invalidTarget := orbital.TargetOperator{

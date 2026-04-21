@@ -10,6 +10,7 @@ import (
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/client/amqp"
 	"github.com/openkcm/orbital/codec"
+	"github.com/openkcm/orbital/runner/async"
 )
 
 // This example uses RabbitMQ as an AMQP message broker.
@@ -31,7 +32,7 @@ func main() {
 	defer client.Close(ctx)
 
 	// Initialize runner
-	runner, err := orbital.NewAsyncRunner(client)
+	runner, err := async.New(client)
 	handleErr("initializing runner", err)
 
 	// Initialize an orbital operator that uses the responder

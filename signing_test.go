@@ -13,6 +13,7 @@ import (
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/respondertest"
+	"github.com/openkcm/orbital/runner/async"
 )
 
 func TestManager_Signing(t *testing.T) {
@@ -365,7 +366,7 @@ func TestOperator_Signing(t *testing.T) {
 					return nil
 				}
 
-				runner, err := orbital.NewAsyncRunner(client)
+				runner, err := async.New(client)
 				require.NoError(t, err)
 
 				o, err := orbital.NewOperator(orbital.TargetOperator{Runner: runner, Verifier: mockVerifier, Signer: tt.respSigner})
@@ -487,7 +488,7 @@ func TestOperator_Verification(t *testing.T) {
 				actVerifyTaskRequestCalls.Store(0)
 
 				client := respondertest.NewResponder()
-				runner, err := orbital.NewAsyncRunner(client)
+				runner, err := async.New(client)
 				require.NoError(t, err)
 
 				o, err := orbital.NewOperator(orbital.TargetOperator{

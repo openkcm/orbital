@@ -1,25 +1,26 @@
-package orbital
+package async
 
 import (
 	"context"
 	"errors"
 
 	slogctx "github.com/veqryn/slog-context"
+
+	"github.com/openkcm/orbital"
 )
 
-// AsyncRunner implements Runner on top of a half-duplex Responder
+// Runner implements orbital.Runner on top of a half-duplex Responder
 // (e.g. AMQP). It pulls requests from the Responder, fans out to a bounded
 // worker pool, and pushes responses back on the same Responder.
-type AsyncRunner struct {
-	client          Responder
-	requests        chan TaskRequest
+type Runner struct {
+	client          orbital.Responder
+	requests        chan orbital.TaskRequest
 	numberOfWorkers int
 }
 
 type (
-	// AsyncOption configures an AsyncRunner.
-	AsyncOption func(*asyncConfig) error
-	asyncConfig struct {
+	Option func(*config) error
+	config struct {
 		bufferSize      int
 		numberOfWorkers int
 	}
@@ -31,14 +32,14 @@ var (
 	ErrResponderNil               = errors.New("responder cannot be nil")
 )
 
-// NewAsyncRunner creates an AsyncRunner backed by the given Responder.
+// New creates a Runner backed by the given Responder.
 // Defaults: buffer size 100, 10 workers.
-func NewAsyncRunner(client Responder, opts ...AsyncOption) (*AsyncRunner, error) {
+func New(client orbital.Responder, opts ...Option) (*Runner, error) {
 	if client == nil {
 		return nil, ErrResponderNil
 	}
 
-	c := asyncConfig{
+	c := config{
 		bufferSize:      100,
 		numberOfWorkers: 10,
 	}
@@ -48,17 +49,17 @@ func NewAsyncRunner(client Responder, opts ...AsyncOption) (*AsyncRunner, error)
 		}
 	}
 
-	return &AsyncRunner{
+	return &Runner{
 		client:          client,
-		requests:        make(chan TaskRequest, c.bufferSize),
+		requests:        make(chan orbital.TaskRequest, c.bufferSize),
 		numberOfWorkers: c.numberOfWorkers,
 	}, nil
 }
 
 // WithBufferSize sets the buffer size for the requests channel.
 // It returns an error if the size is negative.
-func WithBufferSize(size int) AsyncOption {
-	return func(c *asyncConfig) error {
+func WithBufferSize(size int) Option {
+	return func(c *config) error {
 		if size < 0 {
 			return ErrBufferSizeNegative
 		}
@@ -69,8 +70,8 @@ func WithBufferSize(size int) AsyncOption {
 
 // WithNumberOfWorkers sets the number of workers for processing requests.
 // It returns an error if the number is not positive.
-func WithNumberOfWorkers(num int) AsyncOption {
-	return func(c *asyncConfig) error {
+func WithNumberOfWorkers(num int) Option {
+	return func(c *config) error {
 		if num <= 0 {
 			return ErrNumberOfWorkersNotPositive
 		}
@@ -81,14 +82,14 @@ func WithNumberOfWorkers(num int) AsyncOption {
 
 // Run spawns one listener goroutine and numberOfWorkers worker goroutines,
 // then returns. Cancellation of ctx stops all of them.
-func (r *AsyncRunner) Run(ctx context.Context, process ProcessFunc) {
+func (r *Runner) Run(ctx context.Context, process orbital.ProcessFunc) {
 	go r.startListening(ctx)
 	for range r.numberOfWorkers {
 		go r.worker(ctx, process)
 	}
 }
 
-func (r *AsyncRunner) startListening(ctx context.Context) {
+func (r *Runner) startListening(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -102,7 +103,6 @@ func (r *AsyncRunner) startListening(ctx context.Context) {
 			continue
 		}
 
-		// Hand off to a worker, but respect shutdown if the buffer is full.
 		select {
 		case <-ctx.Done():
 			return
@@ -111,7 +111,7 @@ func (r *AsyncRunner) startListening(ctx context.Context) {
 	}
 }
 
-func (r *AsyncRunner) worker(ctx context.Context, process ProcessFunc) {
+func (r *Runner) worker(ctx context.Context, process orbital.ProcessFunc) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -119,9 +119,6 @@ func (r *AsyncRunner) worker(ctx context.Context, process ProcessFunc) {
 		case req := <-r.requests:
 			resp, err := process(ctx, req)
 			if err != nil {
-				// Pipeline errors (bad signature, signer failure) are already
-				// logged by Process. Async semantics: drop and move on,
-				// matching the previous inline behavior.
 				continue
 			}
 
