@@ -101,7 +101,7 @@ var (
 	ErrLoadingJob              = errors.New("failed to load job")
 	ErrUpdatingJob             = errors.New("failed to update job")
 	ErrTaskNotFound            = errors.New("task not found")
-	ErrJobGroupEmpty           = errors.New("at least one job is required")
+	ErrJobGroupEmpty           = errors.New("job group must not be empty")
 )
 
 // NewManager creates a new Manager instance.
@@ -284,11 +284,10 @@ func (m *Manager) Stop(ctx context.Context) error {
 // It validates the job labels before creating the job.
 // It returns an error if a job with the same type and external ID in a non-terminal status already exists.
 func (m *Manager) PrepareJob(ctx context.Context, job Job) (Job, error) {
-	if job.Labels != nil {
-		if err := job.Labels.Validate(); err != nil {
-			return Job{}, err
-		}
+	if err := job.Labels.Validate(); err != nil {
+		return Job{}, err
 	}
+
 	job.Status = JobStatusCreated
 	job, err := m.repo.createJob(ctx, job)
 	if err != nil {
@@ -341,24 +340,18 @@ func (m *Manager) CancelJob(ctx context.Context, jobID uuid.UUID) error {
 // PrepareJobGroup creates a job group and all its jobs in a single transaction.
 // All jobs are created with SCHEDULED status and the group is created with CREATED status.
 // Returns an error if no jobs are provided or if any labels validation fails.
-//
-//nolint:cyclop // validation logic and transaction require multiple checks
 func (m *Manager) PrepareJobGroup(ctx context.Context, group JobGroup) (JobGroup, error) {
 	if len(group.Jobs) == 0 {
 		return JobGroup{}, ErrJobGroupEmpty
 	}
 
-	if group.Labels != nil {
-		if err := group.Labels.Validate(); err != nil {
-			return JobGroup{}, err
-		}
+	if err := group.Labels.Validate(); err != nil {
+		return JobGroup{}, err
 	}
 
 	for _, job := range group.Jobs {
-		if job.Labels != nil {
-			if err := job.Labels.Validate(); err != nil {
-				return JobGroup{}, err
-			}
+		if err := job.Labels.Validate(); err != nil {
+			return JobGroup{}, err
 		}
 	}
 
