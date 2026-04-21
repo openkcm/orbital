@@ -70,7 +70,7 @@ func TestNewClient(t *testing.T) {
 	tests := []struct {
 		name    string
 		conn    *grpc.ClientConn
-		opts    []grpcclient.ConfigOption
+		opts    []grpcclient.ClientOption
 		wantErr error
 	}{
 		{
@@ -81,25 +81,25 @@ func TestNewClient(t *testing.T) {
 		{
 			name:    "InvalidBufferSize",
 			conn:    conn,
-			opts:    []grpcclient.ConfigOption{grpcclient.WithBufferSize(-1)},
+			opts:    []grpcclient.ClientOption{grpcclient.WithBufferSize(-1)},
 			wantErr: grpcclient.ErrInvalidBufferSize,
 		},
 		{
 			name:    "InvalidCallTimeout/zero",
 			conn:    conn,
-			opts:    []grpcclient.ConfigOption{grpcclient.WithCallTimeout(0)},
+			opts:    []grpcclient.ClientOption{grpcclient.WithCallTimeout(0)},
 			wantErr: grpcclient.ErrInvalidCallTimeout,
 		},
 		{
 			name:    "InvalidCallTimeout/negative",
 			conn:    conn,
-			opts:    []grpcclient.ConfigOption{grpcclient.WithCallTimeout(-1 * time.Second)},
+			opts:    []grpcclient.ClientOption{grpcclient.WithCallTimeout(-1 * time.Second)},
 			wantErr: grpcclient.ErrInvalidCallTimeout,
 		},
 		{
 			name: "ValidWithZeroBuffer",
 			conn: conn,
-			opts: []grpcclient.ConfigOption{grpcclient.WithBufferSize(0)},
+			opts: []grpcclient.ClientOption{grpcclient.WithBufferSize(0)},
 		},
 	}
 

@@ -34,7 +34,7 @@ const (
 var _ orbital.Initiator = &Client{}
 
 type (
-	ConfigOption func(*config) error
+	ClientOption func(*config) error
 	config       struct {
 		bufferSize  int
 		callTimeout time.Duration
@@ -51,7 +51,7 @@ type (
 
 // NewClient creates a new gRPC-backed Initiator. The caller retains ownership
 // of conn and is responsible for closing it after the Client is closed.
-func NewClient(conn *grpc.ClientConn, opts ...ConfigOption) (*Client, error) {
+func NewClient(conn *grpc.ClientConn, opts ...ClientOption) (*Client, error) {
 	if conn == nil {
 		return nil, ErrNilConn
 	}
@@ -78,7 +78,7 @@ func NewClient(conn *grpc.ClientConn, opts ...ConfigOption) (*Client, error) {
 // WithBufferSize sets the buffer of the internal responses channel.
 // Defaults to 100. A larger buffer tolerates bursts of responses without
 // blocking RPC goroutines at the send-to-channel step.
-func WithBufferSize(n int) ConfigOption {
+func WithBufferSize(n int) ClientOption {
 	return func(c *config) error {
 		if n < 0 {
 			return ErrInvalidBufferSize
@@ -92,7 +92,7 @@ func WithBufferSize(n int) ConfigOption {
 // Defaults to 30 seconds. This is derived from context.Background, NOT the
 // caller's ctx, because the reconcile transaction ctx handed to
 // SendTaskRequest is too short-lived for the outbound RPC.
-func WithCallTimeout(d time.Duration) ConfigOption {
+func WithCallTimeout(d time.Duration) ClientOption {
 	return func(c *config) error {
 		if d <= 0 {
 			return ErrInvalidCallTimeout
