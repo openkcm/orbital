@@ -169,8 +169,6 @@ func TestSendTaskRequest(t *testing.T) {
 	})
 
 	t.Run("GRPCError", func(t *testing.T) {
-		taskID := uuid.New()
-
 		conn := startServer(t, func(context.Context, *orbitalv1.TaskRequest) (*orbitalv1.TaskResponse, error) {
 			return nil, status.Error(codes.Internal, "something broke")
 		})
@@ -180,7 +178,7 @@ func TestSendTaskRequest(t *testing.T) {
 		defer client.Close(t.Context())
 
 		req := orbital.TaskRequest{
-			TaskID:     taskID,
+			TaskID:     uuid.New(),
 			Type:       "test",
 			ExternalID: "ext-1",
 			ETag:       "etag-1",
@@ -190,14 +188,10 @@ func TestSendTaskRequest(t *testing.T) {
 		require.NoError(t, err)
 
 		resp, err := client.ReceiveTaskResponse(t.Context())
-		require.NoError(t, err)
-
-		assert.Equal(t, taskID, resp.TaskID)
-		assert.Equal(t, "test", resp.Type)
-		assert.Equal(t, "ext-1", resp.ExternalID)
-		assert.Equal(t, "etag-1", resp.ETag)
-		assert.Equal(t, "FAILED", resp.Status)
-		assert.Contains(t, resp.ErrorMessage, "something broke")
+		assert.Error(t, err)
+		assert.Equal(t, codes.Internal, status.Code(err))
+		assert.Contains(t, err.Error(), "something broke")
+		assert.Equal(t, orbital.TaskResponse{}, resp)
 	})
 
 	t.Run("ContextCancelled", func(t *testing.T) {

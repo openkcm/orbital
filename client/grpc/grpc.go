@@ -3,7 +3,6 @@ package grpc
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -42,10 +41,15 @@ type (
 
 	Client struct {
 		stub      orbitalv1.TaskServiceClient
-		responses chan orbital.TaskResponse
+		responses chan rpcResp
 		closeCh   chan struct{}
 		closeOnce sync.Once
 		config    config
+	}
+
+	rpcResp struct {
+		taskRespose orbital.TaskResponse
+		err         error
 	}
 )
 
@@ -69,7 +73,7 @@ func NewClient(conn *grpc.ClientConn, opts ...ClientOption) (*Client, error) {
 
 	return &Client{
 		stub:      orbitalv1.NewTaskServiceClient(conn),
-		responses: make(chan orbital.TaskResponse, cfg.bufferSize),
+		responses: make(chan rpcResp, cfg.bufferSize),
 		closeCh:   make(chan struct{}),
 		config:    cfg,
 	}, nil
@@ -131,7 +135,7 @@ func (c *Client) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse,
 	case <-c.closeCh:
 		return orbital.TaskResponse{}, ErrClientClosed
 	case resp := <-c.responses:
-		return resp, nil
+		return resp.taskRespose, resp.err
 	}
 }
 
@@ -152,33 +156,19 @@ func (c *Client) dispatchRPC(request orbital.TaskRequest, protoReq *orbitalv1.Ta
 	defer cancel()
 
 	protoResp, err := c.stub.SendTaskRequest(callCtx, protoReq)
+	var resp rpcResp
 
-	var resp orbital.TaskResponse
 	if err != nil {
-		resp = failedResponse(request, fmt.Errorf("grpc call failed: %w", err))
+		resp.err = err
 	} else {
-		resp, err = codec.FromProtoToTaskResponse(protoResp)
-		if err != nil {
-			resp = failedResponse(request, err)
-		}
+		taskResp, convErr := codec.FromProtoToTaskResponse(protoResp)
+		resp.err = convErr
+		resp.taskRespose = taskResp
 	}
 
 	select {
 	case <-c.closeCh:
 	default:
 		c.responses <- resp
-	}
-}
-
-// failedResponse builds a TaskResponse with FAILED status, copying the
-// identity fields from the original request so the caller can correlate it.
-func failedResponse(request orbital.TaskRequest, err error) orbital.TaskResponse {
-	return orbital.TaskResponse{
-		TaskID:       request.TaskID,
-		Type:         request.Type,
-		ExternalID:   request.ExternalID,
-		ETag:         request.ETag,
-		Status:       string(orbital.TaskStatusFailed),
-		ErrorMessage: err.Error(),
 	}
 }
