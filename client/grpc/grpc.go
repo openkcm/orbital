@@ -118,10 +118,8 @@ func (c *Client) SendTaskRequest(ctx context.Context, request orbital.TaskReques
 	default:
 	}
 
-	protoReq := codec.FromTaskRequestToProto(request)
-
 	//nolint:contextcheck
-	go c.dispatchRPC(request, protoReq)
+	go c.dispatchRPC(request)
 
 	return nil
 }
@@ -151,7 +149,9 @@ func (c *Client) Close(_ context.Context) error {
 // dispatchRPC performs the gRPC call with its own timeout context and delivers
 // the result to the responses channel. On transport or decoding failures it
 // synthesizes a FAILED TaskResponse preserving the original request identity.
-func (c *Client) dispatchRPC(request orbital.TaskRequest, protoReq *orbitalv1.TaskRequest) {
+func (c *Client) dispatchRPC(request orbital.TaskRequest) {
+	protoReq := codec.FromTaskRequestToProto(request)
+
 	callCtx, cancel := context.WithTimeout(context.Background(), c.config.callTimeout)
 	defer cancel()
 
