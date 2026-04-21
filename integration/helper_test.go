@@ -237,7 +237,12 @@ func createAndStartManager(ctx context.Context, t *testing.T, store *sql.SQL, co
 func createAndStartOperator(ctx context.Context, t *testing.T, client orbital.Responder, config operatorConfig) error {
 	t.Helper()
 
-	operator, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
+	runner, err := orbital.NewAsyncRunner(client)
+	if err != nil {
+		return err
+	}
+
+	operator, err := orbital.NewOperator(orbital.TargetOperator{Runner: runner})
 	if err != nil {
 		return fmt.Errorf("failed to create operator: %w", err)
 	}

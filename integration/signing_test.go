@@ -420,7 +420,10 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, initiatorHand
 		},
 	}
 
-	targetOperator := orbital.TargetOperator{Client: operatorClient, Verifier: responderHandler, Signer: responderHandler, MustCheckSignature: true}
+	runner, err := orbital.NewAsyncRunner(operatorClient)
+	require.NoError(t, err)
+
+	targetOperator := orbital.TargetOperator{Runner: runner, Verifier: responderHandler, Signer: responderHandler, MustCheckSignature: true}
 	err = createAndStartOperatorWithTarget(ctxCancel, t, targetOperator, operatorConfig)
 	require.NoError(t, err)
 

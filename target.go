@@ -55,11 +55,11 @@ type Initiator interface {
 	Close(ctx context.Context) error
 }
 
-// TargetOperator holds the client and cryptographic implementation for responding
+// TargetOperator holds the runner and cryptographic implementation for responding
 // to tasks. It provides access to the Responder for communication,
 // Signer and Verifier for signing and verification operations.
 type TargetOperator struct {
-	Client             Responder
+	Runner             Runner
 	Verifier           TaskRequestVerifier
 	Signer             TaskResponseSigner
 	MustCheckSignature bool

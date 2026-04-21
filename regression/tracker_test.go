@@ -174,7 +174,12 @@ func NewOperatorTracker(ctx context.Context, env *testEnvironment, name string) 
 	}
 
 	tracker.client = client
-	operator, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
+	runner, err := orbital.NewAsyncRunner(client)
+	if err != nil {
+		return tracker, fmt.Errorf("failed to create async runner: %w", err)
+	}
+
+	operator, err := orbital.NewOperator(orbital.TargetOperator{Runner: runner})
 	if err != nil {
 		return tracker, fmt.Errorf("failed to create operator: %w", err)
 	}

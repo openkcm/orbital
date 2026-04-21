@@ -30,8 +30,12 @@ func main() {
 	handleErr("initializing responder", err)
 	defer client.Close(ctx)
 
+	// Initialize runner
+	runner, err := orbital.NewAsyncRunner(client)
+	handleErr("initializing runner", err)
+
 	// Initialize an orbital operator that uses the responder
-	operator, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
+	operator, err := orbital.NewOperator(orbital.TargetOperator{Runner: runner})
 	handleErr("initializing operator", err)
 
 	// Register a handler for the "example" task type
