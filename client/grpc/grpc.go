@@ -41,15 +41,10 @@ type (
 
 	Client struct {
 		stub      orbitalv1.TaskServiceClient
-		responses chan rpcResp
+		responses chan *orbitalv1.TaskResponse
 		closeCh   chan struct{}
 		closeOnce sync.Once
 		config    config
-	}
-
-	rpcResp struct {
-		taskRespose orbital.TaskResponse
-		err         error
 	}
 )
 
@@ -73,7 +68,7 @@ func NewClient(conn *grpc.ClientConn, opts ...ClientOption) (*Client, error) {
 
 	return &Client{
 		stub:      orbitalv1.NewTaskServiceClient(conn),
-		responses: make(chan rpcResp, cfg.bufferSize),
+		responses: make(chan *orbitalv1.TaskResponse, cfg.bufferSize),
 		closeCh:   make(chan struct{}),
 		config:    cfg,
 	}, nil
@@ -128,13 +123,10 @@ func (c *Client) SendTaskRequest(ctx context.Context, request orbital.TaskReques
 		return err
 	}
 
-	var resp rpcResp
-	resp.taskRespose, resp.err = codec.FromProtoToTaskResponse(protoResp)
-
 	select {
 	case <-c.closeCh:
 	default:
-		c.responses <- resp
+		c.responses <- protoResp
 	}
 
 	return nil
@@ -149,7 +141,7 @@ func (c *Client) ReceiveTaskResponse(ctx context.Context) (orbital.TaskResponse,
 	case <-c.closeCh:
 		return orbital.TaskResponse{}, ErrClientClosed
 	case resp := <-c.responses:
-		return resp.taskRespose, resp.err
+		return codec.FromProtoToTaskResponse(resp)
 	}
 }
 
