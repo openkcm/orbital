@@ -9,9 +9,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/respondertest"
+	"github.com/openkcm/orbital/runner/async"
 )
 
 func TestManager_Signing(t *testing.T) {
@@ -364,7 +366,10 @@ func TestOperator_Signing(t *testing.T) {
 					return nil
 				}
 
-				o, err := orbital.NewOperator(orbital.TargetOperator{Client: client, Verifier: mockVerifier, Signer: tt.respSigner})
+				runner, err := async.New(client)
+				require.NoError(t, err)
+
+				o, err := orbital.NewOperator(orbital.TargetOperator{Runner: runner, Verifier: mockVerifier, Signer: tt.respSigner})
 				assert.NoError(t, err)
 				assert.NotNil(t, o)
 
@@ -483,8 +488,11 @@ func TestOperator_Verification(t *testing.T) {
 				actVerifyTaskRequestCalls.Store(0)
 
 				client := respondertest.NewResponder()
+				runner, err := async.New(client)
+				require.NoError(t, err)
+
 				o, err := orbital.NewOperator(orbital.TargetOperator{
-					Client:             client,
+					Runner:             runner,
 					Signer:             respSigner,
 					Verifier:           tt.reqVerifier,
 					MustCheckSignature: tt.mustCheckSignature,

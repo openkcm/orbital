@@ -10,12 +10,30 @@ import (
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/respondertest"
+	"github.com/openkcm/orbital/runner/async"
 )
 
+func newAsyncTarget(t *testing.T, client orbital.Responder) orbital.TargetOperator {
+	t.Helper()
+	runner, err := async.New(client)
+	assert.NoError(t, err)
+	return orbital.TargetOperator{Runner: runner}
+}
+
 func TestOperator_NewOperator(t *testing.T) {
+	t.Run("should return error if runner is nil", func(t *testing.T) {
+		actResult, actErr := orbital.NewOperator(orbital.TargetOperator{})
+		assert.Nil(t, actResult)
+		assert.ErrorIs(t, actErr, orbital.ErrOperatorInvalidConfig)
+		assert.ErrorIs(t, actErr, orbital.ErrRunnerNil)
+	})
+
 	t.Run("should return error if signature checking is enabled and the verifier is nil set for the target", func(t *testing.T) {
+		runner, err := async.New(respondertest.NewResponder())
+		assert.NoError(t, err)
+
 		invalidTarget := orbital.TargetOperator{
-			Client:             respondertest.NewResponder(),
+			Runner:             runner,
 			Verifier:           nil,
 			MustCheckSignature: true,
 		}
@@ -24,56 +42,16 @@ func TestOperator_NewOperator(t *testing.T) {
 		assert.Nil(t, actResult)
 		assert.ErrorIs(t, actErr, orbital.ErrOperatorInvalidConfig)
 	})
-}
 
-func TestNew(t *testing.T) {
-	client := respondertest.NewResponder()
-
-	tests := []struct {
-		name   string
-		opts   []orbital.Option
-		expErr error
-	}{
-		{
-			name:   "negative buffer size",
-			opts:   []orbital.Option{orbital.WithBufferSize(-1)},
-			expErr: orbital.ErrBufferSizeNegative,
-		},
-		{
-			name:   "zero number of workers",
-			opts:   []orbital.Option{orbital.WithNumberOfWorkers(0)},
-			expErr: orbital.ErrNumberOfWorkersNotPositive,
-		},
-		{
-			name: "without options",
-			opts: []orbital.Option{},
-		},
-		{
-			name: "with options",
-			opts: []orbital.Option{
-				orbital.WithBufferSize(0),
-				orbital.WithNumberOfWorkers(1),
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			o, err := orbital.NewOperator(orbital.TargetOperator{Client: client}, tt.opts...)
-			if tt.expErr != nil {
-				assert.ErrorIs(t, err, tt.expErr)
-				return
-			}
-			assert.NoError(t, err)
-			assert.NotNil(t, o)
-		})
-	}
+	t.Run("valid", func(t *testing.T) {
+		o, err := orbital.NewOperator(newAsyncTarget(t, respondertest.NewResponder()))
+		assert.NoError(t, err)
+		assert.NotNil(t, o)
+	})
 }
 
 func TestRegisterHandler(t *testing.T) {
-	client := respondertest.NewResponder()
-
-	o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
+	o, err := orbital.NewOperator(newAsyncTarget(t, respondertest.NewResponder()))
 	assert.NoError(t, err)
 	assert.NotNil(t, o)
 
@@ -116,7 +94,7 @@ func TestRegisterHandler(t *testing.T) {
 func TestListenAndRespond_UnknownTaskType(t *testing.T) {
 	client := respondertest.NewResponder()
 
-	o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
+	o, err := orbital.NewOperator(newAsyncTarget(t, client))
 	assert.NoError(t, err)
 	assert.NotNil(t, o)
 
@@ -172,7 +150,7 @@ func TestListenAndRespond(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client := respondertest.NewResponder()
 
-			o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
+			o, err := orbital.NewOperator(newAsyncTarget(t, client))
 			assert.NoError(t, err)
 			assert.NotNil(t, o)
 
@@ -218,7 +196,7 @@ func TestListenAndRespond(t *testing.T) {
 func TestListenAndRespond_WorkingState(t *testing.T) {
 	client := respondertest.NewResponder()
 
-	o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
+	o, err := orbital.NewOperator(newAsyncTarget(t, client))
 	assert.NoError(t, err)
 	assert.NotNil(t, o)
 

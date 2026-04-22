@@ -21,6 +21,7 @@ import (
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/client/amqp"
 	"github.com/openkcm/orbital/codec"
+	"github.com/openkcm/orbital/runner/async"
 	"github.com/openkcm/orbital/store/sql"
 )
 
@@ -237,7 +238,12 @@ func createAndStartManager(ctx context.Context, t *testing.T, store *sql.SQL, co
 func createAndStartOperator(ctx context.Context, t *testing.T, client orbital.Responder, config operatorConfig) error {
 	t.Helper()
 
-	operator, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
+	runner, err := async.New(client)
+	if err != nil {
+		return err
+	}
+
+	operator, err := orbital.NewOperator(orbital.TargetOperator{Runner: runner})
 	if err != nil {
 		return fmt.Errorf("failed to create operator: %w", err)
 	}
