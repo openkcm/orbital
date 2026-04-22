@@ -119,6 +119,7 @@ func (r *Runner) worker(ctx context.Context, process orbital.ProcessFunc) {
 		case req := <-r.requests:
 			resp, err := process(ctx, req)
 			if err != nil {
+				slogctx.Error(ctx, "failed to process task request", "error", err, "taskId", req.TaskID, "etag", req.ETag)
 				continue
 			}
 
