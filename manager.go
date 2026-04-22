@@ -393,6 +393,8 @@ func (m *Manager) PrepareJobGroup(ctx context.Context, group JobGroup) (JobGroup
 }
 
 // GetJobGroup retrieves a job group by its ID along with all its jobs.
+// Returns (group, true, nil) if found, or (empty, false, nil) if not found.
+// Returns an error if a repository or sorting operation fails.
 func (m *Manager) GetJobGroup(ctx context.Context, groupID uuid.UUID) (JobGroup, bool, error) {
 	group, found, err := m.repo.getJobGroup(ctx, groupID)
 	if err != nil {

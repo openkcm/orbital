@@ -36,10 +36,10 @@ func (l Labels) ToJSON() ([]byte, error) {
 // mergeLabels creates a new Labels map by merging multiple label maps.
 // Later maps override earlier maps if keys conflict.
 // No input maps are modified. Nil maps are skipped.
-func mergeLabels(labelMaps ...Labels) Labels {
+func mergeLabels(ls ...Labels) Labels {
 	merged := make(Labels)
-	for _, labels := range labelMaps {
-		maps.Copy(merged, labels)
+	for _, l := range ls {
+		maps.Copy(merged, l)
 	}
 	return merged
 }

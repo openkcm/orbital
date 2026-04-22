@@ -19,7 +19,7 @@ var (
 
 // TransformToEntities transforms a list of maps into domain entities based on the provided entity name.
 func TransformToEntities(entityName query.EntityName, objs ...map[string]any) ([]Entity, error) {
-	if _, ok := query.SupportedEntityNames[entityName]; !ok {
+	if _, ok := query.ValidEntityNames[entityName]; !ok {
 		return nil, fmt.Errorf("%w `%s` not supported", ErrInvalidEntityType, entityName)
 	}
 

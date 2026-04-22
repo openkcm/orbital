@@ -26,8 +26,8 @@ const (
 	EntityNameJobGroups                       EntityName = "job_groups"
 )
 
-// SupportedEntityNames contains all valid entity names.
-var SupportedEntityNames = map[EntityName]struct{}{
+// ValidEntityNames contains all valid entity names.
+var ValidEntityNames = map[EntityName]struct{}{
 	EntityNameJobs:      {},
 	EntityNameTasks:     {},
 	EntityNameJobCursor: {},

@@ -156,7 +156,7 @@ func TestMergeLabels(t *testing.T) {
 		assert.Empty(t, result)
 	})
 
-	t.Run("should merge single labels map", func(t *testing.T) {
+	t.Run("should merge single label", func(t *testing.T) {
 		// given
 		labels := orbital.Labels{"tenant": "acme", "env": "prod"}
 
@@ -169,7 +169,7 @@ func TestMergeLabels(t *testing.T) {
 		assert.Len(t, result, 2)
 	})
 
-	t.Run("should merge multiple labels maps", func(t *testing.T) {
+	t.Run("should merge multiple labels", func(t *testing.T) {
 		// given
 		labels1 := orbital.Labels{"tenant": "acme"}
 		labels2 := orbital.Labels{"env": "prod"}
@@ -185,7 +185,7 @@ func TestMergeLabels(t *testing.T) {
 		assert.Len(t, result, 3)
 	})
 
-	t.Run("should override with later maps", func(t *testing.T) {
+	t.Run("should override with later label", func(t *testing.T) {
 		// given
 		labels1 := orbital.Labels{"key": "first", "other": "value"}
 		labels2 := orbital.Labels{"key": "second"}
@@ -199,7 +199,7 @@ func TestMergeLabels(t *testing.T) {
 		assert.Len(t, result, 2)
 	})
 
-	t.Run("should not modify original labels", func(t *testing.T) {
+	t.Run("should not modify original label", func(t *testing.T) {
 		// given
 		labels1 := orbital.Labels{"tenant": "acme"}
 		labels2 := orbital.Labels{"env": "prod"}
@@ -213,7 +213,7 @@ func TestMergeLabels(t *testing.T) {
 		assert.Len(t, result, 2)  // New map has 2 entries
 	})
 
-	t.Run("should skip nil maps in variadic args", func(t *testing.T) {
+	t.Run("should skip nil labels in variadic args", func(t *testing.T) {
 		// given
 		labels := orbital.Labels{"tenant": "acme"}
 
@@ -225,7 +225,7 @@ func TestMergeLabels(t *testing.T) {
 		assert.Len(t, result, 1)
 	})
 
-	t.Run("should handle empty maps", func(t *testing.T) {
+	t.Run("should handle empty labels", func(t *testing.T) {
 		// given
 		labels1 := orbital.Labels{}
 		labels2 := orbital.Labels{"tenant": "acme"}
