@@ -366,15 +366,18 @@ func TestOperator_Signing(t *testing.T) {
 					return nil
 				}
 
-				runner, err := async.New(client)
+				processor, err := orbital.NewProcessor(orbital.ProcessorConfig{Verifier: mockVerifier, Signer: tt.respSigner})
 				require.NoError(t, err)
 
-				o, err := orbital.NewOperator(orbital.TargetOperator{Runner: runner, Verifier: mockVerifier, Signer: tt.respSigner})
+				runner, err := async.New(client, processor.Process)
+				require.NoError(t, err)
+
+				o, err := orbital.NewOperator(processor, runner)
 				assert.NoError(t, err)
 				assert.NotNil(t, o)
 
 				ctx := t.Context()
-				o.ListenAndRespond(ctx)
+				go func() { assert.ErrorIs(t, o.ListenAndRespond(ctx), context.Canceled) }()
 
 				h := func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) {
 					assert.Equal(t, taskReq.TaskID, req.TaskID)
@@ -465,7 +468,7 @@ func TestOperator_Verification(t *testing.T) {
 				name:                 "if signature checking is enabled and no verifier is set, operator initialization should fail",
 				mustCheckSignature:   true,
 				reqVerifier:          nil,
-				expOperatorInitError: orbital.ErrOperatorInvalidConfig,
+				expOperatorInitError: orbital.ErrProcessorInvalidConfig,
 			},
 			{
 				name:               "if signature checking is enabled and the verifier returns an error, the handler should not be called",
@@ -488,11 +491,8 @@ func TestOperator_Verification(t *testing.T) {
 				actVerifyTaskRequestCalls.Store(0)
 
 				client := respondertest.NewResponder()
-				runner, err := async.New(client)
-				require.NoError(t, err)
 
-				o, err := orbital.NewOperator(orbital.TargetOperator{
-					Runner:             runner,
+				processor, err := orbital.NewProcessor(orbital.ProcessorConfig{
 					Signer:             respSigner,
 					Verifier:           tt.reqVerifier,
 					MustCheckSignature: tt.mustCheckSignature,
@@ -500,14 +500,20 @@ func TestOperator_Verification(t *testing.T) {
 
 				if tt.expOperatorInitError != nil {
 					assert.ErrorIs(t, err, tt.expOperatorInitError)
-					assert.Nil(t, o)
+					assert.Nil(t, processor)
 					return
 				}
+				require.NoError(t, err)
+
+				runner, err := async.New(client, processor.Process)
+				require.NoError(t, err)
+
+				o, err := orbital.NewOperator(processor, runner)
 				assert.NoError(t, err)
 				assert.NotNil(t, o)
 
 				ctx := t.Context()
-				o.ListenAndRespond(ctx)
+				go func() { assert.ErrorIs(t, o.ListenAndRespond(ctx), context.Canceled) }()
 
 				var actHandlerCalls atomic.Int32
 				actHandlerCallChan := make(chan struct{})

@@ -421,11 +421,13 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, initiatorHand
 		},
 	}
 
-	runner, err := async.New(operatorClient)
+	processor, err := orbital.NewProcessor(orbital.ProcessorConfig{Verifier: responderHandler, Signer: responderHandler, MustCheckSignature: true})
 	require.NoError(t, err)
 
-	targetOperator := orbital.TargetOperator{Runner: runner, Verifier: responderHandler, Signer: responderHandler, MustCheckSignature: true}
-	err = createAndStartOperatorWithTarget(ctxCancel, t, targetOperator, operatorConfig)
+	runner, err := async.New(operatorClient, processor.Process)
+	require.NoError(t, err)
+
+	err = createAndStartOperatorWithTarget(ctxCancel, t, processor, runner, operatorConfig)
 	require.NoError(t, err)
 
 	job, err := createTestJob(ctx, t, manager, "test-job", []byte("job-data"))

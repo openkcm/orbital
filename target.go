@@ -55,16 +55,6 @@ type Initiator interface {
 	Close(ctx context.Context) error
 }
 
-// TargetOperator holds the runner and cryptographic implementation for responding
-// to tasks. It provides access to the Responder for communication,
-// Signer and Verifier for signing and verification operations.
-type TargetOperator struct {
-	Runner             Runner
-	Verifier           TaskRequestVerifier
-	Signer             TaskResponseSigner
-	MustCheckSignature bool
-}
-
 // Responder defines the methods for receiving task requests and sending task responses.
 type Responder interface {
 	ReceiveTaskRequest(ctx context.Context) (TaskRequest, error)

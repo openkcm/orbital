@@ -14,6 +14,7 @@ import (
 // worker pool, and pushes responses back on the same Responder.
 type Runner struct {
 	client          orbital.Responder
+	process         orbital.ProcessFunc
 	requests        chan orbital.TaskRequest
 	numberOfWorkers int
 }
@@ -30,13 +31,19 @@ var (
 	ErrBufferSizeNegative         = errors.New("buffer size cannot be negative")
 	ErrNumberOfWorkersNotPositive = errors.New("number of workers must be greater than 0")
 	ErrResponderNil               = errors.New("responder cannot be nil")
+	ErrProcessFuncNil             = errors.New("process func cannot be nil")
 )
 
-// New creates a Runner backed by the given Responder.
+var _ orbital.Runner = (*Runner)(nil)
+
+// New creates a Runner backed by the given Responder and ProcessFunc.
 // Defaults: buffer size 100, 10 workers.
-func New(client orbital.Responder, opts ...Option) (*Runner, error) {
+func New(client orbital.Responder, process orbital.ProcessFunc, opts ...Option) (*Runner, error) {
 	if client == nil {
 		return nil, ErrResponderNil
+	}
+	if process == nil {
+		return nil, ErrProcessFuncNil
 	}
 
 	c := config{
@@ -51,6 +58,7 @@ func New(client orbital.Responder, opts ...Option) (*Runner, error) {
 
 	return &Runner{
 		client:          client,
+		process:         process,
 		requests:        make(chan orbital.TaskRequest, c.bufferSize),
 		numberOfWorkers: c.numberOfWorkers,
 	}, nil
@@ -81,12 +89,14 @@ func WithNumberOfWorkers(num int) Option {
 }
 
 // Run spawns one listener goroutine and numberOfWorkers worker goroutines,
-// then returns. Cancellation of ctx stops all of them.
-func (r *Runner) Run(ctx context.Context, process orbital.ProcessFunc) {
+// then blocks until ctx is cancelled.
+func (r *Runner) Run(ctx context.Context) error {
 	go r.startListening(ctx)
 	for range r.numberOfWorkers {
-		go r.worker(ctx, process)
+		go r.worker(ctx)
 	}
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 func (r *Runner) startListening(ctx context.Context) {
@@ -111,13 +121,13 @@ func (r *Runner) startListening(ctx context.Context) {
 	}
 }
 
-func (r *Runner) worker(ctx context.Context, process orbital.ProcessFunc) {
+func (r *Runner) worker(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case req := <-r.requests:
-			resp, err := process(ctx, req)
+			resp, err := r.process(ctx, req)
 			if err != nil {
 				slogctx.Error(ctx, "failed to process task request", "error", err, "taskId", req.TaskID, "etag", req.ETag)
 				continue

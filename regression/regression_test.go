@@ -48,7 +48,7 @@ func TestNewRegression(t *testing.T) {
 			op, err := NewOperatorTracker(ctxCancel, env, operatorName)
 			require.NoError(t, err)
 			optTrackers = append(optTrackers, op)
-			go op.operator.ListenAndRespond(ctxCancel)
+			go func() { assert.ErrorIs(t, op.operator.ListenAndRespond(ctxCancel), context.Canceled) }()
 		}
 
 		defer func() {

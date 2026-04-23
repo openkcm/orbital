@@ -31,20 +31,28 @@ func main() {
 	handleErr("initializing responder", err)
 	defer client.Close(ctx)
 
-	// Initialize runner
-	runner, err := async.New(client)
-	handleErr("initializing runner", err)
-
-	// Initialize an orbital operator that uses the responder
-	operator, err := orbital.NewOperator(orbital.TargetOperator{Runner: runner})
-	handleErr("initializing operator", err)
+	// Initialize the processor for handling task requests
+	processor, err := orbital.NewProcessor(orbital.ProcessorConfig{})
+	handleErr("initializing processor", err)
 
 	// Register a handler for the "example" task type
-	err = operator.RegisterHandler("example", handlerExample)
+	err = processor.RegisterHandler("example", handlerExample)
 	handleErr("registering handler", err)
 
+	// Initialize runner with the processor's Process function
+	runner, err := async.New(client, processor.Process)
+	handleErr("initializing runner", err)
+
+	// Initialize an orbital operator that composes the processor and runner
+	operator, err := orbital.NewOperator(processor, runner)
+	handleErr("initializing operator", err)
+
 	// Start the operator to listen for task requests and respond
-	operator.ListenAndRespond(ctx)
+	go func() {
+		if err := operator.ListenAndRespond(ctx); err != nil {
+			log.Printf("operator stopped: %v", err)
+		}
+	}()
 
 	// Send a task request to the operator via the AMQP message broker and wait for the response
 	sendAndReceive(ctx)
