@@ -13,7 +13,6 @@ import (
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/client/amqp"
-	"github.com/openkcm/orbital/runner/async"
 )
 
 // ManagerTracker tracks the state and statistics of a Manager instance
@@ -176,17 +175,7 @@ func NewOperatorTracker(ctx context.Context, env *testEnvironment, name string) 
 
 	tracker.client = client
 
-	processor, err := orbital.NewProcessor(orbital.ProcessorConfig{})
-	if err != nil {
-		return tracker, fmt.Errorf("failed to create processor: %w", err)
-	}
-
-	runner, err := async.New(client, processor.Process)
-	if err != nil {
-		return tracker, fmt.Errorf("failed to create async runner: %w", err)
-	}
-
-	operator, err := orbital.NewOperator(processor, runner)
+	operator, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	if err != nil {
 		return tracker, fmt.Errorf("failed to create operator: %w", err)
 	}

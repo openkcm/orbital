@@ -10,7 +10,6 @@ import (
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/client/amqp"
 	"github.com/openkcm/orbital/codec"
-	"github.com/openkcm/orbital/runner/async"
 )
 
 // This example uses RabbitMQ as an AMQP message broker.
@@ -31,27 +30,18 @@ func main() {
 	handleErr("initializing responder", err)
 	defer client.Close(ctx)
 
-	// Initialize the processor for handling task requests
-	processor, err := orbital.NewProcessor(orbital.ProcessorConfig{})
-	handleErr("initializing processor", err)
-
-	// Register a handler for the "example" task type
-	err = processor.RegisterHandler("example", handlerExample)
-	handleErr("registering handler", err)
-
-	// Initialize runner with the processor's Process function
-	runner, err := async.New(client, processor.Process)
-	handleErr("initializing runner", err)
-
-	// Initialize an orbital operator that composes the processor and runner
-	operator, err := orbital.NewOperator(processor, runner)
+	// Initialize an orbital operator that uses the responder
+	operator, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	handleErr("initializing operator", err)
 
-	// Start the operator to listen for task requests and respond
+	// Register a handler for the "example" task type
+	err = operator.RegisterHandler("example", handlerExample)
+	handleErr("registering handler", err)
+
+	// ListenAndRespond blocks (like http.ListenAndServe), so run it
+	// in a goroutine since this example also sends a request below.
 	go func() {
-		if err := operator.ListenAndRespond(ctx); err != nil {
-			log.Printf("operator stopped: %v", err)
-		}
+		log.Fatal(operator.ListenAndRespond(ctx))
 	}()
 
 	// Send a task request to the operator via the AMQP message broker and wait for the response

@@ -55,11 +55,34 @@ type Initiator interface {
 	Close(ctx context.Context) error
 }
 
-// Responder defines the methods for receiving task requests and sending task responses.
+// Responder is the base interface for any transport that can be closed.
 type Responder interface {
+	Close(ctx context.Context) error
+}
+
+// AsyncResponder is a half-duplex messaging transport (e.g. AMQP, Solace).
+// The operator pulls requests and pushes responses via a worker pool.
+type AsyncResponder interface {
+	Responder
 	ReceiveTaskRequest(ctx context.Context) (TaskRequest, error)
 	SendTaskResponse(ctx context.Context, response TaskResponse) error
-	Close(ctx context.Context) error
+}
+
+// SyncResponder is a request/response transport (e.g. gRPC).
+// Run blocks, calling handler for each inbound request.
+type SyncResponder interface {
+	Responder
+	Run(ctx context.Context, handler TaskRequestHandler) error
+}
+
+// TargetOperator holds the client and cryptographic implementation for responding
+// to tasks. It provides access to the Responder for communication,
+// Signer and Verifier for signing and verification operations.
+type TargetOperator struct {
+	Client             Responder
+	Verifier           TaskRequestVerifier
+	Signer             TaskResponseSigner
+	MustCheckSignature bool
 }
 
 // Signature represents the metadata used for signing and verifying requests.

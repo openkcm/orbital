@@ -21,7 +21,7 @@ type (
 	}
 )
 
-var _ orbital.Responder = &Responder{}
+var _ orbital.AsyncResponder = &Responder{}
 
 // NewResponder creates a new Responder instance.
 // It allows options to configure the buffer size of the input and output channel.

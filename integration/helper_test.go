@@ -21,7 +21,6 @@ import (
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/client/amqp"
 	"github.com/openkcm/orbital/codec"
-	"github.com/openkcm/orbital/runner/async"
 	"github.com/openkcm/orbital/store/sql"
 )
 
@@ -238,20 +237,10 @@ func createAndStartManager(ctx context.Context, t *testing.T, store *sql.SQL, co
 }
 
 // createAndStartOperator creates and starts an operator instance.
-func createAndStartOperator(ctx context.Context, t *testing.T, client orbital.Responder, config operatorConfig) error {
+func createAndStartOperator(ctx context.Context, t *testing.T, client orbital.AsyncResponder, config operatorConfig) error {
 	t.Helper()
 
-	processor, err := orbital.NewProcessor(orbital.ProcessorConfig{})
-	if err != nil {
-		return fmt.Errorf("failed to create processor: %w", err)
-	}
-
-	runner, err := async.New(client, processor.Process)
-	if err != nil {
-		return err
-	}
-
-	operator, err := orbital.NewOperator(processor, runner)
+	operator, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	if err != nil {
 		return fmt.Errorf("failed to create operator: %w", err)
 	}
@@ -259,10 +248,10 @@ func createAndStartOperator(ctx context.Context, t *testing.T, client orbital.Re
 	return addHandlerAndListen(ctx, t, config, operator)
 }
 
-func createAndStartOperatorWithTarget(ctx context.Context, t *testing.T, processor *orbital.Processor, runner orbital.Runner, config operatorConfig) error {
+func createAndStartOperatorWithTarget(ctx context.Context, t *testing.T, target orbital.TargetOperator, config operatorConfig) error {
 	t.Helper()
 
-	operator, err := orbital.NewOperator(processor, runner)
+	operator, err := orbital.NewOperator(target)
 	if err != nil {
 		return fmt.Errorf("failed to create operator: %w", err)
 	}

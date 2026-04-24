@@ -11,54 +11,58 @@ import (
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/respondertest"
-	"github.com/openkcm/orbital/runner/async"
 )
 
-func newProcessorAndRunner(t *testing.T, client orbital.Responder) (*orbital.Processor, *async.Runner) {
-	t.Helper()
-	processor, err := orbital.NewProcessor(orbital.ProcessorConfig{})
-	require.NoError(t, err)
-	runner, err := async.New(client, processor.Process)
-	require.NoError(t, err)
-	return processor, runner
-}
-
 func TestOperator_NewOperator(t *testing.T) {
-	t.Run("should return error if processor is nil", func(t *testing.T) {
+	t.Run("should return error if MustCheckSignature is true but Verifier is nil", func(t *testing.T) {
 		client := respondertest.NewResponder()
-		_, runner := newProcessorAndRunner(t, client)
-
-		actResult, actErr := orbital.NewOperator(nil, runner)
+		actResult, actErr := orbital.NewOperator(orbital.TargetOperator{
+			Client:             client,
+			MustCheckSignature: true,
+		})
 		assert.Nil(t, actResult)
 		assert.ErrorIs(t, actErr, orbital.ErrOperatorInvalidConfig)
-		assert.ErrorIs(t, actErr, orbital.ErrProcessorNil)
-	})
-
-	t.Run("should return error if runner is nil", func(t *testing.T) {
-		processor, err := orbital.NewProcessor(orbital.ProcessorConfig{})
-		require.NoError(t, err)
-
-		actResult, actErr := orbital.NewOperator(processor, nil)
-		assert.Nil(t, actResult)
-		assert.ErrorIs(t, actErr, orbital.ErrOperatorInvalidConfig)
-		assert.ErrorIs(t, actErr, orbital.ErrRunnerNil)
 	})
 
 	t.Run("valid", func(t *testing.T) {
 		client := respondertest.NewResponder()
-		processor, runner := newProcessorAndRunner(t, client)
-
-		o, err := orbital.NewOperator(processor, runner)
+		o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 		assert.NoError(t, err)
 		assert.NotNil(t, o)
+	})
+
+	t.Run("WithBufferSize", func(t *testing.T) {
+		client := respondertest.NewResponder()
+		o, err := orbital.NewOperator(orbital.TargetOperator{Client: client}, orbital.WithBufferSize(50))
+		assert.NoError(t, err)
+		assert.NotNil(t, o)
+	})
+
+	t.Run("WithBufferSize negative", func(t *testing.T) {
+		client := respondertest.NewResponder()
+		o, err := orbital.NewOperator(orbital.TargetOperator{Client: client}, orbital.WithBufferSize(-1))
+		assert.Nil(t, o)
+		assert.ErrorIs(t, err, orbital.ErrBufferSizeNegative)
+	})
+
+	t.Run("WithNumberOfWorkers", func(t *testing.T) {
+		client := respondertest.NewResponder()
+		o, err := orbital.NewOperator(orbital.TargetOperator{Client: client}, orbital.WithNumberOfWorkers(5))
+		assert.NoError(t, err)
+		assert.NotNil(t, o)
+	})
+
+	t.Run("WithNumberOfWorkers zero", func(t *testing.T) {
+		client := respondertest.NewResponder()
+		o, err := orbital.NewOperator(orbital.TargetOperator{Client: client}, orbital.WithNumberOfWorkers(0))
+		assert.Nil(t, o)
+		assert.ErrorIs(t, err, orbital.ErrNumberOfWorkersNotPositive)
 	})
 }
 
 func TestRegisterHandler(t *testing.T) {
 	client := respondertest.NewResponder()
-	processor, runner := newProcessorAndRunner(t, client)
-
-	o, err := orbital.NewOperator(processor, runner)
+	o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	require.NoError(t, err)
 
 	h := func(_ context.Context, _ orbital.HandlerRequest, _ *orbital.HandlerResponse) {}
@@ -99,9 +103,7 @@ func TestRegisterHandler(t *testing.T) {
 
 func TestListenAndRespond_UnknownTaskType(t *testing.T) {
 	client := respondertest.NewResponder()
-	processor, runner := newProcessorAndRunner(t, client)
-
-	o, err := orbital.NewOperator(processor, runner)
+	o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -157,9 +159,7 @@ func TestListenAndRespond(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client := respondertest.NewResponder()
-			processor, runner := newProcessorAndRunner(t, client)
-
-			o, err := orbital.NewOperator(processor, runner)
+			o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 			require.NoError(t, err)
 
 			ctx, cancel := context.WithCancel(t.Context())
@@ -205,9 +205,7 @@ func TestListenAndRespond(t *testing.T) {
 
 func TestListenAndRespond_WorkingState(t *testing.T) {
 	client := respondertest.NewResponder()
-	processor, runner := newProcessorAndRunner(t, client)
-
-	o, err := orbital.NewOperator(processor, runner)
+	o, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -329,20 +327,32 @@ func TestListenAndRespond_WorkingState(t *testing.T) {
 	}
 }
 
+func TestListenAndRespond_UnsupportedResponder(t *testing.T) {
+	o, err := orbital.NewOperator(orbital.TargetOperator{Client: &unsupportedResponder{}})
+	require.NoError(t, err)
+
+	err = o.ListenAndRespond(t.Context())
+	assert.ErrorIs(t, err, orbital.ErrUnsupportedResponder)
+}
+
+type unsupportedResponder struct{}
+
+func (u *unsupportedResponder) Close(_ context.Context) error { return nil }
+
 type mockResponder struct {
 	FnReceiveTaskRequest func(ctx context.Context) (orbital.TaskRequest, error)
 	FnSendTaskResponse   func(ctx context.Context, response orbital.TaskResponse) error
 	FnClose              func(ctx context.Context) error
 }
 
-var _ orbital.Responder = &mockResponder{}
+var _ orbital.AsyncResponder = &mockResponder{}
 
-// ReceiveTaskRequest implements orbital.Responder.
+// ReceiveTaskRequest implements orbital.AsyncResponder.
 func (m *mockResponder) ReceiveTaskRequest(ctx context.Context) (orbital.TaskRequest, error) {
 	return m.FnReceiveTaskRequest(ctx)
 }
 
-// SendTaskResponse implements orbital.Responder.
+// SendTaskResponse implements orbital.AsyncResponder.
 func (m *mockResponder) SendTaskResponse(ctx context.Context, response orbital.TaskResponse) error {
 	return m.FnSendTaskResponse(ctx, response)
 }

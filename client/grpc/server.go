@@ -17,11 +17,11 @@ import (
 	orbitalv1 "github.com/openkcm/orbital/proto/orbital/v1"
 )
 
+var _ orbital.SyncResponder = (*Server)(nil)
+
 var (
-	// ErrProcessFuncNil is returned by NewServer when given a nil ProcessFunc.
-	ErrProcessFuncNil = errors.New("grpc server: process func cannot be nil")
-	// ErrListenerNil is returned by Run when given a nil net.Listener.
-	ErrListenerNil = errors.New("grpc server: listener cannot be nil")
+	// ErrNilListener is returned by NewServer when given a nil net.Listener.
+	ErrNilListener = errors.New("grpc server: listener cannot be nil")
 )
 
 type (
@@ -32,24 +32,25 @@ type (
 		grpcServerOpts []grpc.ServerOption
 	}
 
-	// Server implements the orbital TaskService gRPC server. It receives
-	// task requests over gRPC, processes them via the provided ProcessFunc,
+	// Server implements the orbital TaskService gRPC server and the
+	// SyncResponder interface. It receives task requests over gRPC,
+	// processes them via the TaskRequestHandler provided to Run,
 	// and returns responses synchronously.
 	Server struct {
 		orbitalv1.UnimplementedTaskServiceServer
 
 		config     serverConfig
+		lis        net.Listener
 		grpcServer *grpc.Server
-		process    orbital.ProcessFunc
+		handler    orbital.TaskRequestHandler
 		stopOnce   sync.Once
 	}
 )
 
-// NewServer creates a gRPC Server that delegates request processing to
-// the given ProcessFunc. The ProcessFunc must be non-nil.
-func NewServer(process orbital.ProcessFunc, opts ...ServerOption) (*Server, error) {
-	if process == nil {
-		return nil, ErrProcessFuncNil
+// NewServer creates a gRPC Server bound to the given listener.
+func NewServer(lis net.Listener, opts ...ServerOption) (*Server, error) {
+	if lis == nil {
+		return nil, ErrNilListener
 	}
 
 	cfg := serverConfig{}
@@ -60,8 +61,8 @@ func NewServer(process orbital.ProcessFunc, opts ...ServerOption) (*Server, erro
 	}
 
 	return &Server{
-		config:  cfg,
-		process: process,
+		config: cfg,
+		lis:    lis,
 	}, nil
 }
 
@@ -74,14 +75,11 @@ func WithServerOptions(opts ...grpc.ServerOption) ServerOption {
 	}
 }
 
-// Run registers the TaskService, starts serving on lis, and blocks until
-// Stop is called or ctx is cancelled. A new grpc.Server is created on
-// each call. Once stopped the Server cannot be restarted.
-func (s *Server) Run(ctx context.Context, lis net.Listener) error {
-	if lis == nil {
-		return ErrListenerNil
-	}
-
+// Run registers the TaskService, starts serving, and blocks until
+// Close is called or ctx is cancelled. A new grpc.Server is created on
+// each call.
+func (s *Server) Run(ctx context.Context, handler orbital.TaskRequestHandler) error {
+	s.handler = handler
 	s.grpcServer = grpc.NewServer(s.config.grpcServerOpts...)
 	orbitalv1.RegisterTaskServiceServer(s.grpcServer, s)
 
@@ -90,15 +88,15 @@ func (s *Server) Run(ctx context.Context, lis net.Listener) error {
 		s.stop()
 	}()
 
-	slogctx.Info(ctx, "grpc server starting", "address", lis.Addr().String())
-	return s.grpcServer.Serve(lis)
+	slogctx.Info(ctx, "grpc server starting", "address", s.lis.Addr().String())
+	return s.grpcServer.Serve(s.lis)
 }
 
-// Stop gracefully stops the gRPC server. If ctx expires before graceful
+// Close gracefully stops the gRPC server. If ctx expires before graceful
 // shutdown completes, it force-stops.
-func (s *Server) Stop(ctx context.Context) {
+func (s *Server) Close(ctx context.Context) error {
 	if s.grpcServer == nil {
-		return
+		return nil
 	}
 
 	stopped := make(chan struct{})
@@ -112,6 +110,7 @@ func (s *Server) Stop(ctx context.Context) {
 	case <-ctx.Done():
 		s.grpcServer.Stop()
 	}
+	return nil
 }
 
 // SendTaskRequest implements orbitalv1.TaskServiceServer.
@@ -121,7 +120,7 @@ func (s *Server) SendTaskRequest(ctx context.Context, pReq *orbitalv1.TaskReques
 		return nil, status.Errorf(codes.InvalidArgument, "invalid task request: %v", err)
 	}
 
-	resp, err := s.process(ctx, req)
+	resp, err := s.handler(ctx, req)
 	if err != nil {
 		return nil, mapProcessError(err)
 	}

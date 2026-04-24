@@ -23,12 +23,12 @@ import (
 
 const serverBufSize = 1024 * 1024
 
-func startTestServer(t *testing.T, process orbital.ProcessFunc) (orbitalv1.TaskServiceClient, *grpcpkg.Server) {
+func startTestServer(t *testing.T, handler orbital.TaskRequestHandler) (orbitalv1.TaskServiceClient, *grpcpkg.Server) {
 	t.Helper()
 
 	lis := bufconn.Listen(serverBufSize)
 
-	srv, err := grpcpkg.NewServer(process)
+	srv, err := grpcpkg.NewServer(lis)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -36,7 +36,7 @@ func startTestServer(t *testing.T, process orbital.ProcessFunc) (orbitalv1.TaskS
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- srv.Run(ctx, lis)
+		errCh <- srv.Run(ctx, handler)
 	}()
 
 	conn, err := grpc.NewClient(
@@ -53,40 +53,25 @@ func startTestServer(t *testing.T, process orbital.ProcessFunc) (orbitalv1.TaskS
 }
 
 func TestNewServer(t *testing.T) {
-	process := func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
-		return orbital.TaskResponse{TaskID: req.TaskID}, nil
-	}
+	lis := bufconn.Listen(serverBufSize)
+	defer lis.Close()
 
-	t.Run("NilProcessFunc", func(t *testing.T) {
+	t.Run("NilListener", func(t *testing.T) {
 		srv, err := grpcpkg.NewServer(nil)
 		assert.Nil(t, srv)
-		assert.ErrorIs(t, err, grpcpkg.ErrProcessFuncNil)
+		assert.ErrorIs(t, err, grpcpkg.ErrNilListener)
 	})
 
 	t.Run("Defaults", func(t *testing.T) {
-		srv, err := grpcpkg.NewServer(process)
+		srv, err := grpcpkg.NewServer(lis)
 		require.NoError(t, err)
 		assert.NotNil(t, srv)
 	})
 
 	t.Run("WithServerOptions", func(t *testing.T) {
-		srv, err := grpcpkg.NewServer(process, grpcpkg.WithServerOptions(grpc.MaxRecvMsgSize(1024)))
+		srv, err := grpcpkg.NewServer(lis, grpcpkg.WithServerOptions(grpc.MaxRecvMsgSize(1024)))
 		require.NoError(t, err)
 		assert.NotNil(t, srv)
-	})
-}
-
-func TestServer_Run(t *testing.T) {
-	process := func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
-		return orbital.TaskResponse{TaskID: req.TaskID}, nil
-	}
-
-	t.Run("NilListener", func(t *testing.T) {
-		srv, err := grpcpkg.NewServer(process)
-		require.NoError(t, err)
-
-		err = srv.Run(t.Context(), nil)
-		assert.ErrorIs(t, err, grpcpkg.ErrListenerNil)
 	})
 }
 
@@ -95,7 +80,7 @@ func TestServer_SendTaskRequest(t *testing.T) {
 		taskID := uuid.New()
 		etag := uuid.New().String()
 
-		process := func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
+		handler := func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
 			return orbital.TaskResponse{
 				TaskID:            req.TaskID,
 				Type:              req.Type,
@@ -108,7 +93,7 @@ func TestServer_SendTaskRequest(t *testing.T) {
 			}, nil
 		}
 
-		stub, _ := startTestServer(t, process)
+		stub, _ := startTestServer(t, handler)
 
 		protoReq := codec.FromTaskRequestToProto(orbital.TaskRequest{
 			TaskID:               taskID,
@@ -136,11 +121,11 @@ func TestServer_SendTaskRequest(t *testing.T) {
 	})
 
 	t.Run("InvalidTaskID", func(t *testing.T) {
-		process := func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
+		handler := func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
 			return orbital.TaskResponse{}, nil
 		}
 
-		stub, _ := startTestServer(t, process)
+		stub, _ := startTestServer(t, handler)
 
 		resp, err := stub.SendTaskRequest(t.Context(), &orbitalv1.TaskRequest{
 			TaskId: "not-a-uuid",
@@ -152,11 +137,11 @@ func TestServer_SendTaskRequest(t *testing.T) {
 	})
 
 	t.Run("ErrSignatureInvalid", func(t *testing.T) {
-		process := func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
+		handler := func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
 			return orbital.TaskResponse{}, orbital.ErrSignatureInvalid
 		}
 
-		stub, _ := startTestServer(t, process)
+		stub, _ := startTestServer(t, handler)
 
 		protoReq := codec.FromTaskRequestToProto(orbital.TaskRequest{
 			TaskID: uuid.New(),
@@ -171,11 +156,11 @@ func TestServer_SendTaskRequest(t *testing.T) {
 	})
 
 	t.Run("ErrResponseSigning", func(t *testing.T) {
-		process := func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
+		handler := func(_ context.Context, _ orbital.TaskRequest) (orbital.TaskResponse, error) {
 			return orbital.TaskResponse{}, orbital.ErrResponseSigning
 		}
 
-		stub, _ := startTestServer(t, process)
+		stub, _ := startTestServer(t, handler)
 
 		protoReq := codec.FromTaskRequestToProto(orbital.TaskRequest{
 			TaskID: uuid.New(),
@@ -190,7 +175,7 @@ func TestServer_SendTaskRequest(t *testing.T) {
 	})
 
 	t.Run("FailedStatusIsNormalResponse", func(t *testing.T) {
-		process := func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
+		handler := func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
 			return orbital.TaskResponse{
 				TaskID:       req.TaskID,
 				Status:       string(orbital.TaskStatusFailed),
@@ -199,7 +184,7 @@ func TestServer_SendTaskRequest(t *testing.T) {
 			}, nil
 		}
 
-		stub, _ := startTestServer(t, process)
+		stub, _ := startTestServer(t, handler)
 
 		protoReq := codec.FromTaskRequestToProto(orbital.TaskRequest{
 			TaskID: uuid.New(),
@@ -214,13 +199,13 @@ func TestServer_SendTaskRequest(t *testing.T) {
 	})
 }
 
-func TestServer_Stop(t *testing.T) {
-	process := func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
+func TestServer_Close(t *testing.T) {
+	handler := func(_ context.Context, req orbital.TaskRequest) (orbital.TaskResponse, error) {
 		return orbital.TaskResponse{TaskID: req.TaskID}, nil
 	}
 
-	t.Run("GracefulStop", func(t *testing.T) {
-		stub, srv := startTestServer(t, process)
+	t.Run("GracefulClose", func(t *testing.T) {
+		stub, srv := startTestServer(t, handler)
 
 		protoReq := codec.FromTaskRequestToProto(orbital.TaskRequest{
 			TaskID: uuid.New(),
@@ -230,50 +215,52 @@ func TestServer_Stop(t *testing.T) {
 		_, err := stub.SendTaskRequest(t.Context(), protoReq)
 		require.NoError(t, err)
 
-		srv.Stop(t.Context())
+		require.NoError(t, srv.Close(t.Context()))
 
 		_, err = stub.SendTaskRequest(t.Context(), protoReq)
 		assert.Error(t, err)
 	})
 
-	t.Run("StopBeforeRun", func(t *testing.T) {
-		srv, err := grpcpkg.NewServer(process)
+	t.Run("CloseBeforeRun", func(t *testing.T) {
+		lis := bufconn.Listen(serverBufSize)
+		defer lis.Close()
+
+		srv, err := grpcpkg.NewServer(lis)
 		require.NoError(t, err)
 
 		assert.NotPanics(t, func() {
-			srv.Stop(t.Context())
+			require.NoError(t, srv.Close(t.Context()))
 		})
 	})
 
-	t.Run("ForceStopOnContextExpiry", func(t *testing.T) {
-		_, srv := startTestServer(t, process)
+	t.Run("ForceCloseOnContextExpiry", func(t *testing.T) {
+		_, srv := startTestServer(t, handler)
 
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 
 		assert.NotPanics(t, func() {
-			srv.Stop(ctx)
+			require.NoError(t, srv.Close(ctx))
 		})
 	})
 
 	t.Run("ContextCancellationStopsServer", func(t *testing.T) {
 		lis := bufconn.Listen(serverBufSize)
 
-		srv, err := grpcpkg.NewServer(process)
+		srv, err := grpcpkg.NewServer(lis)
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(t.Context())
 
 		errCh := make(chan error, 1)
 		go func() {
-			errCh <- srv.Run(ctx, lis)
+			errCh <- srv.Run(ctx, handler)
 		}()
 
 		cancel()
 
 		select {
 		case <-errCh:
-			// Server exited after context cancellation — success.
 		case <-time.After(5 * time.Second):
 			t.Fatal("server did not stop after context cancellation")
 		}

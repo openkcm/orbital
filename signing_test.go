@@ -13,7 +13,6 @@ import (
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/respondertest"
-	"github.com/openkcm/orbital/runner/async"
 )
 
 func TestManager_Signing(t *testing.T) {
@@ -366,13 +365,11 @@ func TestOperator_Signing(t *testing.T) {
 					return nil
 				}
 
-				processor, err := orbital.NewProcessor(orbital.ProcessorConfig{Verifier: mockVerifier, Signer: tt.respSigner})
-				require.NoError(t, err)
-
-				runner, err := async.New(client, processor.Process)
-				require.NoError(t, err)
-
-				o, err := orbital.NewOperator(processor, runner)
+				o, err := orbital.NewOperator(orbital.TargetOperator{
+					Client:   client,
+					Verifier: mockVerifier,
+					Signer:   tt.respSigner,
+				})
 				assert.NoError(t, err)
 				assert.NotNil(t, o)
 
@@ -468,7 +465,7 @@ func TestOperator_Verification(t *testing.T) {
 				name:                 "if signature checking is enabled and no verifier is set, operator initialization should fail",
 				mustCheckSignature:   true,
 				reqVerifier:          nil,
-				expOperatorInitError: orbital.ErrProcessorInvalidConfig,
+				expOperatorInitError: orbital.ErrOperatorInvalidConfig,
 			},
 			{
 				name:               "if signature checking is enabled and the verifier returns an error, the handler should not be called",
@@ -492,7 +489,8 @@ func TestOperator_Verification(t *testing.T) {
 
 				client := respondertest.NewResponder()
 
-				processor, err := orbital.NewProcessor(orbital.ProcessorConfig{
+				o, err := orbital.NewOperator(orbital.TargetOperator{
+					Client:             client,
 					Signer:             respSigner,
 					Verifier:           tt.reqVerifier,
 					MustCheckSignature: tt.mustCheckSignature,
@@ -500,17 +498,10 @@ func TestOperator_Verification(t *testing.T) {
 
 				if tt.expOperatorInitError != nil {
 					assert.ErrorIs(t, err, tt.expOperatorInitError)
-					assert.Nil(t, processor)
+					assert.Nil(t, o)
 					return
 				}
 				require.NoError(t, err)
-
-				runner, err := async.New(client, processor.Process)
-				require.NoError(t, err)
-
-				o, err := orbital.NewOperator(processor, runner)
-				assert.NoError(t, err)
-				assert.NotNil(t, o)
 
 				ctx := t.Context()
 				go func() { assert.ErrorIs(t, o.ListenAndRespond(ctx), context.Canceled) }()
