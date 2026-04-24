@@ -67,6 +67,7 @@ func clearTables(t *testing.T, db *stdsql.DB) {
 	assert.NoError(t, clearTasksTable(ctx, db))
 	assert.NoError(t, clearJobCursorTable(ctx, db))
 	assert.NoError(t, clearJobEventTable(ctx, db))
+	assert.NoError(t, clearJobGroupsTable(ctx, db))
 }
 
 func clearJobTable(ctx context.Context, db *stdsql.DB) error {
@@ -86,6 +87,11 @@ func clearJobCursorTable(ctx context.Context, db *stdsql.DB) error {
 
 func clearJobEventTable(ctx context.Context, db *stdsql.DB) error {
 	_, err := db.ExecContext(ctx, "DELETE FROM job_event")
+	return err
+}
+
+func clearJobGroupsTable(ctx context.Context, db *stdsql.DB) error {
+	_, err := db.ExecContext(ctx, "DELETE FROM job_groups")
 	return err
 }
 

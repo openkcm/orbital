@@ -6,6 +6,7 @@ import (
 
 // Possible job statuses.
 const (
+	JobStatusScheduled       JobStatus = "SCHEDULED"
 	JobStatusCreated         JobStatus = "CREATED"
 	JobStatusConfirming      JobStatus = "CONFIRMING"
 	JobStatusConfirmed       JobStatus = "CONFIRMED"
@@ -17,6 +18,14 @@ const (
 	JobStatusResolveCanceled JobStatus = "RESOLVE_CANCELED"
 	JobStatusConfirmCanceled JobStatus = "CONFIRM_CANCELED"
 	JobStatusUserCanceled    JobStatus = "USER_CANCELED"
+)
+
+// Reserved label keys for job group functionality.
+const (
+	// LabelKeyGroupID is the label key for storing the parent group's UUID.
+	LabelKeyGroupID = "orbital/group-id"
+	// LabelKeyGroupOrderKey is the label key for storing the job's position within the group.
+	LabelKeyGroupOrderKey = "orbital/group-order-key"
 )
 
 type (

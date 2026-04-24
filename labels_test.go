@@ -142,4 +142,134 @@ func TestJob_WithLabels(t *testing.T) {
 
 func TestLabelConstants(t *testing.T) {
 	assert.Equal(t, "orbital/", orbital.LabelPrefixReserved)
+	assert.Equal(t, "orbital/group-id", orbital.LabelKeyGroupID)
+	assert.Equal(t, "orbital/group-order-key", orbital.LabelKeyGroupOrderKey)
+}
+
+func TestMergeLabels(t *testing.T) {
+	t.Run("should merge nil labels", func(t *testing.T) {
+		// when
+		result := orbital.MergeLabels(nil)
+
+		// then
+		assert.NotNil(t, result)
+		assert.Empty(t, result)
+	})
+
+	t.Run("should merge single label", func(t *testing.T) {
+		// given
+		labels := orbital.Labels{"tenant": "acme", "env": "prod"}
+
+		// when
+		result := orbital.MergeLabels(labels)
+
+		// then
+		assert.Equal(t, "acme", result["tenant"])
+		assert.Equal(t, "prod", result["env"])
+		assert.Len(t, result, 2)
+	})
+
+	t.Run("should merge multiple labels", func(t *testing.T) {
+		// given
+		labels1 := orbital.Labels{"tenant": "acme"}
+		labels2 := orbital.Labels{"env": "prod"}
+		labels3 := orbital.Labels{"priority": "high"}
+
+		// when
+		result := orbital.MergeLabels(labels1, labels2, labels3)
+
+		// then
+		assert.Equal(t, "acme", result["tenant"])
+		assert.Equal(t, "prod", result["env"])
+		assert.Equal(t, "high", result["priority"])
+		assert.Len(t, result, 3)
+	})
+
+	t.Run("should override with later label", func(t *testing.T) {
+		// given
+		labels1 := orbital.Labels{"key": "first", "other": "value"}
+		labels2 := orbital.Labels{"key": "second"}
+
+		// when
+		result := orbital.MergeLabels(labels1, labels2)
+
+		// then
+		assert.Equal(t, "second", result["key"])  // Overridden
+		assert.Equal(t, "value", result["other"]) // Kept from first
+		assert.Len(t, result, 2)
+	})
+
+	t.Run("should not modify original label", func(t *testing.T) {
+		// given
+		labels1 := orbital.Labels{"tenant": "acme"}
+		labels2 := orbital.Labels{"env": "prod"}
+
+		// when
+		result := orbital.MergeLabels(labels1, labels2)
+
+		// then
+		assert.Len(t, labels1, 1) // Original unchanged
+		assert.Len(t, labels2, 1) // Original unchanged
+		assert.Len(t, result, 2)  // New map has 2 entries
+	})
+
+	t.Run("should skip nil labels in variadic args", func(t *testing.T) {
+		// given
+		labels := orbital.Labels{"tenant": "acme"}
+
+		// when
+		result := orbital.MergeLabels(nil, labels, nil)
+
+		// then
+		assert.Equal(t, "acme", result["tenant"])
+		assert.Len(t, result, 1)
+	})
+
+	t.Run("should handle empty labels", func(t *testing.T) {
+		// given
+		labels1 := orbital.Labels{}
+		labels2 := orbital.Labels{"tenant": "acme"}
+
+		// when
+		result := orbital.MergeLabels(labels1, labels2)
+
+		// then
+		assert.Equal(t, "acme", result["tenant"])
+		assert.Len(t, result, 1)
+	})
+}
+
+func TestLabels_ToJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		labels   orbital.Labels
+		expected string
+	}{
+		{
+			name:     "nil labels",
+			labels:   nil,
+			expected: "null",
+		},
+		{
+			name:     "empty labels",
+			labels:   orbital.Labels{},
+			expected: "{}",
+		},
+		{
+			name:     "single label",
+			labels:   orbital.Labels{"tenant": "acme"},
+			expected: `{"tenant":"acme"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// when
+			result, err := tt.labels.ToJSON()
+
+			// then
+			assert.NoError(t, err)
+			assert.JSONEq(t, tt.expected, string(result))
+		})
+	}
 }

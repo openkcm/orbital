@@ -111,6 +111,8 @@ func ToCanonicalData[T TaskRequest | TaskResponse](in T) ([]byte, error) {
 	return toCanonicalData(in)
 }
 
-func ResolveLabels(values map[string]any, key string) (Labels, error) {
-	return resolveLabels(values, key)
-}
+var (
+	ResolveLabels        = resolveLabels
+	MergeLabels          = mergeLabels
+	SortJobsByGroupOrder = sortJobsByGroupOrder
+)

@@ -111,10 +111,12 @@ func (r *Repository) updateJob(ctx context.Context, job Job) error {
 func (r *Repository) listJobs(ctx context.Context, jobsQuery ListJobsQuery) ([]Job, error) {
 	q := query.Query{
 		EntityName: query.EntityNameJobs,
-		Clauses: []query.Clause{
-			query.ClauseWithCreatedBefore(jobsQuery.CreatedAt),
-		},
-		Limit: jobsQuery.Limit,
+		Clauses:    []query.Clause{},
+		Limit:      jobsQuery.Limit,
+	}
+
+	if jobsQuery.CreatedAt > 0 {
+		q.Clauses = append(q.Clauses, query.ClauseWithCreatedBefore(jobsQuery.CreatedAt))
 	}
 
 	if string(jobsQuery.Status) != "" {
@@ -436,4 +438,34 @@ func (r *Repository) getJobForUpdate(ctx context.Context, id uuid.UUID) (Job, bo
 	}
 
 	return *job, true, nil
+}
+
+// createJobGroup creates a new job group entity in the repository.
+// It takes a context and a JobGroup object as input and returns the created JobGroup object or an error if the operation fails.
+func (r *Repository) createJobGroup(ctx context.Context, group JobGroup) (JobGroup, error) {
+	return createEntity(ctx, group, r)
+}
+
+// getJobGroup retrieves a job group entity from the repository by its ID.
+// It takes a context and a UUID as input and returns the JobGroup entity,
+// a boolean indicating if the job group was found, and an error if the operation fails.
+func (r *Repository) getJobGroup(ctx context.Context, id uuid.UUID) (JobGroup, bool, error) {
+	group, err := getEntity[JobGroup](ctx, r,
+		query.Query{
+			EntityName: query.EntityNameJobGroups,
+			Clauses:    []query.Clause{query.ClauseWithID(id)},
+		})
+	if err != nil || group == nil {
+		return JobGroup{}, false, err
+	}
+
+	return *group, true, nil
+}
+
+// listJobsByGroupID retrieves all jobs belonging to a specific job group.
+// It takes a context and a group UUID as input and returns a slice of Job entities or an error if the operation fails.
+func (r *Repository) listJobsByGroupID(ctx context.Context, groupID uuid.UUID) ([]Job, error) {
+	return r.listJobs(ctx, ListJobsQuery{
+		Labels: Labels{LabelKeyGroupID: groupID.String()},
+	})
 }

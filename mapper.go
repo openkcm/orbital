@@ -19,20 +19,19 @@ var (
 
 // TransformToEntities transforms a list of maps into domain entities based on the provided entity name.
 func TransformToEntities(entityName query.EntityName, objs ...map[string]any) ([]Entity, error) {
-	switch entityName {
-	case query.EntityNameJobs, query.EntityNameTasks, query.EntityNameJobCursor, query.EntityNameJobEvent:
-		result := make([]Entity, 0, len(objs))
-		for _, r := range objs {
-			entity, err := TransformToEntity(entityName, r)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, entity)
-		}
-		return result, nil
-	default:
+	if _, ok := query.ValidEntityNames[entityName]; !ok {
 		return nil, fmt.Errorf("%w `%s` not supported", ErrInvalidEntityType, entityName)
 	}
+
+	result := make([]Entity, 0, len(objs))
+	for _, r := range objs {
+		entity, err := TransformToEntity(entityName, r)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, entity)
+	}
+	return result, nil
 }
 
 // TransformToEntity transforms a map into a domain entity based on the provided entity name.
@@ -114,13 +113,9 @@ func Encodes[T EntityTypes](entityTypes ...T) ([]Entity, error) {
 func Encode[T EntityTypes](entityType T) (Entity, error) {
 	switch obj := any(entityType).(type) {
 	case Job:
-		var labelsJSON []byte
-		if obj.Labels != nil {
-			var err error
-			labelsJSON, err = json.Marshal(obj.Labels)
-			if err != nil {
-				return Entity{}, err
-			}
+		labelsJSON, err := obj.Labels.ToJSON()
+		if err != nil {
+			return Entity{}, err
 		}
 		return Entity{
 			Name:      query.EntityNameJobs,
@@ -190,6 +185,26 @@ func Encode[T EntityTypes](entityType T) (Entity, error) {
 				"created_at":  obj.CreatedAt,
 			},
 		}, nil
+	case JobGroup:
+		labelsJSON, err := obj.Labels.ToJSON()
+		if err != nil {
+			return Entity{}, err
+		}
+		return Entity{
+			Name:      query.EntityNameJobGroups,
+			ID:        obj.ID,
+			UpdatedAt: obj.UpdatedAt,
+			CreatedAt: obj.CreatedAt,
+			Values: map[string]any{
+				"id":            obj.ID,
+				"type":          obj.Type,
+				"status":        obj.Status,
+				"error_message": obj.ErrorMessage,
+				"updated_at":    obj.UpdatedAt,
+				"created_at":    obj.CreatedAt,
+				"labels":        labelsJSON,
+			},
+		}, nil
 	default:
 		return Entity{}, fmt.Errorf("%w `%T` not supported", ErrInvalidEntityType, obj)
 	}
@@ -220,6 +235,8 @@ func Decode[T EntityTypes](entity Entity) (T, error) {
 		return decodeJobCursor[T](entity)
 	case JobEvent:
 		return decodeJobEvent[T](entity)
+	case JobGroup:
+		return decodeJobGroup[T](entity)
 	default:
 		return out, fmt.Errorf("%w `%T` not supported", ErrInvalidEntityType, typ)
 	}
@@ -241,6 +258,30 @@ func decodeJobEvent[T EntityTypes](entity Entity) (T, error) {
 		return empty, err
 	}
 	j.IsNotified = isNotified
+	return out, nil
+}
+
+func decodeJobGroup[T EntityTypes](e Entity) (T, error) {
+	var out, empty T
+	group, ok := any(&out).(*JobGroup)
+	if !ok {
+		return empty, fmt.Errorf("%w `%T` not supported", ErrInvalidEntityType, group)
+	}
+	group.ID, group.CreatedAt, group.UpdatedAt = e.ID, e.CreatedAt, e.UpdatedAt
+	vals := e.Values
+	var err error
+	if group.Type, err = resolve[string](vals, "type"); err != nil {
+		return empty, err
+	}
+	if group.Status, err = resolveType[GroupStatus](vals, "status"); err != nil {
+		return empty, err
+	}
+	if group.ErrorMessage, err = resolve[string](vals, "error_message"); err != nil {
+		return empty, err
+	}
+	if group.Labels, err = resolveLabels(vals, "labels"); err != nil {
+		return empty, err
+	}
 	return out, nil
 }
 

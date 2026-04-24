@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1506,6 +1507,198 @@ func TestManagerStop_GracefulShutdown(t *testing.T) {
 		assert.NoError(t, err)
 
 		assert.Equal(t, int32(3), closeCallCount.Load())
+	})
+}
+
+func TestPrepareJobGroup(t *testing.T) {
+	tests := []struct {
+		name     string
+		group    orbital.JobGroup
+		expGroup orbital.JobGroup
+		expErr   error
+	}{
+		{
+			name: "should create job group with jobs in correct order",
+			group: orbital.JobGroup{
+				Type:   "batch-sync",
+				Labels: orbital.Labels{"env": "prod"},
+				Jobs: []orbital.Job{
+					{Type: "job-type", Data: []byte("job-1")},
+					{Type: "job-type", Data: []byte("job-2")},
+					{Type: "job-type", Data: []byte("job-3")},
+				},
+			},
+			expGroup: orbital.JobGroup{
+				Type:   "batch-sync",
+				Status: orbital.GroupStatusCreated,
+				Labels: orbital.Labels{"env": "prod"},
+				Jobs: []orbital.Job{
+					{Type: "job-type", Status: orbital.JobStatusScheduled},
+					{Type: "job-type", Status: orbital.JobStatusScheduled},
+					{Type: "job-type", Status: orbital.JobStatusScheduled},
+				},
+			},
+			expErr: nil,
+		},
+		{
+			name: "should merge user labels with group labels on jobs",
+			group: orbital.JobGroup{
+				Type: "batch-sync",
+				Jobs: []orbital.Job{
+					{Type: "job-type", Data: []byte("job-1"), Labels: orbital.Labels{"user-key": "user-value"}},
+				},
+			},
+			expGroup: orbital.JobGroup{
+				Type:   "batch-sync",
+				Status: orbital.GroupStatusCreated,
+				Jobs: []orbital.Job{
+					{Type: "job-type", Status: orbital.JobStatusScheduled, Labels: orbital.Labels{"user-key": "user-value"}},
+				},
+			},
+			expErr: nil,
+		},
+		{
+			name: "should return error when no jobs provided",
+			group: orbital.JobGroup{
+				Type: "batch-sync",
+				Jobs: []orbital.Job{},
+			},
+			expErr: orbital.ErrJobGroupEmpty,
+		},
+		{
+			name: "should return error when group labels have reserved prefix",
+			group: orbital.JobGroup{
+				Type:   "batch-sync",
+				Labels: orbital.Labels{"orbital/custom": "value"},
+				Jobs: []orbital.Job{
+					{Type: "job-type", Data: []byte("job-1")},
+				},
+			},
+			expErr: orbital.ErrReservedLabelPrefix,
+		},
+		{
+			name: "should return error when job labels have reserved prefix",
+			group: orbital.JobGroup{
+				Type: "batch-sync",
+				Jobs: []orbital.Job{
+					{Type: "job-type", Data: []byte("job-1"), Labels: orbital.Labels{"orbital/custom": "value"}},
+				},
+			},
+			expErr: orbital.ErrReservedLabelPrefix,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// given
+			db, store := createSQLStore(t)
+			defer clearTables(t, db)
+			repo := orbital.NewRepository(store)
+
+			subj, err := orbital.NewManager(repo, mockTaskResolveFunc())
+			assert.NoError(t, err)
+
+			ctx := t.Context()
+
+			// when
+			result, err := subj.PrepareJobGroup(ctx, tt.group)
+
+			// then
+			if tt.expErr != nil {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, tt.expErr)
+				assert.Equal(t, uuid.Nil, result.ID)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.NotEqual(t, uuid.Nil, result.ID)
+			assert.NotZero(t, result.CreatedAt)
+			assert.NotZero(t, result.UpdatedAt)
+			assert.Equal(t, tt.expGroup.Type, result.Type)
+			assert.Equal(t, tt.expGroup.Status, result.Status)
+			assert.Equal(t, tt.expGroup.Labels, result.Labels)
+
+			assert.Len(t, result.Jobs, len(tt.expGroup.Jobs))
+			for i, job := range result.Jobs {
+				assert.NotEqual(t, uuid.Nil, job.ID)
+				assert.NotZero(t, job.CreatedAt)
+				assert.NotZero(t, job.UpdatedAt)
+				assert.Equal(t, tt.expGroup.Jobs[i].Type, job.Type)
+				assert.Equal(t, tt.expGroup.Jobs[i].Status, job.Status)
+				assert.Equal(t, result.ID.String(), job.Labels[orbital.LabelKeyGroupID])
+				assert.Equal(t, strconv.Itoa(i), job.Labels[orbital.LabelKeyGroupOrderKey])
+				// verify user-provided labels are preserved
+				for k, v := range tt.expGroup.Jobs[i].Labels {
+					assert.Equal(t, v, job.Labels[k])
+				}
+			}
+		})
+	}
+}
+
+func TestGetJobGroup(t *testing.T) {
+	t.Run("should return job group with jobs in correct order", func(t *testing.T) {
+		// given
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		subj, err := orbital.NewManager(repo, mockTaskResolveFunc())
+		assert.NoError(t, err)
+
+		ctx := t.Context()
+
+		// Create a job group
+		group := orbital.JobGroup{
+			Type:   "batch-sync",
+			Labels: orbital.Labels{"env": "prod"},
+			Jobs: []orbital.Job{
+				{Type: "job-type", Data: []byte("job-1")},
+				{Type: "job-type", Data: []byte("job-2")},
+				{Type: "job-type", Data: []byte("job-3")},
+			},
+		}
+
+		created, err := subj.PrepareJobGroup(ctx, group)
+		assert.NoError(t, err)
+
+		// when
+		result, found, err := subj.GetJobGroup(ctx, created.ID)
+
+		// then
+		assert.NoError(t, err)
+		assert.True(t, found)
+		assert.Equal(t, created.ID, result.ID)
+		assert.Equal(t, "batch-sync", result.Type)
+		assert.Equal(t, orbital.GroupStatusCreated, result.Status)
+		assert.Equal(t, orbital.Labels{"env": "prod"}, result.Labels)
+
+		assert.Len(t, result.Jobs, 3)
+		for i, job := range result.Jobs {
+			assert.Equal(t, strconv.Itoa(i), job.Labels[orbital.LabelKeyGroupOrderKey])
+			assert.Equal(t, created.Jobs[i].ID, job.ID)
+		}
+	})
+
+	t.Run("should return not found for non-existent group", func(t *testing.T) {
+		// given
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		subj, err := orbital.NewManager(repo, mockTaskResolveFunc())
+		assert.NoError(t, err)
+
+		ctx := t.Context()
+
+		// when
+		result, found, err := subj.GetJobGroup(ctx, uuid.New())
+
+		// then
+		assert.NoError(t, err)
+		assert.False(t, found)
+		assert.Equal(t, uuid.Nil, result.ID)
 	})
 }
 
