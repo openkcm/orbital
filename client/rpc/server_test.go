@@ -1,4 +1,4 @@
-package grpc_test
+package rpc_test
 
 import (
 	"context"
@@ -16,19 +16,19 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/openkcm/orbital"
-	grpcpkg "github.com/openkcm/orbital/client/grpc"
+	"github.com/openkcm/orbital/client/rpc"
 	"github.com/openkcm/orbital/codec"
 	orbitalv1 "github.com/openkcm/orbital/proto/orbital/v1"
 )
 
 const serverBufSize = 1024 * 1024
 
-func startTestServer(t *testing.T, handler orbital.TaskRequestHandler) (orbitalv1.TaskServiceClient, *grpcpkg.Server) {
+func startTestServer(t *testing.T, handler orbital.TaskRequestHandler) (orbitalv1.TaskServiceClient, *rpc.Server) {
 	t.Helper()
 
 	lis := bufconn.Listen(serverBufSize)
 
-	srv, err := grpcpkg.NewServer(lis)
+	srv, err := rpc.NewServer(lis)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -57,19 +57,19 @@ func TestNewServer(t *testing.T) {
 	defer lis.Close()
 
 	t.Run("NilListener", func(t *testing.T) {
-		srv, err := grpcpkg.NewServer(nil)
+		srv, err := rpc.NewServer(nil)
 		assert.Nil(t, srv)
-		assert.ErrorIs(t, err, grpcpkg.ErrNilListener)
+		assert.ErrorIs(t, err, rpc.ErrNilListener)
 	})
 
 	t.Run("Defaults", func(t *testing.T) {
-		srv, err := grpcpkg.NewServer(lis)
+		srv, err := rpc.NewServer(lis)
 		require.NoError(t, err)
 		assert.NotNil(t, srv)
 	})
 
 	t.Run("WithServerOptions", func(t *testing.T) {
-		srv, err := grpcpkg.NewServer(lis, grpcpkg.WithServerOptions(grpc.MaxRecvMsgSize(1024)))
+		srv, err := rpc.NewServer(lis, rpc.WithServerOptions(grpc.MaxRecvMsgSize(1024)))
 		require.NoError(t, err)
 		assert.NotNil(t, srv)
 	})
@@ -225,7 +225,7 @@ func TestServer_Close(t *testing.T) {
 		lis := bufconn.Listen(serverBufSize)
 		defer lis.Close()
 
-		srv, err := grpcpkg.NewServer(lis)
+		srv, err := rpc.NewServer(lis)
 		require.NoError(t, err)
 
 		assert.NotPanics(t, func() {
@@ -247,7 +247,7 @@ func TestServer_Close(t *testing.T) {
 	t.Run("ContextCancellationStopsServer", func(t *testing.T) {
 		lis := bufconn.Listen(serverBufSize)
 
-		srv, err := grpcpkg.NewServer(lis)
+		srv, err := rpc.NewServer(lis)
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(t.Context())

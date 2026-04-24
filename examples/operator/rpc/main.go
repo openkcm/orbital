@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/openkcm/orbital"
-	grpcserver "github.com/openkcm/orbital/client/grpc"
+	"github.com/openkcm/orbital/client/rpc"
 )
 
 func main() {
@@ -16,7 +16,7 @@ func main() {
 	lis, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "localhost:50051")
 	handleErr("creating listener", err)
 
-	srv, err := grpcserver.NewServer(lis)
+	srv, err := rpc.NewServer(lis)
 	handleErr("creating grpc server", err)
 
 	operator, err := orbital.NewOperator(orbital.TargetOperator{Client: srv})
