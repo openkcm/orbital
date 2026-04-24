@@ -96,7 +96,10 @@ func setupEnv(ctx context.Context, t *testing.T, dbName string) (*testEnvironmen
 	errGrp.Go(func() error {
 		t.Log("Starting RabbitMQ container...")
 
-		rabbitContainer, err := rabbitmq.Run(ctx, "rabbitmq:4-management",
+		// Pin to 4.2 to avoid breaking changes in 4.3+ where AMQP 1.0 v1 address format
+		// is denied by default and v2 format requires queues to be pre-created.
+		// See: https://www.rabbitmq.com/docs/amqp#address-v2
+		rabbitContainer, err := rabbitmq.Run(ctx, "rabbitmq:4.2-management",
 			testcontainers.WithWaitStrategy(
 				wait.ForAll(
 					wait.ForLog("Server startup complete").WithStartupTimeout(60*time.Second),
