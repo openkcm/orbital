@@ -623,7 +623,10 @@ func TestReceiveTaskResponse(t *testing.T) {
 
 func startRabbitMQ(ctx context.Context, opts ...containerOpts) (testcontainers.Container, error) {
 	req := testcontainers.ContainerRequest{
-		Image:        "rabbitmq:4",
+		// Pin to 4.2 to avoid breaking changes in 4.3+ where AMQP 1.0 v1 address format
+		// is denied by default and v2 format requires queues to be pre-created.
+		// See: https://www.rabbitmq.com/docs/amqp#address-v2
+		Image:        "rabbitmq:4.2",
 		ExposedPorts: []string{"5672/tcp", "5671/tcp", "15672/tcp"},
 		WaitingFor: wait.ForAll(
 			wait.ForListeningPort("5672/tcp"),
