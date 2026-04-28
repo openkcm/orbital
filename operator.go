@@ -10,7 +10,7 @@ import (
 )
 
 type (
-	// TaskRequestHandler is the processing pipeline handed to a Responder.
+	// TaskRequestHandler processes a single inbound TaskRequest and returns a TaskResponse.
 	// It performs signature verification, handler dispatch, and response signing.
 	TaskRequestHandler func(ctx context.Context, req TaskRequest) (TaskResponse, error)
 

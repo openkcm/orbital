@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"sync"
+	"sync/atomic"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -22,6 +23,8 @@ var _ orbital.SyncResponder = (*Server)(nil)
 var (
 	// ErrNilListener is returned by NewServer when given a nil net.Listener.
 	ErrNilListener = errors.New("grpc server: listener cannot be nil")
+	// ErrServerAlreadyRan is returned by Run if the server has already been started.
+	ErrServerAlreadyRan = errors.New("grpc server: Run already called")
 )
 
 type (
@@ -43,6 +46,7 @@ type (
 		lis        net.Listener
 		grpcServer *grpc.Server
 		handler    orbital.TaskRequestHandler
+		ran        atomic.Bool
 		stopOnce   sync.Once
 	}
 )
@@ -76,9 +80,12 @@ func WithServerOptions(opts ...grpc.ServerOption) ServerOption {
 }
 
 // Run registers the TaskService, starts serving, and blocks until
-// Close is called or ctx is cancelled. A new grpc.Server is created on
-// each call.
+// Close is called or ctx is cancelled. Run may only be called once.
 func (s *Server) Run(ctx context.Context, handler orbital.TaskRequestHandler) error {
+	if !s.ran.CompareAndSwap(false, true) {
+		return ErrServerAlreadyRan
+	}
+
 	s.handler = handler
 	s.grpcServer = grpc.NewServer(s.config.grpcServerOpts...)
 	orbitalv1.RegisterTaskServiceServer(s.grpcServer, s)

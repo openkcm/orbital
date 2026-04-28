@@ -55,24 +55,23 @@ type Initiator interface {
 	Close(ctx context.Context) error
 }
 
-// Responder is the base interface for any transport that can be closed.
-type Responder interface {
-	Close(ctx context.Context) error
-}
+// Responder is a marker interface satisfied by any operator transport.
+// Use a type switch to AsyncResponder or SyncResponder to access transport methods.
+type Responder interface{}
 
 // AsyncResponder is a half-duplex messaging transport (e.g. AMQP, Solace).
 // The operator pulls requests and pushes responses via a worker pool.
 type AsyncResponder interface {
-	Responder
 	ReceiveTaskRequest(ctx context.Context) (TaskRequest, error)
 	SendTaskResponse(ctx context.Context, response TaskResponse) error
+	Close(ctx context.Context) error
 }
 
 // SyncResponder is a request/response transport (e.g. gRPC).
 // Run blocks, calling handler for each inbound request.
 type SyncResponder interface {
-	Responder
 	Run(ctx context.Context, handler TaskRequestHandler) error
+	Close(ctx context.Context) error
 }
 
 // TargetOperator holds the client and cryptographic implementation for responding

@@ -337,8 +337,6 @@ func TestListenAndRespond_UnsupportedResponder(t *testing.T) {
 
 type unsupportedResponder struct{}
 
-func (u *unsupportedResponder) Close(_ context.Context) error { return nil }
-
 type mockResponder struct {
 	FnReceiveTaskRequest func(ctx context.Context) (orbital.TaskRequest, error)
 	FnSendTaskResponse   func(ctx context.Context, response orbital.TaskResponse) error
