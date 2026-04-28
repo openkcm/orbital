@@ -57,7 +57,7 @@ type Initiator interface {
 
 // Responder is a marker interface satisfied by any operator transport.
 // Use a type switch to AsyncResponder or SyncResponder to access transport methods.
-type Responder interface{}
+type Responder = any
 
 // AsyncResponder is a half-duplex messaging transport (e.g. AMQP, Solace).
 // The operator pulls requests and pushes responses via a worker pool.
