@@ -1,4 +1,4 @@
-package grpc_test
+package rpc_test
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/openkcm/orbital"
-	grpcclient "github.com/openkcm/orbital/client/grpc"
+	"github.com/openkcm/orbital/client/rpc"
 	"github.com/openkcm/orbital/codec"
 	orbitalv1 "github.com/openkcm/orbital/proto/orbital/v1"
 )
@@ -71,42 +71,42 @@ func TestNewClient(t *testing.T) {
 	tests := []struct {
 		name    string
 		conn    *grpc.ClientConn
-		opts    []grpcclient.ClientOption
+		opts    []rpc.ClientOption
 		wantErr error
 	}{
 		{
 			name:    "NilConn",
 			conn:    nil,
-			wantErr: grpcclient.ErrNilConn,
+			wantErr: rpc.ErrNilConn,
 		},
 		{
 			name:    "InvalidBufferSize",
 			conn:    conn,
-			opts:    []grpcclient.ClientOption{grpcclient.WithBufferSize(-1)},
-			wantErr: grpcclient.ErrInvalidBufferSize,
+			opts:    []rpc.ClientOption{rpc.WithBufferSize(-1)},
+			wantErr: rpc.ErrInvalidBufferSize,
 		},
 		{
 			name:    "InvalidCallTimeout/zero",
 			conn:    conn,
-			opts:    []grpcclient.ClientOption{grpcclient.WithCallTimeout(0)},
-			wantErr: grpcclient.ErrInvalidCallTimeout,
+			opts:    []rpc.ClientOption{rpc.WithCallTimeout(0)},
+			wantErr: rpc.ErrInvalidCallTimeout,
 		},
 		{
 			name:    "InvalidCallTimeout/negative",
 			conn:    conn,
-			opts:    []grpcclient.ClientOption{grpcclient.WithCallTimeout(-1 * time.Second)},
-			wantErr: grpcclient.ErrInvalidCallTimeout,
+			opts:    []rpc.ClientOption{rpc.WithCallTimeout(-1 * time.Second)},
+			wantErr: rpc.ErrInvalidCallTimeout,
 		},
 		{
 			name: "ValidWithZeroBuffer",
 			conn: conn,
-			opts: []grpcclient.ClientOption{grpcclient.WithBufferSize(0)},
+			opts: []rpc.ClientOption{rpc.WithBufferSize(0)},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c, err := grpcclient.NewClient(tt.conn, tt.opts...)
+			c, err := rpc.NewClient(tt.conn, tt.opts...)
 			if tt.wantErr != nil {
 				assert.Nil(t, c)
 				assert.ErrorIs(t, err, tt.wantErr)
@@ -137,7 +137,7 @@ func TestSendTaskRequest(t *testing.T) {
 			}, nil
 		})
 
-		client, err := grpcclient.NewClient(conn, grpcclient.WithCallTimeout(5*time.Second))
+		client, err := rpc.NewClient(conn, rpc.WithCallTimeout(5*time.Second))
 		require.NoError(t, err)
 		defer client.Close(t.Context())
 
@@ -174,7 +174,7 @@ func TestSendTaskRequest(t *testing.T) {
 			return nil, status.Error(codes.Internal, "something broke")
 		})
 
-		client, err := grpcclient.NewClient(conn, grpcclient.WithCallTimeout(5*time.Second))
+		client, err := rpc.NewClient(conn, rpc.WithCallTimeout(5*time.Second))
 		require.NoError(t, err)
 		defer client.Close(t.Context())
 
@@ -200,7 +200,7 @@ func TestSendTaskRequest(t *testing.T) {
 			}, nil
 		})
 
-		client, err := grpcclient.NewClient(conn, grpcclient.WithCallTimeout(5*time.Second))
+		client, err := rpc.NewClient(conn, rpc.WithCallTimeout(5*time.Second))
 		require.NoError(t, err)
 		defer client.Close(t.Context())
 
@@ -220,7 +220,7 @@ func TestSendTaskRequest(t *testing.T) {
 	t.Run("ContextCancelled", func(t *testing.T) {
 		conn := startServer(t, noopHandler)
 
-		client, err := grpcclient.NewClient(conn)
+		client, err := rpc.NewClient(conn)
 		require.NoError(t, err)
 		defer client.Close(t.Context())
 
@@ -241,7 +241,7 @@ func TestSendTaskRequest(t *testing.T) {
 			}, nil
 		})
 
-		client, err := grpcclient.NewClient(conn, grpcclient.WithCallTimeout(5*time.Second))
+		client, err := rpc.NewClient(conn, rpc.WithCallTimeout(5*time.Second))
 		require.NoError(t, err)
 		defer client.Close(t.Context())
 
@@ -274,7 +274,7 @@ func TestReceiveTaskResponse(t *testing.T) {
 	t.Run("ContextCancelled", func(t *testing.T) {
 		conn := startServer(t, noopHandler)
 
-		client, err := grpcclient.NewClient(conn)
+		client, err := rpc.NewClient(conn)
 		require.NoError(t, err)
 		defer client.Close(t.Context())
 
@@ -291,24 +291,24 @@ func TestClose(t *testing.T) {
 	t.Run("ThenSendAndReceive", func(t *testing.T) {
 		conn := startServer(t, noopHandler)
 
-		client, err := grpcclient.NewClient(conn)
+		client, err := rpc.NewClient(conn)
 		require.NoError(t, err)
 
 		err = client.Close(t.Context())
 		require.NoError(t, err)
 
 		err = client.SendTaskRequest(t.Context(), orbital.TaskRequest{})
-		assert.ErrorIs(t, err, grpcclient.ErrClientClosed)
+		assert.ErrorIs(t, err, rpc.ErrClientClosed)
 
 		resp, err := client.ReceiveTaskResponse(t.Context())
-		assert.ErrorIs(t, err, grpcclient.ErrClientClosed)
+		assert.ErrorIs(t, err, rpc.ErrClientClosed)
 		assert.Equal(t, orbital.TaskResponse{}, resp)
 	})
 
 	t.Run("Idempotent", func(t *testing.T) {
 		conn := startServer(t, noopHandler)
 
-		client, err := grpcclient.NewClient(conn)
+		client, err := rpc.NewClient(conn)
 		require.NoError(t, err)
 
 		assert.NotPanics(t, func() {

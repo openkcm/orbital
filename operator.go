@@ -10,65 +10,90 @@ import (
 )
 
 type (
-	// Runner drives a transport: it decides where task requests come from
-	// and where task responses go. Run is fire-and-forget: implementations
-	// spawn their own goroutines and return; ctx cancellation signals
-	// shutdown.
-	Runner interface {
-		Run(ctx context.Context, process ProcessFunc)
-	}
+	// TaskRequestHandler processes a single inbound TaskRequest and returns a TaskResponse.
+	// It performs signature verification, handler dispatch, and response signing.
+	TaskRequestHandler func(ctx context.Context, req TaskRequest) (TaskResponse, error)
 
-	// ProcessFunc is the shared pipeline handed to a Runner. It performs
-	// signature verification, handler dispatch, and response signing.
-	// Sentinel errors (ErrSignatureInvalid, ErrResponseSigning) let sync
-	// transports map to transport-level failures; unknown task types stay
-	// in-band as a FAILED TaskResponse with a nil error.
-	ProcessFunc func(ctx context.Context, req TaskRequest) (TaskResponse, error)
-
-	// Operator handles task requests and responses.
-	Operator struct {
-		target          TargetOperator
-		handlerRegistry handlerRegistry
+	// Option is a function that modifies the config parameter of the Operator.
+	Option func(*config) error
+	config struct {
+		bufferSize      int
+		numberOfWorkers int
 	}
 
 	handlerRegistry struct {
 		mu sync.RWMutex
 		r  map[string]HandlerFunc
 	}
+
+	// Operator handles task requests and responses.
+	Operator struct {
+		target          TargetOperator
+		handlerRegistry handlerRegistry
+		requests        chan TaskRequest
+		numberOfWorkers int
+	}
 )
 
 var (
-	ErrOperatorInvalidConfig = errors.New("invalid operator configuration")
-	ErrHandlerNil            = errors.New("handler cannot be nil")
-	ErrRunnerNil             = errors.New("runner cannot be nil")
-	ErrUnknownTaskType       = errors.New("unknown task type")
-
-	// ErrSignatureInvalid is returned by Process when signature verification
-	// fails. Sync transports should translate this to a transport-level
-	// auth failure (e.g. gRPC codes.Unauthenticated).
-	ErrSignatureInvalid = errors.New("task request signature invalid")
-
-	// ErrResponseSigning is returned by Process when the response signer
-	// fails. Sync transports should translate this to a transport-level
-	// internal failure (e.g. gRPC codes.Internal).
-	ErrResponseSigning = errors.New("failed to sign task response")
+	ErrOperatorInvalidConfig      = errors.New("invalid operator configuration")
+	ErrHandlerNil                 = errors.New("handler cannot be nil")
+	ErrBufferSizeNegative         = errors.New("buffer size cannot be negative")
+	ErrNumberOfWorkersNotPositive = errors.New("number of workers must be greater than 0")
+	ErrUnknownTaskType            = errors.New("unknown task type")
+	ErrUnsupportedResponder       = errors.New("unsupported responder type")
+	ErrSignatureInvalid           = errors.New("task request signature invalid")
+	ErrResponseSigning            = errors.New("failed to sign task response")
 )
 
-// NewOperator creates a new Operator from a TargetOperator configuration.
-// The Runner is required; a nil Runner yields ErrOperatorInvalidConfig.
-// If MustCheckSignature is set, Verifier must be non-nil.
-func NewOperator(target TargetOperator) (*Operator, error) {
-	if target.Runner == nil {
-		return nil, fmt.Errorf("%w: %w", ErrOperatorInvalidConfig, ErrRunnerNil)
-	}
+// NewOperator creates a new Operator instance with the given TargetOperator and options.
+func NewOperator(target TargetOperator, opts ...Option) (*Operator, error) {
 	if target.MustCheckSignature && target.Verifier == nil {
 		return nil, ErrOperatorInvalidConfig
+	}
+
+	c := config{
+		bufferSize:      100,
+		numberOfWorkers: 10,
+	}
+
+	for _, opt := range opts {
+		err := opt(&c)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &Operator{
 		target:          target,
 		handlerRegistry: handlerRegistry{r: make(map[string]HandlerFunc)},
+		requests:        make(chan TaskRequest, c.bufferSize),
+		numberOfWorkers: c.numberOfWorkers,
 	}, nil
+}
+
+// WithBufferSize sets the buffer size for the requests channel.
+// It returns an error if the size is negative.
+func WithBufferSize(size int) Option {
+	return func(c *config) error {
+		if size < 0 {
+			return ErrBufferSizeNegative
+		}
+		c.bufferSize = size
+		return nil
+	}
+}
+
+// WithNumberOfWorkers sets the number of workers for processing requests.
+// It returns an error if the number is not positive.
+func WithNumberOfWorkers(num int) Option {
+	return func(c *config) error {
+		if num <= 0 {
+			return ErrNumberOfWorkersNotPositive
+		}
+		c.numberOfWorkers = num
+		return nil
+	}
 }
 
 // RegisterHandler registers a handler for a specific task type.
@@ -83,25 +108,23 @@ func (o *Operator) RegisterHandler(taskType string, h HandlerFunc) error {
 	return nil
 }
 
-// ListenAndRespond starts the configured Runner. It is fire-and-forget: the
-// Runner spawns its own goroutines and this call returns. Shutdown is
-// signalled via ctx cancellation.
-func (o *Operator) ListenAndRespond(ctx context.Context) {
-	o.target.Runner.Run(ctx, o.Process)
+// ListenAndRespond starts listening for task requests and responding to them.
+// It blocks until ctx is cancelled or the transport exits.
+func (o *Operator) ListenAndRespond(ctx context.Context) error {
+	switch r := o.target.Client.(type) {
+	case SyncResponder:
+		return r.Run(ctx, o.process)
+	case AsyncResponder:
+		o.startWorkers(ctx, r)
+		o.startListening(ctx, r)
+
+		return ctx.Err()
+	default:
+		return ErrUnsupportedResponder
+	}
 }
 
-// Process is the shared pipeline: signature verify → handler dispatch →
-// response signing. It is exposed so that custom Runner implementations
-// (sync or async) can drive the Operator directly.
-//
-// Return semantics:
-//   - A TaskResponse with Status=FAILED (unknown task type or handler-reported
-//     failure) is a *successful* pipeline run and is returned with nil error.
-//     Transports should deliver it normally.
-//   - A non-nil error (ErrSignatureInvalid, ErrResponseSigning) is a pipeline
-//     failure. Async transports typically drop; sync transports map to a
-//     transport-level error.
-func (o *Operator) Process(ctx context.Context, req TaskRequest) (TaskResponse, error) {
+func (o *Operator) process(ctx context.Context, req TaskRequest) (TaskResponse, error) {
 	logCtx := slogctx.With(ctx,
 		"externalId", req.ExternalID,
 		"taskId", req.TaskID,
@@ -164,4 +187,56 @@ func (o *Operator) createSignature(ctx context.Context, resp TaskResponse) (Sign
 		return signature, err
 	}
 	return Signature{}, nil
+}
+
+func (o *Operator) startListening(ctx context.Context, r AsyncResponder) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		req, err := r.ReceiveTaskRequest(ctx)
+		if err != nil {
+			slogctx.Error(ctx, "failed to receive task request", "error", err)
+			continue
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case o.requests <- req:
+		}
+	}
+}
+
+func (o *Operator) startWorkers(ctx context.Context, r AsyncResponder) {
+	for range o.numberOfWorkers {
+		go o.worker(ctx, r)
+	}
+}
+
+func (o *Operator) worker(ctx context.Context, r AsyncResponder) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case req := <-o.requests:
+			resp, err := o.process(ctx, req)
+			if err != nil {
+				slogctx.Error(ctx, "failed to process task request", "error", err, "taskId", req.TaskID, "etag", req.ETag)
+				continue
+			}
+
+			err = r.SendTaskResponse(ctx, resp)
+			if err != nil {
+				slogctx.Error(ctx, "failed to send task response",
+					"error", err, "taskId", resp.TaskID, "etag", resp.ETag)
+				continue
+			}
+			slogctx.Debug(ctx, "sent task response",
+				"taskId", resp.TaskID, "etag", resp.ETag)
+		}
+	}
 }

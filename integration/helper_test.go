@@ -21,7 +21,6 @@ import (
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/client/amqp"
 	"github.com/openkcm/orbital/codec"
-	"github.com/openkcm/orbital/runner/async"
 	"github.com/openkcm/orbital/store/sql"
 )
 
@@ -238,15 +237,10 @@ func createAndStartManager(ctx context.Context, t *testing.T, store *sql.SQL, co
 }
 
 // createAndStartOperator creates and starts an operator instance.
-func createAndStartOperator(ctx context.Context, t *testing.T, client orbital.Responder, config operatorConfig) error {
+func createAndStartOperator(ctx context.Context, t *testing.T, client orbital.AsyncResponder, config operatorConfig) error {
 	t.Helper()
 
-	runner, err := async.New(client)
-	if err != nil {
-		return err
-	}
-
-	operator, err := orbital.NewOperator(orbital.TargetOperator{Runner: runner})
+	operator, err := orbital.NewOperator(orbital.TargetOperator{Client: client})
 	if err != nil {
 		return fmt.Errorf("failed to create operator: %w", err)
 	}
@@ -275,7 +269,9 @@ func addHandlerAndListen(ctx context.Context, t *testing.T, config operatorConfi
 		}
 	}
 
-	go operator.ListenAndRespond(ctx)
+	go func() {
+		assert.ErrorIs(t, operator.ListenAndRespond(ctx), context.Canceled)
+	}()
 
 	return nil
 }

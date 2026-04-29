@@ -20,7 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/openkcm/orbital"
-	"github.com/openkcm/orbital/runner/async"
 )
 
 const (
@@ -421,11 +420,12 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, initiatorHand
 		},
 	}
 
-	runner, err := async.New(operatorClient)
-	require.NoError(t, err)
-
-	targetOperator := orbital.TargetOperator{Runner: runner, Verifier: responderHandler, Signer: responderHandler, MustCheckSignature: true}
-	err = createAndStartOperatorWithTarget(ctxCancel, t, targetOperator, operatorConfig)
+	err = createAndStartOperatorWithTarget(ctxCancel, t, orbital.TargetOperator{
+		Client:             operatorClient,
+		Verifier:           responderHandler,
+		Signer:             responderHandler,
+		MustCheckSignature: true,
+	}, operatorConfig)
 	require.NoError(t, err)
 
 	job, err := createTestJob(ctx, t, manager, "test-job", []byte("job-data"))

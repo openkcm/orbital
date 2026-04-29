@@ -13,7 +13,6 @@ import (
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/respondertest"
-	"github.com/openkcm/orbital/runner/async"
 )
 
 func TestManager_Signing(t *testing.T) {
@@ -366,15 +365,16 @@ func TestOperator_Signing(t *testing.T) {
 					return nil
 				}
 
-				runner, err := async.New(client)
-				require.NoError(t, err)
-
-				o, err := orbital.NewOperator(orbital.TargetOperator{Runner: runner, Verifier: mockVerifier, Signer: tt.respSigner})
+				o, err := orbital.NewOperator(orbital.TargetOperator{
+					Client:   client,
+					Verifier: mockVerifier,
+					Signer:   tt.respSigner,
+				})
 				assert.NoError(t, err)
 				assert.NotNil(t, o)
 
 				ctx := t.Context()
-				o.ListenAndRespond(ctx)
+				go func() { assert.ErrorIs(t, o.ListenAndRespond(ctx), context.Canceled) }()
 
 				h := func(_ context.Context, req orbital.HandlerRequest, resp *orbital.HandlerResponse) {
 					assert.Equal(t, taskReq.TaskID, req.TaskID)
@@ -488,11 +488,9 @@ func TestOperator_Verification(t *testing.T) {
 				actVerifyTaskRequestCalls.Store(0)
 
 				client := respondertest.NewResponder()
-				runner, err := async.New(client)
-				require.NoError(t, err)
 
 				o, err := orbital.NewOperator(orbital.TargetOperator{
-					Runner:             runner,
+					Client:             client,
 					Signer:             respSigner,
 					Verifier:           tt.reqVerifier,
 					MustCheckSignature: tt.mustCheckSignature,
@@ -503,11 +501,10 @@ func TestOperator_Verification(t *testing.T) {
 					assert.Nil(t, o)
 					return
 				}
-				assert.NoError(t, err)
-				assert.NotNil(t, o)
+				require.NoError(t, err)
 
 				ctx := t.Context()
-				o.ListenAndRespond(ctx)
+				go func() { assert.ErrorIs(t, o.ListenAndRespond(ctx), context.Canceled) }()
 
 				var actHandlerCalls atomic.Int32
 				actHandlerCallChan := make(chan struct{})

@@ -74,8 +74,8 @@ type (
 )
 
 var (
-	_ orbital.Initiator = &Client{}
-	_ orbital.Responder = &Client{}
+	_ orbital.Initiator      = &Client{}
+	_ orbital.AsyncResponder = &Client{}
 )
 
 // WithBasicAuth tells the client to use SASL PLAIN with user/password.
