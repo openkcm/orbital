@@ -72,6 +72,14 @@ type (
 		Limit              int       // Maximum number of job events to return.
 		OrderByUpdatedAt   bool      // If true, orders job events by updated_at in ascending order.
 	}
+
+	// ListJobGroupsQuery defines the parameters for querying job groups from the repository.
+	ListJobGroupsQuery struct {
+		StatusIn           []GroupStatus // Filter groups by a list of statuses.
+		Limit              int           // Maximum number of groups to return.
+		RetrievalModeQueue bool          // If true, enables queue-like retrieval mode (FOR UPDATE SKIP LOCKED).
+		OrderByUpdatedAt   bool          // If true, orders groups by updated_at in ascending order.
+	}
 )
 
 // createJob creates a new job entity in the repository.
@@ -462,10 +470,54 @@ func (r *Repository) getJobGroup(ctx context.Context, id uuid.UUID) (JobGroup, b
 	return *group, true, nil
 }
 
-// listJobsByGroupID retrieves all jobs belonging to a specific job group.
-// It takes a context and a group UUID as input and returns a slice of Job entities or an error if the operation fails.
-func (r *Repository) listJobsByGroupID(ctx context.Context, groupID uuid.UUID) ([]Job, error) {
-	return r.listJobs(ctx, ListJobsQuery{
+// listOrderedGroupJobs retrieves all jobs belonging to a specific job group, sorted by their group order.
+func (r *Repository) listOrderedGroupJobs(ctx context.Context, groupID uuid.UUID) ([]Job, error) {
+	jobs, err := r.listJobs(ctx, ListJobsQuery{
 		Labels: Labels{LabelKeyGroupID: groupID.String()},
 	})
+	if err != nil {
+		return nil, err
+	}
+	if err := sortJobsByGroupOrder(jobs); err != nil {
+		return nil, err
+	}
+	return jobs, nil
+}
+
+// updateJobGroup updates an existing job group entity in the repository.
+// It takes a context and a JobGroup object as input and returns an error if the update operation fails.
+func (r *Repository) updateJobGroup(ctx context.Context, group JobGroup) error {
+	err := updateEntity(ctx, group, r)
+	if err != nil {
+		slogctx.Error(ctx, "failed to update job group", "error", err, "groupId", group.ID)
+	}
+	return err
+}
+
+// listJobGroups retrieves a list of job group entities from the repository based on the provided query parameters.
+func (r *Repository) listJobGroups(ctx context.Context, groupsQuery ListJobGroupsQuery) ([]JobGroup, error) {
+	q := query.Query{
+		EntityName: query.EntityNameJobGroups,
+		Clauses:    []query.Clause{},
+		Limit:      groupsQuery.Limit,
+	}
+
+	if len(groupsQuery.StatusIn) > 0 {
+		statuses := make([]string, 0, len(groupsQuery.StatusIn))
+		for _, status := range groupsQuery.StatusIn {
+			statuses = append(statuses, string(status))
+		}
+		q.Clauses = append(q.Clauses, query.ClauseWithStatuses(statuses...))
+	}
+
+	q.RetrievalMode = query.RetrievalModeDefault
+	if groupsQuery.RetrievalModeQueue {
+		q.RetrievalMode = query.RetrievalModeForUpdateSkipLocked
+	}
+
+	if groupsQuery.OrderByUpdatedAt {
+		q.OrderBy = append(q.OrderBy, query.OrderByUpdatedAtAscending())
+	}
+
+	return listEntities[JobGroup](ctx, r, q)
 }
