@@ -1799,6 +1799,12 @@ func TestScheduleJobGroup(t *testing.T) {
 			err = orbital.UpdateJobGroup(repo)(ctx, group)
 			assert.NoError(t, err)
 
+			before, found, err := subj.GetJobGroup(ctx, group.ID)
+			assert.NoError(t, err)
+			assert.True(t, found)
+
+			time.Sleep(10 * time.Microsecond)
+
 			// when
 			err = orbital.ScheduleJobGroup(subj)(ctx)
 			assert.NoError(t, err)
@@ -1808,6 +1814,7 @@ func TestScheduleJobGroup(t *testing.T) {
 			assert.NoError(t, err)
 			assert.True(t, found)
 			assert.Equal(t, tt.expGroupStatus, result.Status)
+			assert.Greater(t, result.UpdatedAt, before.UpdatedAt)
 
 			for i, expStatus := range tt.expJobStatuses {
 				assert.Equal(t, expStatus, result.Jobs[i].Status)

@@ -76,8 +76,8 @@ type groupResult interface {
 
 type groupWaitResult struct{}
 
-func (groupWaitResult) apply(_ context.Context, _ Repository, _ *JobGroup) error {
-	return nil
+func (groupWaitResult) apply(ctx context.Context, repo Repository, group *JobGroup) error {
+	return repo.updateJobGroup(ctx, *group)
 }
 
 type groupCompletedResult struct{}
