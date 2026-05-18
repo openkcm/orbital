@@ -116,3 +116,15 @@ var (
 	MergeLabels          = mergeLabels
 	SortJobsByGroupOrder = sortJobsByGroupOrder
 )
+
+func ScheduleJobGroup(m *Manager) func(ctx context.Context) error {
+	return m.scheduleJobGroup
+}
+
+func ListJobGroups(r *Repository) func(ctx context.Context, q ListJobGroupsQuery) ([]JobGroup, error) {
+	return r.listJobGroups
+}
+
+func UpdateJobGroup(r *Repository) func(ctx context.Context, group JobGroup) error {
+	return r.updateJobGroup
+}

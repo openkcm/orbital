@@ -106,3 +106,12 @@ func TerminalStatuses() []JobStatus {
 		JobStatusUserCanceled,
 	}
 }
+
+// unsuccessfulStatuses is the set of terminal statuses that represent
+// unsuccessful job completion (failed or canceled).
+var unsuccessfulStatuses = map[JobStatus]struct{}{
+	JobStatusFailed:          {},
+	JobStatusResolveCanceled: {},
+	JobStatusConfirmCanceled: {},
+	JobStatusUserCanceled:    {},
+}

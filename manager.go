@@ -61,6 +61,8 @@ type (
 		ReconcileWorkerConfig WorkerConfig
 		// NotifyWorkerConfig holds the configuration for the notification worker.
 		NotifyWorkerConfig WorkerConfig
+		// ScheduleJobGroupWorkerConfig holds the configuration for the job group scheduling worker.
+		ScheduleJobGroupWorkerConfig WorkerConfig
 		// BackoffBaseIntervalSec is the base interval for exponential backoff in seconds.
 		// Default is 10 seconds.
 		BackoffBaseIntervalSec uint64
@@ -129,6 +131,11 @@ func NewManager(repo *Repository, taskResolver TaskResolveFunc, optFuncs ...Mana
 				Timeout:      defWorkTimeout,
 			},
 			NotifyWorkerConfig: WorkerConfig{
+				NoOfWorkers:  defNoOfWorker,
+				ExecInterval: defWorkExecInterval,
+				Timeout:      defWorkTimeout,
+			},
+			ScheduleJobGroupWorkerConfig: WorkerConfig{
 				NoOfWorkers:  defNoOfWorker,
 				ExecInterval: defWorkExecInterval,
 				Timeout:      defWorkTimeout,
@@ -225,6 +232,13 @@ func (m *Manager) Start(ctx context.Context) error {
 				ExecInterval: m.Config.NotifyWorkerConfig.ExecInterval,
 				NoOfWorkers:  m.Config.NotifyWorkerConfig.NoOfWorkers,
 				Timeout:      m.Config.NotifyWorkerConfig.Timeout,
+			},
+			{
+				Name:         "schedule-job-group",
+				Fn:           m.scheduleJobGroup,
+				ExecInterval: m.Config.ScheduleJobGroupWorkerConfig.ExecInterval,
+				NoOfWorkers:  m.Config.ScheduleJobGroupWorkerConfig.NoOfWorkers,
+				Timeout:      m.Config.ScheduleJobGroupWorkerConfig.Timeout,
 			},
 		},
 	}
@@ -404,18 +418,41 @@ func (m *Manager) GetJobGroup(ctx context.Context, groupID uuid.UUID) (JobGroup,
 		return JobGroup{}, false, nil
 	}
 
-	jobs, err := m.repo.listJobsByGroupID(ctx, groupID)
+	jobs, err := m.repo.listOrderedGroupJobs(ctx, groupID)
 	if err != nil {
-		return JobGroup{}, false, err
-	}
-
-	if err := sortJobsByGroupOrder(jobs); err != nil {
 		return JobGroup{}, false, err
 	}
 
 	group.Jobs = jobs
 
 	return group, true, nil
+}
+
+// scheduleJobGroup manages sequential job execution within groups.
+func (m *Manager) scheduleJobGroup(ctx context.Context) error {
+	return m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
+		groups, err := repo.listJobGroups(ctx, ListJobGroupsQuery{
+			StatusIn:           []GroupStatus{GroupStatusCreated, GroupStatusProcessing},
+			Limit:              1,
+			RetrievalModeQueue: true,
+			OrderByUpdatedAt:   true,
+		})
+		if err != nil {
+			return err
+		}
+		if len(groups) == 0 {
+			return nil
+		}
+
+		group := groups[0]
+
+		jobs, err := repo.listOrderedGroupJobs(ctx, group.ID)
+		if err != nil {
+			return err
+		}
+
+		return evaluateJobs(jobs).apply(ctx, repo, &group)
+	})
 }
 
 // confirmJob processes jobs in the CREATED state that were created before a specified delay
