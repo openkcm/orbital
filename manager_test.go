@@ -1909,3 +1909,144 @@ func TestScheduleJobGroup(t *testing.T) {
 		assert.Equal(t, orbital.JobStatusScheduled, result.Jobs[1].Status)
 	})
 }
+
+func TestCancelJobGroup(t *testing.T) {
+	t.Run("should cancel group", func(t *testing.T) {
+		tests := []struct {
+			name    string
+			promote bool
+		}{
+			{name: "CREATED", promote: false},
+			{name: "PROCESSING", promote: true},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// given
+				db, store := createSQLStore(t)
+				defer clearTables(t, db)
+				repo := orbital.NewRepository(store)
+
+				subj, err := orbital.NewManager(repo, mockTaskResolveFunc())
+				assert.NoError(t, err)
+
+				ctx := t.Context()
+
+				group, err := subj.PrepareJobGroup(ctx, orbital.NewJobGroup("batch-sync",
+					orbital.Job{Type: "job-type", Data: []byte("job-1")},
+					orbital.Job{Type: "job-type", Data: []byte("job-2")},
+				))
+				assert.NoError(t, err)
+
+				if tt.promote {
+					err = orbital.ScheduleJobGroup(subj)(ctx)
+					assert.NoError(t, err)
+				}
+
+				// when
+				err = subj.CancelJobGroup(ctx, group.ID)
+
+				// then
+				assert.NoError(t, err)
+
+				result, ok, err := subj.GetJobGroup(ctx, group.ID)
+				assert.NoError(t, err)
+				assert.True(t, ok)
+				assert.Equal(t, orbital.GroupStatusCanceled, result.Status)
+				assert.Equal(t, "group has been canceled by the user", result.ErrorMessage)
+			})
+		}
+	})
+
+	t.Run("group not found", func(t *testing.T) {
+		// given
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		subj, err := orbital.NewManager(repo, mockTaskResolveFunc())
+		assert.NoError(t, err)
+
+		// when
+		err = subj.CancelJobGroup(t.Context(), uuid.New())
+
+		// then
+		assert.ErrorIs(t, err, orbital.ErrJobGroupNotFound)
+	})
+
+	t.Run("should not cancel terminal group", func(t *testing.T) {
+		tests := []struct {
+			name   string
+			status orbital.GroupStatus
+		}{
+			{name: "DONE", status: orbital.GroupStatusDone},
+			{name: "FAILED", status: orbital.GroupStatusFailed},
+			{name: "CANCELED", status: orbital.GroupStatusCanceled},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// given
+				db, store := createSQLStore(t)
+				defer clearTables(t, db)
+				repo := orbital.NewRepository(store)
+
+				subj, err := orbital.NewManager(repo, mockTaskResolveFunc())
+				assert.NoError(t, err)
+
+				ctx := t.Context()
+
+				group, err := subj.PrepareJobGroup(ctx, orbital.NewJobGroup("batch-sync",
+					orbital.Job{Type: "job-type", Data: []byte("job-1")},
+				))
+				assert.NoError(t, err)
+
+				err = orbital.UpdateJobGroup(repo)(ctx, orbital.JobGroup{
+					ID:     group.ID,
+					Type:   group.Type,
+					Status: tt.status,
+				})
+				assert.NoError(t, err)
+
+				// when
+				err = subj.CancelJobGroup(ctx, group.ID)
+
+				// then
+				assert.ErrorIs(t, err, orbital.ErrJobGroupUnCancelable)
+			})
+		}
+	})
+
+	t.Run("scheduler should not promote jobs after group is canceled", func(t *testing.T) {
+		// given
+		db, store := createSQLStore(t)
+		defer clearTables(t, db)
+		repo := orbital.NewRepository(store)
+
+		subj, err := orbital.NewManager(repo, mockTaskResolveFunc())
+		assert.NoError(t, err)
+
+		ctx := t.Context()
+
+		group, err := subj.PrepareJobGroup(ctx, orbital.NewJobGroup("batch-sync",
+			orbital.Job{Type: "job-type", Data: []byte("job-1")},
+			orbital.Job{Type: "job-type", Data: []byte("job-2")},
+		))
+		assert.NoError(t, err)
+
+		// cancel before any scheduling
+		err = subj.CancelJobGroup(ctx, group.ID)
+		assert.NoError(t, err)
+
+		// when - run scheduler
+		err = orbital.ScheduleJobGroup(subj)(ctx)
+		assert.NoError(t, err)
+
+		// then - jobs remain SCHEDULED, group remains CANCELED
+		result, _, err := subj.GetJobGroup(ctx, group.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, orbital.GroupStatusCanceled, result.Status)
+		assert.Equal(t, orbital.JobStatusScheduled, result.Jobs[0].Status)
+		assert.Equal(t, orbital.JobStatusScheduled, result.Jobs[1].Status)
+	})
+}

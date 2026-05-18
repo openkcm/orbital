@@ -470,6 +470,22 @@ func (r *Repository) getJobGroup(ctx context.Context, id uuid.UUID) (JobGroup, b
 	return *group, true, nil
 }
 
+// getJobGroupForUpdate retrieves a job group entity by its ID and ensures that the group is locked for update.
+func (r *Repository) getJobGroupForUpdate(ctx context.Context, id uuid.UUID) (JobGroup, bool, error) {
+	q := query.Query{
+		EntityName:    query.EntityNameJobGroups,
+		Clauses:       []query.Clause{query.ClauseWithID(id)},
+		RetrievalMode: query.RetrievalModeForUpdate,
+	}
+
+	group, err := getEntity[JobGroup](ctx, r, q)
+	if err != nil || group == nil {
+		return JobGroup{}, false, err
+	}
+
+	return *group, true, nil
+}
+
 // listOrderedGroupJobs retrieves all jobs belonging to a specific job group, sorted by their group order.
 func (r *Repository) listOrderedGroupJobs(ctx context.Context, groupID uuid.UUID) ([]Job, error) {
 	jobs, err := r.listJobs(ctx, ListJobsQuery{

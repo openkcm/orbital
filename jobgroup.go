@@ -50,6 +50,11 @@ func (jg JobGroup) WithLabels(labels Labels) JobGroup {
 	return jg
 }
 
+// isCancelable reports whether the group can be canceled based on its current status.
+func (jg JobGroup) isCancelable() bool {
+	return jg.Status == GroupStatusCreated || jg.Status == GroupStatusProcessing
+}
+
 // sortJobsByGroupOrder sorts jobs in-place by their group order key (ascending).
 // Returns an error if any job has an invalid or missing order key.
 func sortJobsByGroupOrder(jobs []Job) error {
