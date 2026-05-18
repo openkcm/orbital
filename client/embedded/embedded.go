@@ -102,7 +102,7 @@ func (c *Client) SendTaskRequest(ctx context.Context, request orbital.TaskReques
 	}
 
 	// process the request asynchronously with its own context
-	//nolint:contextcheck
+	//nolint:contextcheck,gosec
 	go func() {
 		ctxTimeout, cancel := context.WithTimeout(context.Background(), c.config.handlerTimeout)
 		defer cancel()
