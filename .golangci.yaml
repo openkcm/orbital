@@ -7,6 +7,7 @@ linters:
     - ginkgolinter
     - gochecknoglobals
     - gochecknoinits
+    - goconst
     - godox
     - lll
     - musttag
@@ -47,7 +48,6 @@ linters:
       - linters:
           - dupl
           - funlen
-          - goconst
           - maintidx
           - cyclop
           - nilerr
@@ -55,7 +55,7 @@ linters:
     paths:
       - third_party$
       - builtin$
-      - examples$
+      - examples/
 formatters:
   enable:
     - gci
@@ -76,4 +76,4 @@ formatters:
     paths:
       - third_party$
       - builtin$
-      - examples$
+      - examples/

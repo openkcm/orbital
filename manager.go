@@ -104,6 +104,8 @@ var (
 	ErrUpdatingJob             = errors.New("failed to update job")
 	ErrTaskNotFound            = errors.New("task not found")
 	ErrJobGroupEmpty           = errors.New("job group must not be empty")
+	ErrJobGroupNotFound        = errors.New("job group not found")
+	ErrJobGroupUnCancelable    = errors.New("job group cannot be canceled in its current state")
 )
 
 // NewManager creates a new Manager instance.
@@ -426,6 +428,28 @@ func (m *Manager) GetJobGroup(ctx context.Context, groupID uuid.UUID) (JobGroup,
 	group.Jobs = jobs
 
 	return group, true, nil
+}
+
+// CancelJobGroup cancels a job group. Scheduled jobs will no longer be promoted.
+// Returns ErrJobGroupNotFound or ErrJobGroupUnCancelable if already terminal.
+func (m *Manager) CancelJobGroup(ctx context.Context, groupID uuid.UUID) error {
+	return m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
+		slogctx.Debug(ctx, "canceling job group", "groupId", groupID)
+		group, found, err := repo.getJobGroupForUpdate(ctx, groupID)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return ErrJobGroupNotFound
+		}
+		if !group.isCancelable() {
+			return ErrJobGroupUnCancelable
+		}
+
+		group.Status = GroupStatusCanceled
+		group.ErrorMessage = "group has been canceled by the user"
+		return repo.updateJobGroup(ctx, group)
+	})
 }
 
 // scheduleJobGroup manages sequential job execution within groups.
