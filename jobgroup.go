@@ -55,6 +55,11 @@ func (jg JobGroup) isCancelable() bool {
 	return jg.Status == GroupStatusCreated || jg.Status == GroupStatusProcessing
 }
 
+// isTerminal reports whether the group has reached a terminal state.
+func (jg JobGroup) isTerminal() bool {
+	return jg.Status == GroupStatusDone || jg.Status == GroupStatusFailed || jg.Status == GroupStatusCanceled
+}
+
 // sortJobsByGroupOrder sorts jobs in-place by their group order key (ascending).
 // Returns an error if any job has an invalid or missing order key.
 func sortJobsByGroupOrder(jobs []Job) error {

@@ -35,7 +35,7 @@ type TransactionFunc func(context.Context, Repository) error
 // EntityTypes defines a type constraint for entities that can be used in the repository.
 // It allows only types Job, Task, JobCursor, JobEvent, or JobGroup to satisfy this interface.
 type EntityTypes interface {
-	Job | Task | JobCursor | JobEvent | JobGroup
+	Job | Task | JobCursor | JobEvent | JobGroup | JobGroupEvent
 }
 
 type FindResult struct {

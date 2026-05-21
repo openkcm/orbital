@@ -31,14 +31,17 @@ type (
 		runner     *worker.Runner
 		closeOnce  sync.Once
 
-		Config               Config
-		repo                 *Repository
-		jobConfirmFunc       JobConfirmFunc
-		taskResolveFunc      TaskResolveFunc
-		jobDoneEventFunc     JobTerminatedEventFunc
-		jobCanceledEventFunc JobTerminatedEventFunc
-		jobFailedEventFunc   JobTerminatedEventFunc
-		targets              map[string]TargetManager
+		Config                 Config
+		repo                   *Repository
+		jobConfirmFunc         JobConfirmFunc
+		taskResolveFunc        TaskResolveFunc
+		jobDoneEventFunc       JobTerminatedEventFunc
+		jobCanceledEventFunc   JobTerminatedEventFunc
+		jobFailedEventFunc     JobTerminatedEventFunc
+		groupDoneEventFunc     GroupTerminatedEventFunc
+		groupCanceledEventFunc GroupTerminatedEventFunc
+		groupFailedEventFunc   GroupTerminatedEventFunc
+		targets                map[string]TargetManager
 	}
 
 	// JobTerminatedEventFunc defines a callback function type for sending job events.
@@ -61,6 +64,8 @@ type (
 		ReconcileWorkerConfig WorkerConfig
 		// NotifyWorkerConfig holds the configuration for the notification worker.
 		NotifyWorkerConfig WorkerConfig
+		// NotifyGroupWorkerConfig holds the configuration for the group notification worker.
+		NotifyGroupWorkerConfig WorkerConfig
 		// ScheduleJobGroupWorkerConfig holds the configuration for the job group scheduling worker.
 		ScheduleJobGroupWorkerConfig WorkerConfig
 		// BackoffBaseIntervalSec is the base interval for exponential backoff in seconds.
@@ -142,6 +147,11 @@ func NewManager(repo *Repository, taskResolver TaskResolveFunc, optFuncs ...Mana
 				ExecInterval: defWorkExecInterval,
 				Timeout:      defWorkTimeout,
 			},
+			NotifyGroupWorkerConfig: WorkerConfig{
+				NoOfWorkers:  defNoOfWorker,
+				ExecInterval: defWorkExecInterval,
+				Timeout:      defWorkTimeout,
+			},
 			ConfirmJobAfter:        defConfirmJobAfter,
 			TaskLimitNum:           defTaskLimitNum,
 			BackoffBaseIntervalSec: defBackoffBaseInterval,
@@ -195,6 +205,27 @@ func WithJobFailedEventFunc(f JobTerminatedEventFunc) ManagerOptsFunc {
 	}
 }
 
+// WithGroupDoneEventFunc registers a function to send group done events.
+func WithGroupDoneEventFunc(f GroupTerminatedEventFunc) ManagerOptsFunc {
+	return func(m *Manager) {
+		m.groupDoneEventFunc = f
+	}
+}
+
+// WithGroupCanceledEventFunc registers a function to send group canceled events.
+func WithGroupCanceledEventFunc(f GroupTerminatedEventFunc) ManagerOptsFunc {
+	return func(m *Manager) {
+		m.groupCanceledEventFunc = f
+	}
+}
+
+// WithGroupFailedEventFunc registers a function to send group failed events.
+func WithGroupFailedEventFunc(f GroupTerminatedEventFunc) ManagerOptsFunc {
+	return func(m *Manager) {
+		m.groupFailedEventFunc = f
+	}
+}
+
 // Start starts the job manager to process jobs.
 func (m *Manager) Start(ctx context.Context) error {
 	if !m.isValidConfig(ctx) {
@@ -241,6 +272,13 @@ func (m *Manager) Start(ctx context.Context) error {
 				ExecInterval: m.Config.ScheduleJobGroupWorkerConfig.ExecInterval,
 				NoOfWorkers:  m.Config.ScheduleJobGroupWorkerConfig.NoOfWorkers,
 				Timeout:      m.Config.ScheduleJobGroupWorkerConfig.Timeout,
+			},
+			{
+				Name:         "notify-group-event",
+				Fn:           m.sendGroupTerminatedEvent,
+				ExecInterval: m.Config.NotifyGroupWorkerConfig.ExecInterval,
+				NoOfWorkers:  m.Config.NotifyGroupWorkerConfig.NoOfWorkers,
+				Timeout:      m.Config.NotifyGroupWorkerConfig.Timeout,
 			},
 		},
 	}
@@ -434,7 +472,9 @@ func (m *Manager) GetJobGroup(ctx context.Context, groupID uuid.UUID) (JobGroup,
 // Returns ErrJobGroupNotFound or ErrJobGroupUnCancelable if already terminal.
 func (m *Manager) CancelJobGroup(ctx context.Context, groupID uuid.UUID) error {
 	return m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
-		slogctx.Debug(ctx, "canceling job group", "groupId", groupID)
+		ctx = slogctx.With(ctx, "groupId", groupID)
+		slogctx.Debug(ctx, "canceling job group")
+
 		group, found, err := repo.getJobGroupForUpdate(ctx, groupID)
 		if err != nil {
 			return err
@@ -448,7 +488,13 @@ func (m *Manager) CancelJobGroup(ctx context.Context, groupID uuid.UUID) error {
 
 		group.Status = GroupStatusCanceled
 		group.ErrorMessage = "group has been canceled by the user"
-		return repo.updateJobGroup(ctx, group)
+		ctx = slogctx.With(ctx, "status", group.Status)
+
+		if err := repo.updateJobGroup(ctx, group); err != nil {
+			return err
+		}
+
+		return m.recordGroupTerminatedEvent(ctx, repo, group)
 	})
 }
 
@@ -469,13 +515,21 @@ func (m *Manager) scheduleJobGroup(ctx context.Context) error {
 		}
 
 		group := groups[0]
+		ctx = slogctx.With(ctx, "groupId", group.ID)
 
 		jobs, err := repo.listOrderedGroupJobs(ctx, group.ID)
 		if err != nil {
 			return err
 		}
 
-		return evaluateJobs(jobs).apply(ctx, repo, &group)
+		if err := evaluateJobs(jobs).apply(ctx, repo, &group); err != nil {
+			return err
+		}
+		if group.isTerminal() {
+			ctx = slogctx.With(ctx, "status", group.Status)
+			return m.recordGroupTerminatedEvent(ctx, repo, group)
+		}
+		return nil
 	})
 }
 

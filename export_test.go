@@ -121,10 +121,34 @@ func ScheduleJobGroup(m *Manager) func(ctx context.Context) error {
 	return m.scheduleJobGroup
 }
 
+func CreateJobGroup(r *Repository) func(ctx context.Context, group JobGroup) (JobGroup, error) {
+	return r.createJobGroup
+}
+
 func ListJobGroups(r *Repository) func(ctx context.Context, q ListJobGroupsQuery) ([]JobGroup, error) {
 	return r.listJobGroups
 }
 
 func UpdateJobGroup(r *Repository) func(ctx context.Context, group JobGroup) error {
 	return r.updateJobGroup
+}
+
+func CreateJobGroupEvent(r *Repository) func(ctx context.Context, event JobGroupEvent) (JobGroupEvent, error) {
+	return r.createJobGroupEvent
+}
+
+func GetJobGroupEvent(r *Repository) func(ctx context.Context, q ListJobGroupEventQuery) (JobGroupEvent, bool, error) {
+	return r.getJobGroupEvent
+}
+
+func UpdateJobGroupEvent(r *Repository) func(ctx context.Context, event JobGroupEvent) error {
+	return r.updateJobGroupEvent
+}
+
+func RecordGroupTerminatedEvent(m *Manager) func(ctx context.Context, repo Repository, group JobGroup) error {
+	return m.recordGroupTerminatedEvent
+}
+
+func SendGroupTerminatedEvent(m *Manager) func(ctx context.Context) error {
+	return m.sendGroupTerminatedEvent
 }

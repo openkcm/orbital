@@ -205,6 +205,19 @@ func Encode[T EntityTypes](entityType T) (Entity, error) {
 				"labels":        labelsJSON,
 			},
 		}, nil
+	case JobGroupEvent:
+		return Entity{
+			Name:      query.EntityNameJobGroupEvent,
+			ID:        obj.ID,
+			CreatedAt: obj.CreatedAt,
+			UpdatedAt: obj.UpdatedAt,
+			Values: map[string]any{
+				"id":          obj.ID,
+				"is_notified": obj.IsNotified,
+				"updated_at":  obj.UpdatedAt,
+				"created_at":  obj.CreatedAt,
+			},
+		}, nil
 	default:
 		return Entity{}, fmt.Errorf("%w `%T` not supported", ErrInvalidEntityType, obj)
 	}
@@ -237,6 +250,8 @@ func Decode[T EntityTypes](entity Entity) (T, error) {
 		return decodeJobEvent[T](entity)
 	case JobGroup:
 		return decodeJobGroup[T](entity)
+	case JobGroupEvent:
+		return decodeJobGroupEvent[T](entity)
 	default:
 		return out, fmt.Errorf("%w `%T` not supported", ErrInvalidEntityType, typ)
 	}
@@ -282,6 +297,25 @@ func decodeJobGroup[T EntityTypes](e Entity) (T, error) {
 	if group.Labels, err = resolveLabels(vals, "labels"); err != nil {
 		return empty, err
 	}
+	return out, nil
+}
+
+func decodeJobGroupEvent[T EntityTypes](entity Entity) (T, error) {
+	var out, empty T
+	e, ok := any(&out).(*JobGroupEvent)
+	if !ok {
+		return empty, fmt.Errorf("%w `%T` not supported", ErrInvalidEntityType, e)
+	}
+	e.ID = entity.ID
+	e.UpdatedAt = entity.UpdatedAt
+	e.CreatedAt = entity.CreatedAt
+
+	values := entity.Values
+	isNotified, err := resolve[bool](values, "is_notified")
+	if err != nil {
+		return empty, err
+	}
+	e.IsNotified = isNotified
 	return out, nil
 }
 

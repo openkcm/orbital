@@ -91,6 +91,12 @@ func New(ctx context.Context, db *sql.DB) (*SQL, error) {
 			labels JSONB,
 			updated_at BIGINT NOT NULL,
 			created_at BIGINT NOT NULL
+		);
+		CREATE TABLE IF NOT EXISTS job_group_events(
+			id UUID PRIMARY KEY,
+			is_notified BOOLEAN NOT NULL,
+			updated_at BIGINT NOT NULL,
+			created_at BIGINT NOT NULL
 		);`
 	return s, s.execContext(ctx, stmt)
 }
