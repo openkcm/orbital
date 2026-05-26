@@ -31,7 +31,7 @@ func TestLabels_Validate(t *testing.T) {
 		},
 		{
 			name:      "should fail with orbital/ prefix",
-			labels:    orbital.Labels{"orbital/group-id": "123"},
+			labels:    orbital.Labels{"orbital/job-group-id": "123"},
 			expectErr: true,
 		},
 		{
@@ -142,8 +142,8 @@ func TestJob_WithLabels(t *testing.T) {
 
 func TestLabelConstants(t *testing.T) {
 	assert.Equal(t, "orbital/", orbital.LabelPrefixReserved)
-	assert.Equal(t, "orbital/group-id", orbital.LabelKeyGroupID)
-	assert.Equal(t, "orbital/group-order-key", orbital.LabelKeyGroupOrderKey)
+	assert.Equal(t, "orbital/job-group-id", orbital.LabelKeyJobGroupID)
+	assert.Equal(t, "orbital/job-group-order-key", orbital.LabelKeyJobGroupOrderKey)
 }
 
 func TestMergeLabels(t *testing.T) {

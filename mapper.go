@@ -288,7 +288,7 @@ func decodeJobGroup[T EntityTypes](e Entity) (T, error) {
 	if group.Type, err = resolve[string](vals, "type"); err != nil {
 		return empty, err
 	}
-	if group.Status, err = resolveType[GroupStatus](vals, "status"); err != nil {
+	if group.Status, err = resolveType[JobGroupStatus](vals, "status"); err != nil {
 		return empty, err
 	}
 	if group.ErrorMessage, err = resolve[string](vals, "error_message"); err != nil {

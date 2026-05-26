@@ -131,7 +131,7 @@ func mockTerminatedFunc() orbital.JobTerminatedEventFunc {
 	}
 }
 
-func mockGroupTerminatedFunc() orbital.GroupTerminatedEventFunc {
+func mockJobGroupTerminatedFunc() orbital.JobGroupTerminatedEventFunc {
 	return func(_ context.Context, _ orbital.JobGroup) error {
 		return nil
 	}

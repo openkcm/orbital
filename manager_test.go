@@ -217,7 +217,7 @@ func TestPrepareJob(t *testing.T) {
 			prepJob: orbital.Job{
 				Type:       "type",
 				ExternalID: "ext-id-reserved",
-				Labels:     orbital.Labels{"orbital/group-id": "123"},
+				Labels:     orbital.Labels{"orbital/job-group-id": "123"},
 			},
 			expErr: orbital.ErrReservedLabelPrefix,
 		},
@@ -1530,7 +1530,7 @@ func TestPrepareJobGroup(t *testing.T) {
 			},
 			expGroup: orbital.JobGroup{
 				Type:   "batch-sync",
-				Status: orbital.GroupStatusCreated,
+				Status: orbital.JobGroupStatusCreated,
 				Labels: orbital.Labels{"env": "prod"},
 				Jobs: []orbital.Job{
 					{Type: "job-type", Status: orbital.JobStatusScheduled},
@@ -1541,7 +1541,7 @@ func TestPrepareJobGroup(t *testing.T) {
 			expErr: nil,
 		},
 		{
-			name: "should merge user labels with group labels on jobs",
+			name: "should merge user labels with job group labels on jobs",
 			group: orbital.JobGroup{
 				Type: "batch-sync",
 				Jobs: []orbital.Job{
@@ -1550,7 +1550,7 @@ func TestPrepareJobGroup(t *testing.T) {
 			},
 			expGroup: orbital.JobGroup{
 				Type:   "batch-sync",
-				Status: orbital.GroupStatusCreated,
+				Status: orbital.JobGroupStatusCreated,
 				Jobs: []orbital.Job{
 					{Type: "job-type", Status: orbital.JobStatusScheduled, Labels: orbital.Labels{"user-key": "user-value"}},
 				},
@@ -1566,7 +1566,7 @@ func TestPrepareJobGroup(t *testing.T) {
 			expErr: orbital.ErrJobGroupEmpty,
 		},
 		{
-			name: "should return error when group labels have reserved prefix",
+			name: "should return error when job group labels have reserved prefix",
 			group: orbital.JobGroup{
 				Type:   "batch-sync",
 				Labels: orbital.Labels{"orbital/custom": "value"},
@@ -1626,8 +1626,8 @@ func TestPrepareJobGroup(t *testing.T) {
 				assert.NotZero(t, job.UpdatedAt)
 				assert.Equal(t, tt.expGroup.Jobs[i].Type, job.Type)
 				assert.Equal(t, tt.expGroup.Jobs[i].Status, job.Status)
-				assert.Equal(t, result.ID.String(), job.Labels[orbital.LabelKeyGroupID])
-				assert.Equal(t, strconv.Itoa(i), job.Labels[orbital.LabelKeyGroupOrderKey])
+				assert.Equal(t, result.ID.String(), job.Labels[orbital.LabelKeyJobGroupID])
+				assert.Equal(t, strconv.Itoa(i), job.Labels[orbital.LabelKeyJobGroupOrderKey])
 				// verify user-provided labels are preserved
 				for k, v := range tt.expGroup.Jobs[i].Labels {
 					assert.Equal(t, v, job.Labels[k])
@@ -1671,17 +1671,17 @@ func TestGetJobGroup(t *testing.T) {
 		assert.True(t, found)
 		assert.Equal(t, created.ID, result.ID)
 		assert.Equal(t, "batch-sync", result.Type)
-		assert.Equal(t, orbital.GroupStatusCreated, result.Status)
+		assert.Equal(t, orbital.JobGroupStatusCreated, result.Status)
 		assert.Equal(t, orbital.Labels{"env": "prod"}, result.Labels)
 
 		assert.Len(t, result.Jobs, 3)
 		for i, job := range result.Jobs {
-			assert.Equal(t, strconv.Itoa(i), job.Labels[orbital.LabelKeyGroupOrderKey])
+			assert.Equal(t, strconv.Itoa(i), job.Labels[orbital.LabelKeyJobGroupOrderKey])
 			assert.Equal(t, created.Jobs[i].ID, job.ID)
 		}
 	})
 
-	t.Run("should return not found for non-existent group", func(t *testing.T) {
+	t.Run("should return not found for non-existent job group", func(t *testing.T) {
 		// given
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
@@ -1716,56 +1716,56 @@ func (t TaskResolveUnknown) Type() orbital.TaskResolverResultType {
 
 func TestScheduleJobGroup(t *testing.T) {
 	tests := []struct {
-		name           string
-		groupStatus    orbital.GroupStatus
-		jobStatuses    [2]orbital.JobStatus
-		expGroupStatus orbital.GroupStatus
-		expJobStatuses [2]orbital.JobStatus
-		expErrContains string
+		name              string
+		jobGroupStatus    orbital.JobGroupStatus
+		jobStatuses       [2]orbital.JobStatus
+		expJobGroupStatus orbital.JobGroupStatus
+		expJobStatuses    [2]orbital.JobStatus
+		expErrContains    string
 	}{
 		{
-			name:           "promotes first job when group is CREATED",
-			groupStatus:    orbital.GroupStatusCreated,
-			jobStatuses:    [2]orbital.JobStatus{orbital.JobStatusScheduled, orbital.JobStatusScheduled},
-			expGroupStatus: orbital.GroupStatusProcessing,
-			expJobStatuses: [2]orbital.JobStatus{orbital.JobStatusCreated, orbital.JobStatusScheduled},
+			name:              "promotes first job when job group is CREATED",
+			jobGroupStatus:    orbital.JobGroupStatusCreated,
+			jobStatuses:       [2]orbital.JobStatus{orbital.JobStatusScheduled, orbital.JobStatusScheduled},
+			expJobGroupStatus: orbital.JobGroupStatusProcessing,
+			expJobStatuses:    [2]orbital.JobStatus{orbital.JobStatusCreated, orbital.JobStatusScheduled},
 		},
 		{
-			name:           "promotes next job when previous is done",
-			groupStatus:    orbital.GroupStatusProcessing,
-			jobStatuses:    [2]orbital.JobStatus{orbital.JobStatusDone, orbital.JobStatusScheduled},
-			expGroupStatus: orbital.GroupStatusProcessing,
-			expJobStatuses: [2]orbital.JobStatus{orbital.JobStatusDone, orbital.JobStatusCreated},
+			name:              "promotes next job when previous is done",
+			jobGroupStatus:    orbital.JobGroupStatusProcessing,
+			jobStatuses:       [2]orbital.JobStatus{orbital.JobStatusDone, orbital.JobStatusScheduled},
+			expJobGroupStatus: orbital.JobGroupStatusProcessing,
+			expJobStatuses:    [2]orbital.JobStatus{orbital.JobStatusDone, orbital.JobStatusCreated},
 		},
 		{
-			name:           "completes group when all jobs are done",
-			groupStatus:    orbital.GroupStatusProcessing,
-			jobStatuses:    [2]orbital.JobStatus{orbital.JobStatusDone, orbital.JobStatusDone},
-			expGroupStatus: orbital.GroupStatusDone,
-			expJobStatuses: [2]orbital.JobStatus{orbital.JobStatusDone, orbital.JobStatusDone},
+			name:              "completes job group when all jobs are done",
+			jobGroupStatus:    orbital.JobGroupStatusProcessing,
+			jobStatuses:       [2]orbital.JobStatus{orbital.JobStatusDone, orbital.JobStatusDone},
+			expJobGroupStatus: orbital.JobGroupStatusDone,
+			expJobStatuses:    [2]orbital.JobStatus{orbital.JobStatusDone, orbital.JobStatusDone},
 		},
 		{
-			name:           "fails group when a job fails",
-			groupStatus:    orbital.GroupStatusProcessing,
-			jobStatuses:    [2]orbital.JobStatus{orbital.JobStatusDone, orbital.JobStatusFailed},
-			expGroupStatus: orbital.GroupStatusFailed,
-			expJobStatuses: [2]orbital.JobStatus{orbital.JobStatusDone, orbital.JobStatusFailed},
-			expErrContains: "failed",
+			name:              "fails job group when a job fails",
+			jobGroupStatus:    orbital.JobGroupStatusProcessing,
+			jobStatuses:       [2]orbital.JobStatus{orbital.JobStatusDone, orbital.JobStatusFailed},
+			expJobGroupStatus: orbital.JobGroupStatusFailed,
+			expJobStatuses:    [2]orbital.JobStatus{orbital.JobStatusDone, orbital.JobStatusFailed},
+			expErrContains:    "failed",
 		},
 		{
-			name:           "fails group when first job fails, second job stays scheduled without promotion",
-			groupStatus:    orbital.GroupStatusProcessing,
-			jobStatuses:    [2]orbital.JobStatus{orbital.JobStatusFailed, orbital.JobStatusScheduled},
-			expGroupStatus: orbital.GroupStatusFailed,
-			expJobStatuses: [2]orbital.JobStatus{orbital.JobStatusFailed, orbital.JobStatusScheduled},
-			expErrContains: "failed",
+			name:              "fails job group when first job fails, second job stays scheduled without promotion",
+			jobGroupStatus:    orbital.JobGroupStatusProcessing,
+			jobStatuses:       [2]orbital.JobStatus{orbital.JobStatusFailed, orbital.JobStatusScheduled},
+			expJobGroupStatus: orbital.JobGroupStatusFailed,
+			expJobStatuses:    [2]orbital.JobStatus{orbital.JobStatusFailed, orbital.JobStatusScheduled},
+			expErrContains:    "failed",
 		},
 		{
-			name:           "waits when a job is active",
-			groupStatus:    orbital.GroupStatusProcessing,
-			jobStatuses:    [2]orbital.JobStatus{orbital.JobStatusProcessing, orbital.JobStatusScheduled},
-			expGroupStatus: orbital.GroupStatusProcessing,
-			expJobStatuses: [2]orbital.JobStatus{orbital.JobStatusProcessing, orbital.JobStatusScheduled},
+			name:              "waits when a job is active",
+			jobGroupStatus:    orbital.JobGroupStatusProcessing,
+			jobStatuses:       [2]orbital.JobStatus{orbital.JobStatusProcessing, orbital.JobStatusScheduled},
+			expJobGroupStatus: orbital.JobGroupStatusProcessing,
+			expJobStatuses:    [2]orbital.JobStatus{orbital.JobStatusProcessing, orbital.JobStatusScheduled},
 		},
 	}
 
@@ -1795,7 +1795,7 @@ func TestScheduleJobGroup(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			group.Status = tt.groupStatus
+			group.Status = tt.jobGroupStatus
 			err = orbital.UpdateJobGroup(repo)(ctx, group)
 			assert.NoError(t, err)
 
@@ -1813,7 +1813,7 @@ func TestScheduleJobGroup(t *testing.T) {
 			result, found, err := subj.GetJobGroup(ctx, group.ID)
 			assert.NoError(t, err)
 			assert.True(t, found)
-			assert.Equal(t, tt.expGroupStatus, result.Status)
+			assert.Equal(t, tt.expJobGroupStatus, result.Status)
 			assert.Greater(t, result.UpdatedAt, before.UpdatedAt)
 
 			for i, expStatus := range tt.expJobStatuses {
@@ -1826,7 +1826,7 @@ func TestScheduleJobGroup(t *testing.T) {
 		})
 	}
 
-	t.Run("no-op when no groups to process", func(t *testing.T) {
+	t.Run("no-op when no job groups to process", func(t *testing.T) {
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
 		repo := orbital.NewRepository(store)
@@ -1838,7 +1838,7 @@ func TestScheduleJobGroup(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("skips terminal groups", func(t *testing.T) {
+	t.Run("skips terminal job groups", func(t *testing.T) {
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
 		repo := orbital.NewRepository(store)
@@ -1848,35 +1848,35 @@ func TestScheduleJobGroup(t *testing.T) {
 
 		ctx := t.Context()
 
-		// Create a DONE group
+		// Create a DONE job group
 		doneGroup, err := subj.PrepareJobGroup(ctx, orbital.JobGroup{
-			Type: "done-group",
+			Type: "done-job-group",
 			Jobs: []orbital.Job{
 				{Type: "job-type", Data: []byte("job-1")},
 				{Type: "job-type", Data: []byte("job-2")},
 			},
 		})
 		assert.NoError(t, err)
-		doneGroup.Status = orbital.GroupStatusDone
+		doneGroup.Status = orbital.JobGroupStatusDone
 		err = orbital.UpdateJobGroup(repo)(ctx, doneGroup)
 		assert.NoError(t, err)
 
-		// Create a FAILED group
+		// Create a FAILED job group
 		failedGroup, err := subj.PrepareJobGroup(ctx, orbital.JobGroup{
-			Type: "failed-group",
+			Type: "failed-job-group",
 			Jobs: []orbital.Job{
 				{Type: "job-type", Data: []byte("job-1")},
 				{Type: "job-type", Data: []byte("job-2")},
 			},
 		})
 		assert.NoError(t, err)
-		failedGroup.Status = orbital.GroupStatusFailed
+		failedGroup.Status = orbital.JobGroupStatusFailed
 		err = orbital.UpdateJobGroup(repo)(ctx, failedGroup)
 		assert.NoError(t, err)
 
-		// Create a CREATED group (control — should be picked up)
+		// Create a CREATED job group (control — should be picked up)
 		activeGroup, err := subj.PrepareJobGroup(ctx, orbital.JobGroup{
-			Type: "active-group",
+			Type: "active-job-group",
 			Jobs: []orbital.Job{
 				{Type: "job-type", Data: []byte("job-1")},
 				{Type: "job-type", Data: []byte("job-2")},
@@ -1888,30 +1888,30 @@ func TestScheduleJobGroup(t *testing.T) {
 		err = orbital.ScheduleJobGroup(subj)(ctx)
 		assert.NoError(t, err)
 
-		// then - terminal groups untouched
+		// then - terminal job groups untouched
 		result, _, err := subj.GetJobGroup(ctx, doneGroup.ID)
 		assert.NoError(t, err)
-		assert.Equal(t, orbital.GroupStatusDone, result.Status)
+		assert.Equal(t, orbital.JobGroupStatusDone, result.Status)
 		assert.Equal(t, orbital.JobStatusScheduled, result.Jobs[0].Status)
 		assert.Equal(t, orbital.JobStatusScheduled, result.Jobs[1].Status)
 
 		result, _, err = subj.GetJobGroup(ctx, failedGroup.ID)
 		assert.NoError(t, err)
-		assert.Equal(t, orbital.GroupStatusFailed, result.Status)
+		assert.Equal(t, orbital.JobGroupStatusFailed, result.Status)
 		assert.Equal(t, orbital.JobStatusScheduled, result.Jobs[0].Status)
 		assert.Equal(t, orbital.JobStatusScheduled, result.Jobs[1].Status)
 
-		// active group was advanced (proves scheduler ran)
+		// active job group was advanced (proves scheduler ran)
 		result, _, err = subj.GetJobGroup(ctx, activeGroup.ID)
 		assert.NoError(t, err)
-		assert.Equal(t, orbital.GroupStatusProcessing, result.Status)
+		assert.Equal(t, orbital.JobGroupStatusProcessing, result.Status)
 		assert.Equal(t, orbital.JobStatusCreated, result.Jobs[0].Status)
 		assert.Equal(t, orbital.JobStatusScheduled, result.Jobs[1].Status)
 	})
 }
 
 func TestCancelJobGroup(t *testing.T) {
-	t.Run("should cancel group", func(t *testing.T) {
+	t.Run("should cancel job group", func(t *testing.T) {
 		tests := []struct {
 			name    string
 			promote bool
@@ -1952,13 +1952,13 @@ func TestCancelJobGroup(t *testing.T) {
 				result, ok, err := subj.GetJobGroup(ctx, group.ID)
 				assert.NoError(t, err)
 				assert.True(t, ok)
-				assert.Equal(t, orbital.GroupStatusCanceled, result.Status)
-				assert.Equal(t, "group has been canceled by the user", result.ErrorMessage)
+				assert.Equal(t, orbital.JobGroupStatusCanceled, result.Status)
+				assert.Equal(t, "job group has been canceled by the user", result.ErrorMessage)
 			})
 		}
 	})
 
-	t.Run("group not found", func(t *testing.T) {
+	t.Run("job group not found", func(t *testing.T) {
 		// given
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
@@ -1974,14 +1974,14 @@ func TestCancelJobGroup(t *testing.T) {
 		assert.ErrorIs(t, err, orbital.ErrJobGroupNotFound)
 	})
 
-	t.Run("should not cancel terminal group", func(t *testing.T) {
+	t.Run("should not cancel terminal job group", func(t *testing.T) {
 		tests := []struct {
 			name   string
-			status orbital.GroupStatus
+			status orbital.JobGroupStatus
 		}{
-			{name: "DONE", status: orbital.GroupStatusDone},
-			{name: "FAILED", status: orbital.GroupStatusFailed},
-			{name: "CANCELED", status: orbital.GroupStatusCanceled},
+			{name: "DONE", status: orbital.JobGroupStatusDone},
+			{name: "FAILED", status: orbital.JobGroupStatusFailed},
+			{name: "CANCELED", status: orbital.JobGroupStatusCanceled},
 		}
 
 		for _, tt := range tests {
@@ -2017,7 +2017,7 @@ func TestCancelJobGroup(t *testing.T) {
 		}
 	})
 
-	t.Run("scheduler should not promote jobs after group is canceled", func(t *testing.T) {
+	t.Run("scheduler should not promote jobs after job group is canceled", func(t *testing.T) {
 		// given
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
@@ -2042,10 +2042,10 @@ func TestCancelJobGroup(t *testing.T) {
 		err = orbital.ScheduleJobGroup(subj)(ctx)
 		assert.NoError(t, err)
 
-		// then - jobs remain SCHEDULED, group remains CANCELED
+		// then - jobs remain SCHEDULED, job group remains CANCELED
 		result, _, err := subj.GetJobGroup(ctx, group.ID)
 		assert.NoError(t, err)
-		assert.Equal(t, orbital.GroupStatusCanceled, result.Status)
+		assert.Equal(t, orbital.JobGroupStatusCanceled, result.Status)
 		assert.Equal(t, orbital.JobStatusScheduled, result.Jobs[0].Status)
 		assert.Equal(t, orbital.JobStatusScheduled, result.Jobs[1].Status)
 	})

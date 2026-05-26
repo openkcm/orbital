@@ -145,10 +145,10 @@ func UpdateJobGroupEvent(r *Repository) func(ctx context.Context, event JobGroup
 	return r.updateJobGroupEvent
 }
 
-func RecordGroupTerminatedEvent(m *Manager) func(ctx context.Context, repo Repository, group JobGroup) error {
-	return m.recordGroupTerminatedEvent
+func RecordJobGroupTerminatedEvent(m *Manager) func(ctx context.Context, repo Repository, group JobGroup) error {
+	return m.recordJobGroupTerminatedEvent
 }
 
-func SendGroupTerminatedEvent(m *Manager) func(ctx context.Context) error {
-	return m.sendGroupTerminatedEvent
+func SendJobGroupTerminatedEvent(m *Manager) func(ctx context.Context) error {
+	return m.sendJobGroupTerminatedEvent
 }

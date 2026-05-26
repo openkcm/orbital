@@ -18,16 +18,16 @@ type JobGroupEvent struct {
 	CreatedAt  int64
 }
 
-// GroupTerminatedEventFunc is a callback invoked when a job group reaches a terminal state.
-type GroupTerminatedEventFunc func(ctx context.Context, group JobGroup) error
+// JobGroupTerminatedEventFunc is a callback invoked when a job group reaches a terminal state.
+type JobGroupTerminatedEventFunc func(ctx context.Context, group JobGroup) error
 
-// recordGroupTerminatedEvent creates or resets a group event record so that
-// sendGroupTerminatedEvent will pick it up for notification.
-// Returns nil immediately if no callback is registered for the group's status.
-func (m *Manager) recordGroupTerminatedEvent(ctx context.Context, repo Repository, group JobGroup) error {
-	eventFunc := m.groupEventFunc(group)
+// recordJobGroupTerminatedEvent creates or resets a job group event record so that
+// sendJobGroupTerminatedEvent will pick it up for notification.
+// Returns nil immediately if no callback is registered for the job group's status.
+func (m *Manager) recordJobGroupTerminatedEvent(ctx context.Context, repo Repository, group JobGroup) error {
+	eventFunc := m.jobGroupEventFunc(group)
 	if eventFunc == nil {
-		slogctx.Debug(ctx, "no group event function set, skipping event recording")
+		slogctx.Debug(ctx, "no job group event function set, skipping event recording")
 		return nil
 	}
 	event, ok, err := repo.getJobGroupEvent(ctx, ListJobGroupEventQuery{ID: group.ID})
@@ -45,9 +45,9 @@ func (m *Manager) recordGroupTerminatedEvent(ctx context.Context, repo Repositor
 	return nil
 }
 
-// sendGroupTerminatedEvent is a background worker that picks up unnotified group events,
+// sendJobGroupTerminatedEvent is a background worker that picks up unnotified job group events,
 // invokes the registered callback, and marks them as notified on success.
-func (m *Manager) sendGroupTerminatedEvent(ctx context.Context) error {
+func (m *Manager) sendJobGroupTerminatedEvent(ctx context.Context) error {
 	return m.repo.transaction(ctx, func(ctx context.Context, repo Repository) error {
 		isNotified := false
 		event, ok, err := repo.getJobGroupEvent(ctx, ListJobGroupEventQuery{
@@ -71,34 +71,34 @@ func (m *Manager) sendGroupTerminatedEvent(ctx context.Context) error {
 			return fmt.Errorf("job group %s: %w", event.ID, ErrJobGroupNotFound)
 		}
 
-		ctx = slogctx.With(ctx, "groupId", group.ID, "status", group.Status)
+		ctx = slogctx.With(ctx, "jobGroupId", group.ID, "status", group.Status)
 
-		eventFunc := m.groupEventFunc(group)
+		eventFunc := m.jobGroupEventFunc(group)
 		if eventFunc == nil {
-			slogctx.Debug(ctx, "no group event function set for group status")
+			slogctx.Debug(ctx, "no job group event function set for job group status")
 			return repo.updateJobGroupEvent(ctx, event)
 		}
 
 		err = eventFunc(ctx, group)
 		if err != nil {
-			slogctx.Error(ctx, "failed to send group event", slog.Any("error", err))
+			slogctx.Error(ctx, "failed to send job group event", slog.Any("error", err))
 		}
 		event.IsNotified = err == nil
 		return repo.updateJobGroupEvent(ctx, event)
 	})
 }
 
-// groupEventFunc selects the callback for the group's terminal status, or nil if none is registered.
+// jobGroupEventFunc selects the callback for the job group's terminal status, or nil if none is registered.
 //
 //nolint:exhaustive
-func (m *Manager) groupEventFunc(group JobGroup) GroupTerminatedEventFunc {
+func (m *Manager) jobGroupEventFunc(group JobGroup) JobGroupTerminatedEventFunc {
 	switch group.Status {
-	case GroupStatusDone:
-		return m.groupDoneEventFunc
-	case GroupStatusCanceled:
-		return m.groupCanceledEventFunc
-	case GroupStatusFailed:
-		return m.groupFailedEventFunc
+	case JobGroupStatusDone:
+		return m.jobGroupDoneEventFunc
+	case JobGroupStatusCanceled:
+		return m.jobGroupCanceledEventFunc
+	case JobGroupStatusFailed:
+		return m.jobGroupFailedEventFunc
 	default:
 		return nil
 	}
