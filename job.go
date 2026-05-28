@@ -22,10 +22,10 @@ const (
 
 // Reserved label keys for job group functionality.
 const (
-	// LabelKeyGroupID is the label key for storing the parent group's UUID.
-	LabelKeyGroupID = "orbital/group-id"
-	// LabelKeyGroupOrderKey is the label key for storing the job's position within the group.
-	LabelKeyGroupOrderKey = "orbital/group-order-key"
+	// LabelKeyJobGroupID is the label key for storing the parent job group's UUID.
+	LabelKeyJobGroupID = "orbital/job-group-id"
+	// LabelKeyJobGroupOrderKey is the label key for storing the job's position within the job group.
+	LabelKeyJobGroupOrderKey = "orbital/job-group-order-key"
 )
 
 type (

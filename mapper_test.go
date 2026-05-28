@@ -418,7 +418,7 @@ func TestEncodes(t *testing.T) {
 			{
 				ID:           uID,
 				Type:         "batch-sync",
-				Status:       orbital.GroupStatusCreated,
+				Status:       orbital.JobGroupStatusCreated,
 				ErrorMessage: "",
 				Labels:       orbital.Labels{"env": "prod"},
 				CreatedAt:    unixTime,
@@ -434,7 +434,7 @@ func TestEncodes(t *testing.T) {
 				Values: map[string]any{
 					"id":            uID,
 					"type":          "batch-sync",
-					"status":        orbital.GroupStatusCreated,
+					"status":        orbital.JobGroupStatusCreated,
 					"error_message": "",
 					"created_at":    unixTime,
 					"updated_at":    unixTime,
@@ -455,7 +455,7 @@ func TestEncodes(t *testing.T) {
 			{
 				ID:           uID,
 				Type:         "batch-sync",
-				Status:       orbital.GroupStatusCreated,
+				Status:       orbital.JobGroupStatusCreated,
 				ErrorMessage: "",
 				Labels:       nil,
 				CreatedAt:    unixTime,
@@ -471,7 +471,7 @@ func TestEncodes(t *testing.T) {
 				Values: map[string]any{
 					"id":            uID,
 					"type":          "batch-sync",
-					"status":        orbital.GroupStatusCreated,
+					"status":        orbital.JobGroupStatusCreated,
 					"error_message": "",
 					"created_at":    unixTime,
 					"updated_at":    unixTime,
@@ -560,8 +560,8 @@ func TestDecodes(t *testing.T) {
 				UpdatedAt:    clock.NowUnixNano(),
 				CreatedAt:    clock.NowUnixNano(),
 				Labels: orbital.Labels{
-					"orbital/group-id":    uuid.New().String(),
-					"orbital/group-index": "0",
+					"orbital/job-group-id":        uuid.New().String(),
+					"orbital/job-group-order-key": "0",
 				},
 			}
 
@@ -828,7 +828,7 @@ func TestDecodes(t *testing.T) {
 			group1 := orbital.JobGroup{
 				ID:           uuid.New(),
 				Type:         "batch-sync",
-				Status:       orbital.GroupStatusCreated,
+				Status:       orbital.JobGroupStatusCreated,
 				ErrorMessage: "",
 				Labels:       orbital.Labels{"env": "prod"},
 				UpdatedAt:    clock.NowUnixNano(),
@@ -837,7 +837,7 @@ func TestDecodes(t *testing.T) {
 			group2 := orbital.JobGroup{
 				ID:           uuid.New(),
 				Type:         "full-sync",
-				Status:       orbital.GroupStatusFailed,
+				Status:       orbital.JobGroupStatusFailed,
 				ErrorMessage: "something went wrong",
 				Labels:       orbital.Labels{"env": "dev"},
 				UpdatedAt:    clock.NowUnixNano(),
@@ -860,7 +860,7 @@ func TestDecodes(t *testing.T) {
 			group := orbital.JobGroup{
 				ID:           uuid.New(),
 				Type:         "batch-sync",
-				Status:       orbital.GroupStatusCreated,
+				Status:       orbital.JobGroupStatusCreated,
 				ErrorMessage: "",
 				Labels:       nil,
 				UpdatedAt:    clock.NowUnixNano(),

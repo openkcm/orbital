@@ -75,10 +75,19 @@ type (
 
 	// ListJobGroupsQuery defines the parameters for querying job groups from the repository.
 	ListJobGroupsQuery struct {
-		StatusIn           []GroupStatus // Filter groups by a list of statuses.
-		Limit              int           // Maximum number of groups to return.
-		RetrievalModeQueue bool          // If true, enables queue-like retrieval mode (FOR UPDATE SKIP LOCKED).
-		OrderByUpdatedAt   bool          // If true, orders groups by updated_at in ascending order.
+		StatusIn           []JobGroupStatus // Filter job groups by a list of statuses.
+		Limit              int              // Maximum number of job groups to return.
+		RetrievalModeQueue bool             // If true, enables queue-like retrieval mode (FOR UPDATE SKIP LOCKED).
+		OrderByUpdatedAt   bool             // If true, orders job groups by updated_at in ascending order.
+	}
+
+	// ListJobGroupEventQuery defines the parameters for querying job group events from the repository.
+	ListJobGroupEventQuery struct {
+		ID                 uuid.UUID // Filter job group events by their ID.
+		IsNotified         *bool     // Filter job group events by whether they have been notified.
+		RetrievalModeQueue bool      // If true, enables queue-like retrieval mode.
+		Limit              int       // Maximum number of job group events to return.
+		OrderByUpdatedAt   bool      // If true, orders job group events by updated_at in ascending order.
 	}
 )
 
@@ -470,7 +479,7 @@ func (r *Repository) getJobGroup(ctx context.Context, id uuid.UUID) (JobGroup, b
 	return *group, true, nil
 }
 
-// getJobGroupForUpdate retrieves a job group entity by its ID and ensures that the group is locked for update.
+// getJobGroupForUpdate retrieves a job group entity by its ID and ensures that the job group is locked for update.
 func (r *Repository) getJobGroupForUpdate(ctx context.Context, id uuid.UUID) (JobGroup, bool, error) {
 	q := query.Query{
 		EntityName:    query.EntityNameJobGroups,
@@ -489,7 +498,7 @@ func (r *Repository) getJobGroupForUpdate(ctx context.Context, id uuid.UUID) (Jo
 // listOrderedGroupJobs retrieves all jobs belonging to a specific job group, sorted by their group order.
 func (r *Repository) listOrderedGroupJobs(ctx context.Context, groupID uuid.UUID) ([]Job, error) {
 	jobs, err := r.listJobs(ctx, ListJobsQuery{
-		Labels: Labels{LabelKeyGroupID: groupID.String()},
+		Labels: Labels{LabelKeyJobGroupID: groupID.String()},
 	})
 	if err != nil {
 		return nil, err
@@ -505,7 +514,7 @@ func (r *Repository) listOrderedGroupJobs(ctx context.Context, groupID uuid.UUID
 func (r *Repository) updateJobGroup(ctx context.Context, group JobGroup) error {
 	err := updateEntity(ctx, group, r)
 	if err != nil {
-		slogctx.Error(ctx, "failed to update job group", "error", err, "groupId", group.ID)
+		slogctx.Error(ctx, "failed to update job group", "error", err, "jobGroupId", group.ID)
 	}
 	return err
 }
@@ -536,4 +545,57 @@ func (r *Repository) listJobGroups(ctx context.Context, groupsQuery ListJobGroup
 	}
 
 	return listEntities[JobGroup](ctx, r, q)
+}
+
+// createJobGroupEvent creates a new job group event in the repository.
+func (r *Repository) createJobGroupEvent(ctx context.Context, event JobGroupEvent) (JobGroupEvent, error) {
+	created, err := createEntity(ctx, event, r)
+	if err != nil {
+		slogctx.Error(ctx, "failed to create job group event", "error", err)
+	}
+	return created, err
+}
+
+// getJobGroupEvent retrieves a JobGroupEvent from the repository based on the provided query.
+func (r *Repository) getJobGroupEvent(ctx context.Context, eventQuery ListJobGroupEventQuery) (JobGroupEvent, bool, error) {
+	q := query.Query{
+		EntityName:    query.EntityNameJobGroupEvent,
+		Clauses:       []query.Clause{},
+		RetrievalMode: query.RetrievalModeDefault,
+		Limit:         eventQuery.Limit,
+	}
+
+	if eventQuery.RetrievalModeQueue {
+		q.RetrievalMode = query.RetrievalModeForUpdateSkipLocked
+	}
+
+	if eventQuery.IsNotified != nil {
+		q.Clauses = append(q.Clauses, query.ClauseWithIsNotified(*eventQuery.IsNotified))
+	}
+	if eventQuery.ID != uuid.Nil {
+		q.Clauses = append(q.Clauses, query.ClauseWithID(eventQuery.ID))
+	}
+	if eventQuery.OrderByUpdatedAt {
+		q.OrderBy = append(q.OrderBy, query.OrderByUpdatedAtAscending())
+	}
+
+	event, err := getEntity[JobGroupEvent](ctx, r, q)
+	if err != nil {
+		slogctx.Error(ctx, "failed to get job group event", "error", err)
+		return JobGroupEvent{}, false, err
+	}
+	if event == nil {
+		return JobGroupEvent{}, false, nil
+	}
+
+	return *event, true, nil
+}
+
+// updateJobGroupEvent updates an existing JobGroupEvent entity in the repository.
+func (r *Repository) updateJobGroupEvent(ctx context.Context, event JobGroupEvent) error {
+	err := updateEntity(ctx, event, r)
+	if err != nil {
+		slogctx.Error(ctx, "failed to update job group event", "error", err, "eventId", event.ID)
+	}
+	return err
 }

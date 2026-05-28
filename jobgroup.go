@@ -9,13 +9,13 @@ import (
 	"github.com/google/uuid"
 )
 
-// Possible group statuses.
+// Possible job group statuses.
 const (
-	GroupStatusCreated    GroupStatus = "CREATED"
-	GroupStatusProcessing GroupStatus = "PROCESSING"
-	GroupStatusDone       GroupStatus = "DONE"
-	GroupStatusFailed     GroupStatus = "FAILED"
-	GroupStatusCanceled   GroupStatus = "CANCELED"
+	JobGroupStatusCreated    JobGroupStatus = "CREATED"
+	JobGroupStatusProcessing JobGroupStatus = "PROCESSING"
+	JobGroupStatusDone       JobGroupStatus = "DONE"
+	JobGroupStatusFailed     JobGroupStatus = "FAILED"
+	JobGroupStatusCanceled   JobGroupStatus = "CANCELED"
 )
 
 type (
@@ -26,13 +26,13 @@ type (
 		Jobs         []Job // Jobs in the group, ordered by their position
 		CreatedAt    int64
 		UpdatedAt    int64
-		Status       GroupStatus
+		Status       JobGroupStatus
 		Labels       Labels
 		ErrorMessage string
 	}
 
-	// GroupStatus represents the possible statuses of a JobGroup.
-	GroupStatus string
+	// JobGroupStatus represents the possible statuses of a JobGroup.
+	JobGroupStatus string
 )
 
 // NewJobGroup creates a new JobGroup with the provided type and jobs.
@@ -50,87 +50,92 @@ func (jg JobGroup) WithLabels(labels Labels) JobGroup {
 	return jg
 }
 
-// isCancelable reports whether the group can be canceled based on its current status.
+// isCancelable reports whether the job group can be canceled based on its current status.
 func (jg JobGroup) isCancelable() bool {
-	return jg.Status == GroupStatusCreated || jg.Status == GroupStatusProcessing
+	return jg.Status == JobGroupStatusCreated || jg.Status == JobGroupStatusProcessing
 }
 
-// sortJobsByGroupOrder sorts jobs in-place by their group order key (ascending).
+// hasTerminalState reports whether the job group has reached a terminal state.
+func (jg JobGroup) hasTerminalState() bool {
+	return jg.Status == JobGroupStatusDone || jg.Status == JobGroupStatusFailed || jg.Status == JobGroupStatusCanceled
+}
+
+// sortJobsByGroupOrder sorts jobs in-place by their job group order key (ascending).
 // Returns an error if any job has an invalid or missing order key.
 func sortJobsByGroupOrder(jobs []Job) error {
 	for _, job := range jobs {
-		if _, err := strconv.Atoi(job.Labels[LabelKeyGroupOrderKey]); err != nil {
-			return fmt.Errorf("job %s has invalid or missing group order key: %w", job.ID, err)
+		if _, err := strconv.Atoi(job.Labels[LabelKeyJobGroupOrderKey]); err != nil {
+			return fmt.Errorf("job %s has invalid or missing job group order key: %w", job.ID, err)
 		}
 	}
 
 	sort.Slice(jobs, func(i, j int) bool {
-		orderI, _ := strconv.Atoi(jobs[i].Labels[LabelKeyGroupOrderKey])
-		orderJ, _ := strconv.Atoi(jobs[j].Labels[LabelKeyGroupOrderKey])
+		orderI, _ := strconv.Atoi(jobs[i].Labels[LabelKeyJobGroupOrderKey])
+		orderJ, _ := strconv.Atoi(jobs[j].Labels[LabelKeyJobGroupOrderKey])
 		return orderI < orderJ
 	})
 
 	return nil
 }
 
-// groupResult represents the outcome of evaluating the jobs in a group.
-// Each implementation knows how to apply itself to transition the group state.
-type groupResult interface {
+// jobGroupResult represents the outcome of evaluating the jobs in a job group.
+// Each implementation knows how to apply itself to transition the job group state.
+type jobGroupResult interface {
 	apply(ctx context.Context, repo Repository, group *JobGroup) error
 }
 
-type groupWaitResult struct{}
+type jobGroupWaitResult struct{}
 
-func (groupWaitResult) apply(ctx context.Context, repo Repository, group *JobGroup) error {
+func (jobGroupWaitResult) apply(ctx context.Context, repo Repository, group *JobGroup) error {
 	return repo.updateJobGroup(ctx, *group)
 }
 
-type groupCompletedResult struct{}
+type jobGroupCompletedResult struct{}
 
-func (groupCompletedResult) apply(ctx context.Context, repo Repository, group *JobGroup) error {
-	group.Status = GroupStatusDone
+func (jobGroupCompletedResult) apply(ctx context.Context, repo Repository, group *JobGroup) error {
+	group.Status = JobGroupStatusDone
 	return repo.updateJobGroup(ctx, *group)
 }
 
-type groupFailedResult struct {
+type jobGroupFailedResult struct {
 	reason string
 }
 
-func (r groupFailedResult) apply(ctx context.Context, repo Repository, group *JobGroup) error {
-	group.Status = GroupStatusFailed
+func (r jobGroupFailedResult) apply(ctx context.Context, repo Repository, group *JobGroup) error {
+	group.Status = JobGroupStatusFailed
 	group.ErrorMessage = r.reason
 	return repo.updateJobGroup(ctx, *group)
 }
 
-type groupPromoteResult struct {
+type jobGroupPromoteResult struct {
 	job *Job
 }
 
-func (r groupPromoteResult) apply(ctx context.Context, repo Repository, group *JobGroup) error {
+func (r jobGroupPromoteResult) apply(ctx context.Context, repo Repository, group *JobGroup) error {
 	r.job.Status = JobStatusCreated
 	if err := repo.updateJob(ctx, *r.job); err != nil {
 		return err
 	}
-	group.Status = GroupStatusProcessing
+	group.Status = JobGroupStatusProcessing
 	return repo.updateJobGroup(ctx, *group)
 }
 
-// evaluateJobs inspects the jobs in order and returns a groupResult
-// representing the next action for the group's scheduling lifecycle.
-func evaluateJobs(jobs []Job) groupResult {
+// evaluateJobs inspects the jobs in order and returns a jobGroupResult
+// representing the next action for the job group's scheduling lifecycle.
+func evaluateJobs(jobs []Job) jobGroupResult {
 	for i := range jobs {
 		switch {
 		case jobs[i].Status == JobStatusDone:
 			continue
 		case isUnsuccessful(jobs[i].Status):
-			return groupFailedResult{reason: fmt.Sprintf("job %s failed or is canceled", jobs[i].ID)}
+			return jobGroupFailedResult{reason: fmt.Sprintf("job %s failed or is canceled", jobs[i].ID)}
 		case jobs[i].Status == JobStatusScheduled:
-			return groupPromoteResult{job: &jobs[i]}
+			return jobGroupPromoteResult{job: &jobs[i]}
 		default:
-			return groupWaitResult{}
+			return jobGroupWaitResult{}
 		}
 	}
-	return groupCompletedResult{}
+	return jobGroupCompletedResult{}
 }
 
 func isUnsuccessful(status JobStatus) bool {

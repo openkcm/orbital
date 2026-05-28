@@ -68,6 +68,7 @@ func clearTables(t *testing.T, db *stdsql.DB) {
 	assert.NoError(t, clearJobCursorTable(ctx, db))
 	assert.NoError(t, clearJobEventTable(ctx, db))
 	assert.NoError(t, clearJobGroupsTable(ctx, db))
+	assert.NoError(t, clearJobGroupEventsTable(ctx, db))
 }
 
 func clearJobTable(ctx context.Context, db *stdsql.DB) error {
@@ -92,6 +93,11 @@ func clearJobEventTable(ctx context.Context, db *stdsql.DB) error {
 
 func clearJobGroupsTable(ctx context.Context, db *stdsql.DB) error {
 	_, err := db.ExecContext(ctx, "DELETE FROM job_groups")
+	return err
+}
+
+func clearJobGroupEventsTable(ctx context.Context, db *stdsql.DB) error {
+	_, err := db.ExecContext(ctx, "DELETE FROM job_group_events")
 	return err
 }
 
@@ -121,6 +127,12 @@ func mockTaskResolveFunc() orbital.TaskResolveFunc {
 
 func mockTerminatedFunc() orbital.JobTerminatedEventFunc {
 	return func(_ context.Context, _ orbital.Job) error {
+		return nil
+	}
+}
+
+func mockJobGroupTerminatedFunc() orbital.JobGroupTerminatedEventFunc {
+	return func(_ context.Context, _ orbital.JobGroup) error {
 		return nil
 	}
 }

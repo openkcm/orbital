@@ -24,15 +24,17 @@ const (
 	EntityNameJobCursor                       EntityName = "job_cursor"
 	EntityNameJobEvent                        EntityName = "job_event"
 	EntityNameJobGroups                       EntityName = "job_groups"
+	EntityNameJobGroupEvent                   EntityName = "job_group_events"
 )
 
 // ValidEntityNames contains all valid entity names.
 var ValidEntityNames = map[EntityName]struct{}{
-	EntityNameJobs:      {},
-	EntityNameTasks:     {},
-	EntityNameJobCursor: {},
-	EntityNameJobEvent:  {},
-	EntityNameJobGroups: {},
+	EntityNameJobs:          {},
+	EntityNameTasks:         {},
+	EntityNameJobCursor:     {},
+	EntityNameJobEvent:      {},
+	EntityNameJobGroups:     {},
+	EntityNameJobGroupEvent: {},
 }
 
 type RetrievalMode int
