@@ -68,7 +68,9 @@ func testJobGroupCompleteSequentially(ctx context.Context, t *testing.T, store *
 
 		client, err := embedded.NewClient(h)
 		require.NoError(t, err)
-		t.Cleanup(func() { client.Close(ctx) })
+		t.Cleanup(func() {
+			assert.NoError(t, client.Close(ctx))
+		})
 
 		targetManagers[target] = orbital.TargetManager{Client: client}
 		jobs[i] = orbital.NewJob("test-type", requireEncode(t, jobData{Target: target}))
@@ -91,7 +93,9 @@ func testJobGroupCompleteSequentially(ctx context.Context, t *testing.T, store *
 	withFastIntervals(manager)
 
 	require.NoError(t, manager.Start(ctx))
-	t.Cleanup(func() { manager.Stop(ctx) })
+	t.Cleanup(func() {
+		assert.NoError(t, manager.Stop(ctx))
+	})
 
 	group, err := manager.PrepareJobGroup(ctx, orbital.JobGroup{
 		Type: "sequential-job-group",
@@ -144,7 +148,9 @@ func testJobGroupFailAndStopPromotion(ctx context.Context, t *testing.T, store *
 
 		client, err := embedded.NewClient(h)
 		require.NoError(t, err)
-		t.Cleanup(func() { client.Close(ctx) })
+		t.Cleanup(func() {
+			assert.NoError(t, client.Close(ctx))
+		})
 
 		targetManagers[target] = orbital.TargetManager{Client: client}
 		jobs[i] = orbital.NewJob("test-type", requireEncode(t, jobData{Target: target}))
@@ -167,7 +173,9 @@ func testJobGroupFailAndStopPromotion(ctx context.Context, t *testing.T, store *
 	withFastIntervals(manager)
 
 	require.NoError(t, manager.Start(ctx))
-	t.Cleanup(func() { manager.Stop(ctx) })
+	t.Cleanup(func() {
+		assert.NoError(t, manager.Stop(ctx))
+	})
 
 	group, err := manager.PrepareJobGroup(ctx, orbital.JobGroup{
 		Type: "fail-job-group",
@@ -218,7 +226,9 @@ func testJobGroupCancelAndStopPromotion(ctx context.Context, t *testing.T, store
 
 		client, err := embedded.NewClient(h)
 		require.NoError(t, err)
-		t.Cleanup(func() { client.Close(ctx) })
+		t.Cleanup(func() {
+			assert.NoError(t, client.Close(ctx))
+		})
 
 		targetManagers[target] = orbital.TargetManager{Client: client}
 		jobs[i] = orbital.NewJob("test-type", requireEncode(t, jobData{Target: target}))
@@ -241,7 +251,9 @@ func testJobGroupCancelAndStopPromotion(ctx context.Context, t *testing.T, store
 	withFastIntervals(manager)
 
 	require.NoError(t, manager.Start(ctx))
-	t.Cleanup(func() { manager.Stop(ctx) })
+	t.Cleanup(func() {
+		assert.NoError(t, manager.Stop(ctx))
+	})
 
 	group, err := manager.PrepareJobGroup(ctx, orbital.JobGroup{
 		Type: "cancel-job-group",

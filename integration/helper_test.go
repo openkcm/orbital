@@ -305,6 +305,7 @@ func setupPostgres(ctx context.Context, t *testing.T) *postgresContainer {
 		postgres.BasicWaitStrategies(),
 	)
 	require.NoError(t, err)
+	//nolint:contextcheck
 	t.Cleanup(func() {
 		assert.NoError(t, pgContainer.Terminate(context.Background()))
 	})
