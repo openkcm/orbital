@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/modules/rabbitmq"
@@ -288,4 +291,66 @@ func createTestJob(ctx context.Context, t *testing.T, manager *orbital.Manager, 
 
 	t.Logf("Created job %s with type %s", createdJob.ID, jobType)
 	return createdJob, nil
+}
+
+// setupPostgres starts a Postgres container and returns its connection details.
+// The container is terminated when the test completes.
+func setupPostgres(ctx context.Context, t *testing.T) *postgresContainer {
+	t.Helper()
+
+	pgContainer, err := postgres.Run(ctx, "postgres:17-alpine",
+		postgres.WithDatabase("orbital"),
+		postgres.WithUsername("postgres"),
+		postgres.WithPassword("postgres"),
+		postgres.BasicWaitStrategies(),
+	)
+	require.NoError(t, err)
+	//nolint:contextcheck
+	t.Cleanup(func() {
+		assert.NoError(t, pgContainer.Terminate(context.Background()))
+	})
+
+	pgHost, err := pgContainer.Host(ctx)
+	require.NoError(t, err)
+
+	pgPort, err := pgContainer.MappedPort(ctx, "5432")
+	require.NoError(t, err)
+
+	dsn := fmt.Sprintf("host=%s port=%s user=postgres password=postgres dbname=orbital sslmode=disable",
+		pgHost, pgPort.Port())
+	db, err := stdsql.Open("postgres", dsn)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		assert.NoError(t, db.Close())
+	})
+
+	return &postgresContainer{
+		container: pgContainer,
+		host:      pgHost,
+		port:      pgPort.Port(),
+		db:        db,
+	}
+}
+
+// createStore creates a new isolated database on the given Postgres container
+// and returns a sql.SQL store connected to it.
+func createStore(ctx context.Context, t *testing.T, pg *postgresContainer) *sql.SQL {
+	t.Helper()
+
+	name := "test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	_, err := pg.db.ExecContext(ctx, "CREATE DATABASE "+name)
+	require.NoError(t, err)
+
+	dsn := fmt.Sprintf("host=%s port=%s user=postgres password=postgres dbname=%s sslmode=disable",
+		pg.host, pg.port, name)
+	db, err := stdsql.Open("postgres", dsn)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		assert.NoError(t, db.Close())
+	})
+
+	store, err := sql.New(ctx, db)
+	require.NoError(t, err)
+
+	return store
 }

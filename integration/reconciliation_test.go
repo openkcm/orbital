@@ -3,7 +3,6 @@ package integration_test
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,8 +10,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	stdsql "database/sql"
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/store/sql"
@@ -48,36 +45,12 @@ func TestReconciliationFlows(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				t.Parallel()
 
-				dbName := strings.ReplaceAll(tt.name, " ", "_")
-				store, db := createStore(ctx, t, env, dbName)
-				t.Cleanup(func() {
-					err := db.Close()
-					assert.NoError(t, err, "failed to close test database connection")
-				})
+				store := createStore(ctx, t, &env.postgres)
 
 				tt.test(ctx, t, env, store)
 			})
 		}
 	})
-}
-
-// createStore creates a new test database and returns the store and database connection.
-func createStore(ctx context.Context, t *testing.T, env *testEnvironment, name string) (*sql.SQL, *stdsql.DB) {
-	t.Helper()
-
-	_, err := env.postgres.db.ExecContext(ctx, "CREATE DATABASE "+name)
-	assert.NoError(t, err, "failed to create test database")
-
-	postgresURL := fmt.Sprintf("host=%s port=%s user=postgres password=postgres dbname=%s sslmode=disable",
-		env.postgres.host, env.postgres.port, name)
-
-	db, err := stdsql.Open("postgres", postgresURL)
-	assert.NoError(t, err, "failed to connect to test database")
-
-	store, err := sql.New(ctx, db)
-	assert.NoError(t, err, "failed to create store for test")
-
-	return store, db
 }
 
 // testReconcile tests the basic flow: create job → create 1 task → job processing → job done.

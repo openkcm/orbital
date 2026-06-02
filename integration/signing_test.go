@@ -7,7 +7,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -340,10 +339,7 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, initiatorHand
 
 	ctx := t.Context()
 
-	store, db := createStore(ctx, t, env, fmt.Sprintf("orbital_%d", time.Now().UnixNano()))
-	t.Cleanup(func() {
-		db.Close()
-	})
+	store := createStore(ctx, t, &env.postgres)
 
 	tasksQueue := "tasks-minimal-" + uuid.NewString()
 	responsesQueue := "responses-minimal-" + uuid.NewString()
