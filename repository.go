@@ -258,23 +258,20 @@ func (r *Repository) listTasks(ctx context.Context, tasksQuery ListTasksQuery) (
 		q.Clauses = append(q.Clauses, query.ClauseWithJobID(tasksQuery.JobID))
 	}
 
-	now := clock.NowUnixNano()
 	if tasksQuery.CreatedAt != 0 {
 		q.Clauses = append(q.Clauses, query.ClauseWithCreatedBefore(tasksQuery.CreatedAt))
 	}
-	q.Clauses = append(q.Clauses, query.ClauseWithCreatedBefore(now))
 
 	if tasksQuery.UpdatedAt != 0 {
 		q.Clauses = append(q.Clauses, query.ClauseWithUpdatedBefore(tasksQuery.UpdatedAt))
 	}
-	q.Clauses = append(q.Clauses, query.ClauseWithUpdatedBefore(now))
 
 	if tasksQuery.Limit > 0 {
 		q.Limit = tasksQuery.Limit
 	}
 
 	if tasksQuery.IsReconcileReady {
-		q.Clauses = append(q.Clauses, query.ClauseWithReadyToBeSent(now))
+		q.Clauses = append(q.Clauses, query.ClauseWithReadyToBeSent(clock.NowUnixNano()))
 	}
 
 	q.RetrievalMode = query.RetrievalModeDefault
