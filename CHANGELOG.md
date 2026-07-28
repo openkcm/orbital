@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.6.0](https://github.com/openkcm/orbital/compare/v0.5.1...v0.6.0) (2026-07-28)
+
+
+### Features
+
+* add job group scheduler ([b38bdc4](https://github.com/openkcm/orbital/commit/b38bdc42d86e60e8a85352ec53980c8e2cf1bbde)), closes [#176](https://github.com/openkcm/orbital/issues/176)
+* add labels to job ([0cf7a39](https://github.com/openkcm/orbital/commit/0cf7a39429497566bf43b2af6c27cbffb7b0f4d6)), closes [#164](https://github.com/openkcm/orbital/issues/164)
+* added grpc client ([#168](https://github.com/openkcm/orbital/issues/168)) ([e5d0c57](https://github.com/openkcm/orbital/commit/e5d0c5715bba63a06d9d254958cde66bff406f4e))
+* added sync runner and refactored operator creation ([#171](https://github.com/openkcm/orbital/issues/171)) ([51fcc92](https://github.com/openkcm/orbital/commit/51fcc929c929ac54ae12187dacaf2014a75b4c47))
+* implement group terminated events for JobGroup lifecycle ([605db17](https://github.com/openkcm/orbital/commit/605db17c1c482f850e4fbc1a08fb6b6545ef6eda)), closes [#178](https://github.com/openkcm/orbital/issues/178)
+* introduce job group structure ([6586d43](https://github.com/openkcm/orbital/commit/6586d43711c34b1d2b4063adab679ece758fa21c)), closes [#163](https://github.com/openkcm/orbital/issues/163)
+* **manager:** add CancelJobGroup to cancel a job group ([03213e8](https://github.com/openkcm/orbital/commit/03213e886a6be5ebfd8564cc66e28e400c011375)), closes [#177](https://github.com/openkcm/orbital/issues/177)
+* prepare and get job groups ([506ef8d](https://github.com/openkcm/orbital/commit/506ef8d150466e039b4da8fc9c28c63639234c3c)), closes [#167](https://github.com/openkcm/orbital/issues/167)
+* refactored operator to have a runner interface ([#169](https://github.com/openkcm/orbital/issues/169)) ([6d28174](https://github.com/openkcm/orbital/commit/6d28174f006bb31ae82cebc54a3e879680c7e0e7))
+
+
+### Bug Fixes
+
+* add job group integration tests ([b948d37](https://github.com/openkcm/orbital/commit/b948d37c213fe1bd27327c573a4c08c9d52ca272)), closes [#179](https://github.com/openkcm/orbital/issues/179)
+* **deps:** bump actions/setup-go from 6.3.0 to 6.4.0 in the actions-group group across 1 directory ([#162](https://github.com/openkcm/orbital/issues/162)) ([2f653be](https://github.com/openkcm/orbital/commit/2f653bea06637eb5cbc2ab2e8adfd8f1ab6791dc))
+* **deps:** bump the gomod-group group across 1 directory with 6 updates ([#159](https://github.com/openkcm/orbital/issues/159)) ([09e0ec0](https://github.com/openkcm/orbital/commit/09e0ec069615855aebaee59bb491b62d3c530294))
+* remove implicit time-based filters from listTasks to prevent clock skew issues  ([13e4804](https://github.com/openkcm/orbital/commit/13e4804ac3d53a6ac7a79429d7bcef136533f87a))
+* **test:** pin rabbitmq image version ([170528a](https://github.com/openkcm/orbital/commit/170528ac942a70d1e55b379201ca7284196932a4)), closes [#173](https://github.com/openkcm/orbital/issues/173)
+
 ## [0.5.1](https://github.com/openkcm/orbital/compare/v0.5.0...v0.5.1) (2026-03-20)
 
 
