@@ -28,9 +28,13 @@ func (l Labels) Validate() error {
 	return nil
 }
 
-// ToJSON converts Labels to JSON bytes for storage.
-func (l Labels) ToJSON() ([]byte, error) {
-	return json.Marshal(l)
+// ToJSONString converts Labels to a JSON string for storage.
+func (l Labels) ToJSONString() (string, error) {
+	b, err := json.Marshal(l)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // mergeLabels creates a new Labels map by merging multiple label maps.
