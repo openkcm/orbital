@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/openkcm/orbital/compare/v0.6.0...v0.6.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* convert labels into string before storing as JSON ([#193](https://github.com/openkcm/orbital/issues/193)) ([488f924](https://github.com/openkcm/orbital/commit/488f924b6e566c0e22d32b2c21e5661f00bddc10))
+
 ## [0.6.0](https://github.com/openkcm/orbital/compare/v0.5.1...v0.6.0) (2026-07-28)
 
 
