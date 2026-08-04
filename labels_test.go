@@ -265,11 +265,11 @@ func TestLabels_ToJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// when
-			result, err := tt.labels.ToJSON()
+			result, err := tt.labels.ToJSONString()
 
 			// then
 			assert.NoError(t, err)
-			assert.JSONEq(t, tt.expected, string(result))
+			assert.JSONEq(t, tt.expected, result)
 		})
 	}
 }
