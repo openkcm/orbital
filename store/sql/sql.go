@@ -83,6 +83,20 @@ func New(ctx context.Context, db *sql.DB) (*SQL, error) {
 			updated_at BIGINT NOT NULL,
 			created_at BIGINT NOT NULL
         );
+		-- Remove orphaned job_event rows whose jobs row no longer exists, then
+		-- enforce the relationship so the database cascades deletes and orphans
+		-- can no longer accumulate.
+		DELETE FROM job_event WHERE id NOT IN (SELECT id FROM jobs);
+		DO $$
+		BEGIN
+			IF NOT EXISTS (
+				SELECT 1 FROM pg_constraint WHERE conname = 'fk_job_event_job'
+			) THEN
+				ALTER TABLE job_event
+					ADD CONSTRAINT fk_job_event_job
+					FOREIGN KEY (id) REFERENCES jobs(id) ON DELETE CASCADE;
+			END IF;
+		END $$;
 		CREATE TABLE IF NOT EXISTS job_groups(
 			id UUID PRIMARY KEY,
 			type VARCHAR(100) NOT NULL,

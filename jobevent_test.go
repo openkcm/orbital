@@ -157,8 +157,12 @@ func TestRecordJobEvent(t *testing.T) {
 				)
 				jobID := uuid.New()
 
+				// A job_event can only exist for a real job, so create the job first.
+				_, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{ID: jobID, Type: "type", Status: tt.jobStatus})
+				assert.NoError(t, err)
+
 				// when
-				err := orbital.RecordJobTerminatedEvent(subj)(ctx, *repo, orbital.Job{ID: jobID, Status: tt.jobStatus})
+				err = orbital.RecordJobTerminatedEvent(subj)(ctx, *repo, orbital.Job{ID: jobID, Status: tt.jobStatus})
 				assert.NoError(t, err)
 
 				// then
@@ -221,8 +225,12 @@ func TestRecordJobEvent(t *testing.T) {
 				)
 				jobID := uuid.New()
 
+				// A job_event can only exist for a real job, so create the job first.
+				_, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{ID: jobID, Type: "type", Status: tt.jobStatus})
+				assert.NoError(t, err)
+
 				// create a job event with isNotified = true
-				_, err := orbital.CreateRepoJobEvent(repo)(ctx, orbital.JobEvent{ID: jobID, IsNotified: true})
+				_, err = orbital.CreateRepoJobEvent(repo)(ctx, orbital.JobEvent{ID: jobID, IsNotified: true})
 				assert.NoError(t, err)
 
 				// when
@@ -275,21 +283,30 @@ func TestSendJobEvent(t *testing.T) {
 		assert.Equal(t, 0, jobTerminationCalled)
 	})
 
-	t.Run("should return error if there are no jobs for the jobevent", func(t *testing.T) {
+	t.Run("should mark jobevent as notified if there are no jobs for the jobevent", func(t *testing.T) {
 		// given
 		ctx := t.Context()
 		db, store := createSQLStore(t)
 		defer clearTables(t, db)
 		repo := orbital.NewRepository(store)
-		_, err := orbital.CreateRepoJobEvent(repo)(ctx, orbital.JobEvent{IsNotified: false})
+
+		// Temporarily drop fk constraint so that we can create an orphaned job_event.
+		_, err := db.ExecContext(ctx, "ALTER TABLE job_event DROP CONSTRAINT fk_job_event_job")
 		assert.NoError(t, err)
+		createdEvent, err := orbital.CreateRepoJobEvent(repo)(ctx, orbital.JobEvent{IsNotified: false})
+		assert.NoError(t, err)
+
 		subj, _ := orbital.NewManager(repo, mockTaskResolveFunc())
 
 		// when
 		err = orbital.SendJobTerminatedEvent(subj)(ctx)
 
 		// then
-		assert.Error(t, err)
+		assert.NoError(t, err)
+		actEvent, ok, err := orbital.GetRepoJobEvent(repo)(ctx, orbital.JobEventQuery{ID: createdEvent.ID})
+		assert.NoError(t, err)
+		assert.True(t, ok)
+		assert.True(t, actEvent.IsNotified)
 	})
 
 	t.Run("should send event if there are jobevents for the job with terminal status", func(t *testing.T) {

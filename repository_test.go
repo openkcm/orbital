@@ -1048,8 +1048,12 @@ func TestRepoCreateJobEvent(t *testing.T) {
 	defer clearTables(t, db)
 	repo := orbital.NewRepository(store)
 
+	// A job_event can only exist for a real job, so create the job first.
+	job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{Type: "type", Status: "status"})
+	assert.NoError(t, err)
+
 	jobEvent := orbital.JobEvent{
-		ID:         uuid.New(),
+		ID:         job.ID,
 		IsNotified: true,
 	}
 	createdJobEvent, err := orbital.CreateRepoJobEvent(repo)(ctx, jobEvent)
@@ -1069,7 +1073,12 @@ func TestRepoGetJobEvent(t *testing.T) {
 		defer clearTables(t, db)
 		repo := orbital.NewRepository(store)
 
+		// A job_event can only exist for a real job, so create the job first.
+		job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{Type: "type", Status: "status"})
+		assert.NoError(t, err)
+
 		createdJobEvent, err := orbital.CreateRepoJobEvent(repo)(ctx, orbital.JobEvent{
+			ID:         job.ID,
 			IsNotified: true,
 		})
 		assert.NoError(t, err)
@@ -1100,7 +1109,12 @@ func TestRepoUpdateJobEvent(t *testing.T) {
 	defer clearTables(t, db)
 	repo := orbital.NewRepository(store)
 
+	// A job_event can only exist for a real job, so create the job first.
+	job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{Type: "type", Status: "status"})
+	assert.NoError(t, err)
+
 	jobEvent, err := orbital.CreateRepoJobEvent(repo)(t.Context(), orbital.JobEvent{
+		ID:         job.ID,
 		IsNotified: false,
 	})
 	assert.NoError(t, err)
