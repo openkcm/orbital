@@ -44,7 +44,7 @@ type (
 
 		config     serverConfig
 		lis        net.Listener
-		grpcServer *grpc.Server
+		grpcServer atomic.Pointer[grpc.Server]
 		handler    orbital.TaskRequestHandler
 		ran        atomic.Bool
 		stopOnce   sync.Once
@@ -87,8 +87,9 @@ func (s *Server) Run(ctx context.Context, handler orbital.TaskRequestHandler) er
 	}
 
 	s.handler = handler
-	s.grpcServer = grpc.NewServer(s.config.grpcServerOpts...)
-	orbitalv1.RegisterTaskServiceServer(s.grpcServer, s)
+	grpcServer := grpc.NewServer(s.config.grpcServerOpts...)
+	orbitalv1.RegisterTaskServiceServer(grpcServer, s)
+	s.grpcServer.Store(grpcServer)
 
 	go func() {
 		<-ctx.Done()
@@ -96,13 +97,14 @@ func (s *Server) Run(ctx context.Context, handler orbital.TaskRequestHandler) er
 	}()
 
 	slogctx.Info(ctx, "grpc server starting", "address", s.lis.Addr().String())
-	return s.grpcServer.Serve(s.lis)
+	return grpcServer.Serve(s.lis)
 }
 
 // Close gracefully stops the gRPC server. If ctx expires before graceful
 // shutdown completes, it force-stops.
 func (s *Server) Close(ctx context.Context) error {
-	if s.grpcServer == nil {
+	grpcServer := s.grpcServer.Load()
+	if grpcServer == nil {
 		return nil
 	}
 
@@ -115,7 +117,7 @@ func (s *Server) Close(ctx context.Context) error {
 	select {
 	case <-stopped:
 	case <-ctx.Done():
-		s.grpcServer.Stop()
+		grpcServer.Stop()
 	}
 	return nil
 }
@@ -148,8 +150,8 @@ func mapProcessError(err error) error {
 
 func (s *Server) stop() {
 	s.stopOnce.Do(func() {
-		if s.grpcServer != nil {
-			s.grpcServer.GracefulStop()
+		if grpcServer := s.grpcServer.Load(); grpcServer != nil {
+			grpcServer.GracefulStop()
 		}
 	})
 }

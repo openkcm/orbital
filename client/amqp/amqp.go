@@ -327,8 +327,7 @@ func (c *Client) connect(ctx context.Context, info ConnectionInfo, opts *amqp.Co
 // retryOnConnError executes f and reconnects if a connection error occurs.
 func (c *Client) retryOnConnError(ctx context.Context, f func() error) error {
 	err := c.withRLock(f)
-	var connErr *amqp.ConnError
-	if errors.As(err, &connErr) {
+	if connErr, ok := errors.AsType[*amqp.ConnError](err); ok {
 		slogctx.Error(ctx, "AMQP connection error, attempt to reconnect", "error", connErr.Error())
 
 		err = c.connect(ctx, c.connInfo, c.connOpts)
