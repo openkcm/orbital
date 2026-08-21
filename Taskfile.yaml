@@ -5,5 +5,6 @@ includes:
     taskfile: hack/common/Taskfile_library.yaml
     flatten: true
     vars:
+      LINTER_VERSION: v2.13.1
       CODE_DIRS: '{{.ROOT_DIR}}/...'
       GENERATE_DOCS_INDEX: "false"

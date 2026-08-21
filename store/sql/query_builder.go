@@ -36,10 +36,8 @@ type selectQueryBuilder struct {
 // newSelectQueryBuilder creates a new SELECT query builder.
 func newSelectQueryBuilder() *selectQueryBuilder {
 	return &selectQueryBuilder{
-		baseQueryBuilder: baseQueryBuilder{
-			params:     []any{},
-			paramIndex: 1,
-		},
+		params:     []any{},
+		paramIndex: 1,
 	}
 }
 
@@ -198,10 +196,8 @@ type insertQueryBuilder struct {
 // newInsertQueryBuilder creates a new INSERT query builder.
 func newInsertQueryBuilder() *insertQueryBuilder {
 	return &insertQueryBuilder{
-		baseQueryBuilder: baseQueryBuilder{
-			params:     []any{},
-			paramIndex: 1,
-		},
+		params:     []any{},
+		paramIndex: 1,
 	}
 }
 
@@ -262,10 +258,8 @@ type updateQueryBuilder struct {
 // newUpdateQueryBuilder creates a new UPDATE query builder.
 func newUpdateQueryBuilder() *updateQueryBuilder {
 	return &updateQueryBuilder{
-		baseQueryBuilder: baseQueryBuilder{
-			params:     []any{},
-			paramIndex: 1,
-		},
+		params:     []any{},
+		paramIndex: 1,
 	}
 }
 
