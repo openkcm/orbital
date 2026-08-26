@@ -3,8 +3,7 @@ package orbital
 import (
 	"context"
 	"log/slog"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	slogctx "github.com/veqryn/slog-context"
 )

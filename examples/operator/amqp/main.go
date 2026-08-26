@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/client/amqp"

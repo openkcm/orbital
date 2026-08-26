@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/google/uuid"
+	"uuid"
 
 	_ "github.com/lib/pq"
 
@@ -68,7 +68,7 @@ func main() {
 
 	// Create and store a resource
 	resource := Resource{
-		ID:   uuid.NewString(),
+		ID:   uuid.New().String(),
 		Data: []byte("resource-data"),
 	}
 	resourceDB[resource.ID] = resource

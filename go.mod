@@ -4,7 +4,6 @@ go 1.27.0
 
 require (
 	github.com/Azure/go-amqp v1.7.0
-	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.12.3
 	github.com/moby/moby/api v1.55.0
 	github.com/openkcm/common-sdk v1.19.1
@@ -42,6 +41,7 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/compress v1.18.7 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect
 	github.com/magiconair/properties v1.8.10 // indirect

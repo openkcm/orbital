@@ -1,14 +1,13 @@
 package sql
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/store/query"
@@ -135,7 +134,7 @@ func (sqb *selectQueryBuilder) buildContainsCondition(clause query.Clause) strin
 
 // buildCursorCondition builds the cursor-based pagination condition.
 func (sqb *selectQueryBuilder) buildCursorCondition(cursor query.Cursor) string {
-	if cursor.Timestamp <= 0 || cursor.ID == uuid.Nil {
+	if cursor.Timestamp <= 0 || cursor.ID == uuid.Nil() {
 		return ""
 	}
 

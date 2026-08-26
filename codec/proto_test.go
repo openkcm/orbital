@@ -1,11 +1,11 @@
 package codec_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"reflect"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
 

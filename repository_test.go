@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/openkcm/orbital"
@@ -56,7 +56,7 @@ func TestRepoCreateJob(t *testing.T) {
 		}
 		createdJob, err := orbital.CreateRepoJob(repo)(ctx, job)
 		assert.NoError(t, err)
-		assert.NotEqual(t, uuid.Nil, createdJob.ID)
+		assert.NotEqual(t, uuid.Nil(), createdJob.ID)
 
 		fetchedJob, ok, err := orbital.GetRepoJob(repo)(ctx, createdJob.ID)
 		assert.NoError(t, err)
@@ -101,7 +101,7 @@ func TestRepoGetJob(t *testing.T) {
 			ErrorMessage: "error-message",
 		})
 		assert.NoError(t, err)
-		assert.NotEqual(t, uuid.Nil, createdJob.ID)
+		assert.NotEqual(t, uuid.Nil(), createdJob.ID)
 
 		fetchedJob, ok, err := orbital.GetRepoJob(repo)(ctx, createdJob.ID)
 		assert.NoError(t, err)
@@ -121,7 +121,7 @@ func TestRepoGetJob(t *testing.T) {
 		fetchedJob, ok, err := orbital.GetRepoJob(repo)(ctx, uuid.New())
 		assert.NoError(t, err)
 		assert.False(t, ok)
-		assert.Equal(t, uuid.Nil, fetchedJob.ID)
+		assert.Equal(t, uuid.Nil(), fetchedJob.ID)
 	})
 }
 
@@ -524,7 +524,7 @@ func TestRepoCreateTasks(t *testing.T) {
 
 		taskIDs, err := orbital.CreateRepoTasks(repo)(ctx, tasks)
 		assert.NoError(t, err)
-		assert.NotEqual(t, uuid.Nil, taskIDs)
+		assert.NotEqual(t, uuid.Nil(), taskIDs)
 
 		for index, taskID := range taskIDs {
 			fetchedTask, ok, err := orbital.GetRepoTask(repo)(t.Context(), taskID)
@@ -552,7 +552,7 @@ func TestRepoCreateTasks(t *testing.T) {
 			ErrorMessage: errorMessage,
 		}})
 		assert.NoError(t, err)
-		assert.NotEqual(t, uuid.Nil, taskIDs)
+		assert.NotEqual(t, uuid.Nil(), taskIDs)
 
 		fetchedTask, ok, err := orbital.GetRepoTask(repo)(t.Context(), taskIDs[0])
 		assert.NoError(t, err)
@@ -785,7 +785,7 @@ func TestRepoGetJobCursor(t *testing.T) {
 			Cursor: "cursor",
 		})
 		assert.NoError(t, err)
-		assert.NotEqual(t, uuid.Nil, createdJobCursor.ID)
+		assert.NotEqual(t, uuid.Nil(), createdJobCursor.ID)
 
 		fetchedCursor, ok, err := orbital.GetRepoJobCursor(repo)(ctx, createdJobCursor.ID)
 		assert.NoError(t, err)
@@ -1058,7 +1058,7 @@ func TestRepoCreateJobEvent(t *testing.T) {
 	}
 	createdJobEvent, err := orbital.CreateRepoJobEvent(repo)(ctx, jobEvent)
 	assert.NoError(t, err)
-	assert.NotEqual(t, uuid.Nil, createdJobEvent.ID)
+	assert.NotEqual(t, uuid.Nil(), createdJobEvent.ID)
 
 	fetchedJobEvent, ok, err := orbital.GetRepoJobEvent(repo)(ctx, orbital.JobEventQuery{ID: jobEvent.ID})
 	assert.NoError(t, err)
@@ -1082,7 +1082,7 @@ func TestRepoGetJobEvent(t *testing.T) {
 			IsNotified: true,
 		})
 		assert.NoError(t, err)
-		assert.NotEqual(t, uuid.Nil, createdJobEvent.ID)
+		assert.NotEqual(t, uuid.Nil(), createdJobEvent.ID)
 
 		fetchedJobEvent, ok, err := orbital.GetRepoJobEvent(repo)(ctx, orbital.JobEventQuery{ID: createdJobEvent.ID})
 		assert.NoError(t, err)
@@ -1099,7 +1099,7 @@ func TestRepoGetJobEvent(t *testing.T) {
 		fetchedJobEvent, ok, err := orbital.GetRepoJobEvent(repo)(ctx, orbital.JobEventQuery{ID: uuid.New()})
 		assert.NoError(t, err)
 		assert.False(t, ok)
-		assert.Equal(t, uuid.Nil, fetchedJobEvent.ID)
+		assert.Equal(t, uuid.Nil(), fetchedJobEvent.ID)
 	})
 }
 
@@ -1145,7 +1145,7 @@ func TestRepoGetJobForUpdate(t *testing.T) {
 			ErrorMessage: "error-message",
 		})
 		assert.NoError(t, err)
-		assert.NotEqual(t, uuid.Nil, job.ID)
+		assert.NotEqual(t, uuid.Nil(), job.ID)
 
 		fetchedJob, ok, err := orbital.GetRepoJobForUpdate(repo)(ctx, job.ID)
 		assert.NoError(t, err)
@@ -1165,7 +1165,7 @@ func TestRepoGetJobForUpdate(t *testing.T) {
 		fetchedJob, ok, err := orbital.GetRepoJobForUpdate(repo)(ctx, uuid.New())
 		assert.NoError(t, err)
 		assert.False(t, ok)
-		assert.Equal(t, uuid.Nil, fetchedJob.ID)
+		assert.Equal(t, uuid.Nil(), fetchedJob.ID)
 	})
 
 	t.Run("transaction should get updated job after waiting for other transaction to finish", func(t *testing.T) {
@@ -1272,7 +1272,7 @@ func TestRepoGetTaskForUpdate(t *testing.T) {
 		fetchedTask, ok, err := orbital.GetRepoTaskForUpdate(repo)(ctx, uuid.New())
 		assert.NoError(t, err)
 		assert.False(t, ok)
-		assert.Equal(t, uuid.Nil, fetchedTask.ID)
+		assert.Equal(t, uuid.Nil(), fetchedTask.ID)
 	})
 
 	t.Run("transaction should get updated task after waiting for other transaction to finish", func(t *testing.T) {

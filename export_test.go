@@ -3,8 +3,7 @@ package orbital
 import (
 	"context"
 	"sync"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 func ConfirmJob(m *Manager) func(ctx context.Context) error {

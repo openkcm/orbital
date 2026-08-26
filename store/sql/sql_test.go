@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	stdsql "database/sql"
@@ -582,7 +582,7 @@ func TestList(t *testing.T) {
 		assert.Len(t, result.Entities, 2)
 		assert.Equal(t, expEntities[1:], result.Entities)
 		assert.Equal(t, int64(0), result.Cursor.Timestamp)
-		assert.Equal(t, uuid.Nil, result.Cursor.ID)
+		assert.Equal(t, uuid.Nil(), result.Cursor.ID)
 	})
 
 	t.Run("should return entities ordered by created_at", func(t *testing.T) {

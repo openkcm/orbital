@@ -5,7 +5,8 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"log"
@@ -155,7 +156,7 @@ func (h *Handler) executeTest(ctx context.Context, cfg Parameters) (testRunResul
 }
 
 func (h *Handler) sendTestResults(w http.ResponseWriter, r *http.Request, result testRunResult, cfg Parameters) {
-	metricsBytes, err := json.MarshalIndent(result.metrics, "", "  ")
+	metricsBytes, err := json.Marshal(result.metrics, jsontext.WithIndent("  "))
 	if err != nil {
 		http.Error(w, "Failed to marshal metrics: "+err.Error(), http.StatusInternalServerError)
 		return

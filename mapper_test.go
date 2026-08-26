@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/openkcm/orbital"
@@ -199,7 +199,7 @@ func TestInit(t *testing.T) {
 		// then
 		assert.Less(t, now, entity.CreatedAt)
 		assert.Less(t, now, entity.UpdatedAt)
-		assert.NotEqual(t, uuid.Nil, entity.ID)
+		assert.NotEqual(t, uuid.Nil(), entity.ID)
 		_, ok := entity.Values["id"]
 		assert.True(t, ok)
 		_, ok = entity.Values["created_at"]
@@ -332,7 +332,7 @@ func TestEncodes(t *testing.T) {
 					"data":                 []byte(nil),
 					"type":                 "",
 					"etag":                 "",
-					"job_id":               uuid.Nil,
+					"job_id":               uuid.Nil(),
 					"last_reconciled_at":   int64(0),
 					"reconcile_after_sec":  uint64(0),
 					"reconcile_count":      uint64(0),

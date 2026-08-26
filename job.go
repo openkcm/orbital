@@ -1,7 +1,7 @@
 package orbital
 
 import (
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // Possible job statuses.

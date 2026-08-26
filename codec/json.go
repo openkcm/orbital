@@ -1,7 +1,7 @@
 package codec
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 
 	"github.com/openkcm/orbital"
 )
@@ -11,14 +11,21 @@ type JSON struct{}
 
 var _ orbital.Codec = JSON{}
 
+// marshalOpts keeps the wire format compatible with encoding/json v1,
+// where nil maps and slices are encoded as JSON null.
+var marshalOpts = json.JoinOptions(
+	json.FormatNilMapAsNull(true),
+	json.FormatNilSliceAsNull(true),
+)
+
 // EncodeTaskRequest encodes a TaskRequest into JSON format.
 func (j JSON) EncodeTaskRequest(req orbital.TaskRequest) ([]byte, error) {
-	return json.Marshal(req)
+	return json.Marshal(req, marshalOpts)
 }
 
 // EncodeTaskResponse encodes a TaskResponse into JSON format.
 func (j JSON) EncodeTaskResponse(resp orbital.TaskResponse) ([]byte, error) {
-	return json.Marshal(resp)
+	return json.Marshal(resp, marshalOpts)
 }
 
 // DecodeTaskRequest decodes JSON data into a TaskRequest.

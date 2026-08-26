@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -337,7 +337,7 @@ func setupPostgres(ctx context.Context, t *testing.T) *postgresContainer {
 func createStore(ctx context.Context, t *testing.T, pg *postgresContainer) *sql.SQL {
 	t.Helper()
 
-	name := "test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	name := "test_" + strings.ReplaceAll(uuid.New().String(), "-", "")
 	_, err := pg.db.ExecContext(ctx, "CREATE DATABASE "+name)
 	require.NoError(t, err)
 

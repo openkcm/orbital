@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/openkcm/orbital"
@@ -249,7 +249,7 @@ func TestPrepareJob(t *testing.T) {
 
 			job, err := orbital.CreateRepoJob(repo)(ctx, tt.existJob)
 			assert.NoError(t, err)
-			assert.NotEqual(t, uuid.Nil, job.ID)
+			assert.NotEqual(t, uuid.Nil(), job.ID)
 
 			// when
 			job, err = subj.PrepareJob(ctx, tt.prepJob)
@@ -258,11 +258,11 @@ func TestPrepareJob(t *testing.T) {
 			if tt.expErr != nil {
 				assert.Error(t, err)
 				assert.ErrorIs(t, err, tt.expErr)
-				assert.Equal(t, uuid.Nil, job.ID)
+				assert.Equal(t, uuid.Nil(), job.ID)
 				return
 			}
 			assert.NoError(t, err)
-			assert.NotEqual(t, uuid.Nil, job.ID)
+			assert.NotEqual(t, uuid.Nil(), job.ID)
 
 			preparedJob, ok, err := subj.GetJob(ctx, job.ID)
 			assert.NoError(t, err)
@@ -1024,7 +1024,7 @@ func TestCreateTasks(t *testing.T) {
 				// check if eTag is created
 				eTag, err := uuid.Parse(actTasks[targetIndex].ETag)
 				assert.NoError(t, err)
-				assert.NotEqual(t, uuid.Nil, eTag)
+				assert.NotEqual(t, uuid.Nil(), eTag)
 			}
 		}
 	})
@@ -1607,12 +1607,12 @@ func TestPrepareJobGroup(t *testing.T) {
 			if tt.expErr != nil {
 				assert.Error(t, err)
 				assert.ErrorIs(t, err, tt.expErr)
-				assert.Equal(t, uuid.Nil, result.ID)
+				assert.Equal(t, uuid.Nil(), result.ID)
 				return
 			}
 
 			assert.NoError(t, err)
-			assert.NotEqual(t, uuid.Nil, result.ID)
+			assert.NotEqual(t, uuid.Nil(), result.ID)
 			assert.NotZero(t, result.CreatedAt)
 			assert.NotZero(t, result.UpdatedAt)
 			assert.Equal(t, tt.expGroup.Type, result.Type)
@@ -1621,7 +1621,7 @@ func TestPrepareJobGroup(t *testing.T) {
 
 			assert.Len(t, result.Jobs, len(tt.expGroup.Jobs))
 			for i, job := range result.Jobs {
-				assert.NotEqual(t, uuid.Nil, job.ID)
+				assert.NotEqual(t, uuid.Nil(), job.ID)
 				assert.NotZero(t, job.CreatedAt)
 				assert.NotZero(t, job.UpdatedAt)
 				assert.Equal(t, tt.expGroup.Jobs[i].Type, job.Type)
@@ -1698,7 +1698,7 @@ func TestGetJobGroup(t *testing.T) {
 		// then
 		assert.NoError(t, err)
 		assert.False(t, found)
-		assert.Equal(t, uuid.Nil, result.ID)
+		assert.Equal(t, uuid.Nil(), result.ID)
 	})
 }
 

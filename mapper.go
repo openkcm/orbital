@@ -1,11 +1,10 @@
 package orbital
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/openkcm/orbital/internal/clock"
 	"github.com/openkcm/orbital/store/query"
@@ -79,7 +78,7 @@ func Init(e *Entity) {
 		e.UpdatedAt = now
 		e.Values["updated_at"] = now
 	}
-	if e.ID == uuid.Nil {
+	if e.ID == uuid.Nil() {
 		e.ID = uuid.New()
 		e.Values["id"] = e.ID
 	}
@@ -431,10 +430,10 @@ func decodeJob[T EntityTypes](e Entity) (T, error) {
 func resolveUUID(maps map[string]any, key string) (uuid.UUID, error) {
 	keyVal, ok := maps[key]
 	if !ok {
-		return uuid.Nil, fmt.Errorf("%w: %s not found", ErrMandatoryFields, key)
+		return uuid.Nil(), fmt.Errorf("%w: %s not found", ErrMandatoryFields, key)
 	}
 	var err error
-	uID := uuid.Nil
+	uID := uuid.Nil()
 	switch val := keyVal.(type) {
 	case []uint8:
 		uID, err = uuid.Parse(string(val))

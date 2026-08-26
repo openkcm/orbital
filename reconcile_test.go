@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/openkcm/orbital"
@@ -473,7 +473,7 @@ func TestReconcile(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		beforeETag := uuid.NewString()
+		beforeETag := uuid.New().String()
 		ids, err := orbital.CreateRepoTasks(repo)(ctx, []orbital.Task{
 			{
 				JobID:  job.ID,

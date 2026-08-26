@@ -2,8 +2,8 @@ package orbital_test
 
 import (
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/openkcm/orbital"
@@ -58,7 +58,7 @@ func TestNewJobGroup(t *testing.T) {
 		group := orbital.NewJobGroup("test-job-group")
 
 		// then
-		assert.Equal(t, uuid.Nil, group.ID)
+		assert.Equal(t, uuid.Nil(), group.ID)
 		assert.Equal(t, orbital.JobGroupStatus(""), group.Status)
 		assert.Nil(t, group.Labels)
 		assert.Empty(t, group.ErrorMessage)
