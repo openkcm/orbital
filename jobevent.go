@@ -2,16 +2,12 @@ package orbital
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
 
 	slogctx "github.com/veqryn/slog-context"
 )
-
-var errJobNotFound = errors.New("job not found")
 
 // JobEvent represents an event related to a job, used for tracking and processing job state changes.
 type JobEvent struct {
@@ -73,7 +69,12 @@ func (m *Manager) sendJobTerminatedEvent(ctx context.Context) error {
 			return err
 		}
 		if !ok {
-			return fmt.Errorf("job %s: %w", event.ID, errJobNotFound)
+			// The job row is gone, so the event is undeliverable. Mark it as
+			// notified to stop the worker from retrying it indefinitely.
+			slogctx.Warn(ctx, "job not found for terminated event, marking as notified",
+				slog.String("jobId", event.ID.String()))
+			event.IsNotified = true
+			return repo.updateJobEvent(ctx, event)
 		}
 
 		eventFunc := m.eventFunc(job)

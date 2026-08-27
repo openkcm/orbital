@@ -109,13 +109,17 @@ func Encodes[T EntityTypes](entityTypes ...T) ([]Entity, error) {
 
 // Encode converts a domain object to a store entity.
 //
-//nolint:funlen
+//nolint:funlen,cyclop
 func Encode[T EntityTypes](entityType T) (Entity, error) {
 	switch obj := any(entityType).(type) {
 	case Job:
-		labelsJSON, err := obj.Labels.ToJSON()
-		if err != nil {
-			return Entity{}, err
+		var labelsVal any
+		if obj.Labels != nil {
+			s, err := obj.Labels.ToJSONString()
+			if err != nil {
+				return Entity{}, err
+			}
+			labelsVal = s
 		}
 		return Entity{
 			Name:      query.EntityNameJobs,
@@ -131,7 +135,7 @@ func Encode[T EntityTypes](entityType T) (Entity, error) {
 				"error_message": obj.ErrorMessage,
 				"updated_at":    obj.UpdatedAt,
 				"created_at":    obj.CreatedAt,
-				"labels":        labelsJSON,
+				"labels":        labelsVal,
 			},
 		}, nil
 	case Task:
@@ -186,9 +190,13 @@ func Encode[T EntityTypes](entityType T) (Entity, error) {
 			},
 		}, nil
 	case JobGroup:
-		labelsJSON, err := obj.Labels.ToJSON()
-		if err != nil {
-			return Entity{}, err
+		var labelsVal any
+		if obj.Labels != nil {
+			s, err := obj.Labels.ToJSONString()
+			if err != nil {
+				return Entity{}, err
+			}
+			labelsVal = s
 		}
 		return Entity{
 			Name:      query.EntityNameJobGroups,
@@ -202,7 +210,7 @@ func Encode[T EntityTypes](entityType T) (Entity, error) {
 				"error_message": obj.ErrorMessage,
 				"updated_at":    obj.UpdatedAt,
 				"created_at":    obj.CreatedAt,
-				"labels":        labelsJSON,
+				"labels":        labelsVal,
 			},
 		}, nil
 	case JobGroupEvent:
@@ -528,6 +536,15 @@ func resolveLabels(values map[string]any, key string) (Labels, error) {
 		}
 		var labels Labels
 		if err := json.Unmarshal(v, &labels); err != nil {
+			return nil, fmt.Errorf("%w '%s' failed to unmarshal JSON: %w", ErrInvalidEntityValue, key, err)
+		}
+		return labels, nil
+	case string:
+		if v == "" {
+			return nil, nil //nolint:nilnil
+		}
+		var labels Labels
+		if err := json.Unmarshal([]byte(v), &labels); err != nil {
 			return nil, fmt.Errorf("%w '%s' failed to unmarshal JSON: %w", ErrInvalidEntityValue, key, err)
 		}
 		return labels, nil
