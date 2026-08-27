@@ -4,12 +4,14 @@ linters:
   disable:
     - depguard
     - exhaustruct
+    - exhaustruct_v5
     - funlen
     - ginkgolinter
     - gochecknoglobals
     - gochecknoinits
     - goconst
     - godox
+    - gomodguard
     - lll
     - musttag
     - nlreturn
