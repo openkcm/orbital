@@ -297,7 +297,7 @@ func TestEncodes(t *testing.T) {
 					"status":        orbital.JobStatusCreated,
 					"type":          "baz-type",
 					"external_id":   "ext-id",
-					"labels":        []byte("null"),
+					"labels":        nil,
 				},
 			},
 		}
@@ -438,7 +438,7 @@ func TestEncodes(t *testing.T) {
 					"error_message": "",
 					"created_at":    unixTime,
 					"updated_at":    unixTime,
-					"labels":        []byte(`{"env":"prod"}`),
+					"labels":        `{"env":"prod"}`,
 				},
 			},
 		}
@@ -475,7 +475,7 @@ func TestEncodes(t *testing.T) {
 					"error_message": "",
 					"created_at":    unixTime,
 					"updated_at":    unixTime,
-					"labels":        []byte("null"),
+					"labels":        nil,
 				},
 			},
 		}

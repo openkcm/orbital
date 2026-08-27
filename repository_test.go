@@ -672,6 +672,86 @@ func TestRepoListTasks(t *testing.T) {
 	}
 }
 
+// This fixes a bug in multi-server environments where clock skew between servers caused tasks to
+// become invisible. Previously, listTasks unconditionally added updatedAt < now and createdAt < now
+// filters. If Server A (with a slightly ahead clock) updated a task, its updated_at timestamp
+// could be in the future relative to Server B. When Server B queried with its own now, the automatic
+// filter excluded those tasks. The fix removes the implicit time-based filters, applying them only
+// when explicitly provided in the query.
+func TestListTasksRaceCondition(t *testing.T) {
+	// given
+	ctx := t.Context()
+	db, store := createSQLStore(t)
+	defer clearTables(t, db)
+	repo := orbital.NewRepository(store)
+
+	t.Run("should fetch tasks regardless of their updatedAt when UpdatedAt is not provided in the query", func(t *testing.T) {
+		// given
+		jobID := uuid.New()
+		tasks := []orbital.Task{
+			{
+				JobID: jobID,
+			},
+		}
+
+		ids, err := orbital.CreateRepoTasks(repo)(ctx, tasks)
+		assert.NoError(t, err)
+		assert.Len(t, ids, 1)
+
+		// Update the updated_at timestamp of the task to a future time
+		futureTime := time.Now().Add(time.Minute).UTC().UnixNano()
+
+		// Updating this to future date to simulate a scenario where the task's updated_at is after the query's created_at filter
+		res, err := db.ExecContext(ctx, "UPDATE tasks SET updated_at = $1 WHERE id = $2", futureTime, ids[0])
+		assert.NoError(t, err)
+		rowsAffected, err := res.RowsAffected()
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), rowsAffected)
+
+		// when
+		fetchedTasks, err := orbital.ListRepoTasks(repo)(ctx, orbital.ListTasksQuery{
+			JobID: jobID,
+		})
+
+		// then
+		assert.NoError(t, err)
+		assert.Len(t, fetchedTasks, 1)
+	})
+
+	t.Run("should fetch tasks regardless of their createdAt when CreatedAt is not provided in the query", func(t *testing.T) {
+		// given
+		jobID := uuid.New()
+		tasks := []orbital.Task{
+			{
+				JobID: jobID,
+			},
+		}
+
+		ids, err := orbital.CreateRepoTasks(repo)(ctx, tasks)
+		assert.NoError(t, err)
+		assert.Len(t, ids, 1)
+
+		// Update the created_at timestamp of the task to a future time
+		futureTime := time.Now().Add(time.Minute).UTC().UnixNano()
+
+		// Updating this to future date to simulate a scenario where the task's created_at is after the query's created_at filter
+		res, err := db.ExecContext(ctx, "UPDATE tasks SET created_at = $1 WHERE id = $2", futureTime, ids[0])
+		assert.NoError(t, err)
+		rowsAffected, err := res.RowsAffected()
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), rowsAffected)
+
+		// when
+		fetchedTasks, err := orbital.ListRepoTasks(repo)(ctx, orbital.ListTasksQuery{
+			JobID: jobID,
+		})
+
+		// then
+		assert.NoError(t, err)
+		assert.Len(t, fetchedTasks, 1)
+	})
+}
+
 func TestRepoCreateJobCursor(t *testing.T) {
 	ctx := t.Context()
 	db, store := createSQLStore(t)
@@ -968,8 +1048,12 @@ func TestRepoCreateJobEvent(t *testing.T) {
 	defer clearTables(t, db)
 	repo := orbital.NewRepository(store)
 
+	// A job_event can only exist for a real job, so create the job first.
+	job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{Type: "type", Status: "status"})
+	assert.NoError(t, err)
+
 	jobEvent := orbital.JobEvent{
-		ID:         uuid.New(),
+		ID:         job.ID,
 		IsNotified: true,
 	}
 	createdJobEvent, err := orbital.CreateRepoJobEvent(repo)(ctx, jobEvent)
@@ -989,7 +1073,12 @@ func TestRepoGetJobEvent(t *testing.T) {
 		defer clearTables(t, db)
 		repo := orbital.NewRepository(store)
 
+		// A job_event can only exist for a real job, so create the job first.
+		job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{Type: "type", Status: "status"})
+		assert.NoError(t, err)
+
 		createdJobEvent, err := orbital.CreateRepoJobEvent(repo)(ctx, orbital.JobEvent{
+			ID:         job.ID,
 			IsNotified: true,
 		})
 		assert.NoError(t, err)
@@ -1020,7 +1109,12 @@ func TestRepoUpdateJobEvent(t *testing.T) {
 	defer clearTables(t, db)
 	repo := orbital.NewRepository(store)
 
+	// A job_event can only exist for a real job, so create the job first.
+	job, err := orbital.CreateRepoJob(repo)(ctx, orbital.Job{Type: "type", Status: "status"})
+	assert.NoError(t, err)
+
 	jobEvent, err := orbital.CreateRepoJobEvent(repo)(t.Context(), orbital.JobEvent{
+		ID:         job.ID,
 		IsNotified: false,
 	})
 	assert.NoError(t, err)
