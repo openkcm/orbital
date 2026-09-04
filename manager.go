@@ -9,8 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/openkcm/common-sdk/pkg/logger"
 
 	slogctx "github.com/veqryn/slog-context"
@@ -771,7 +771,7 @@ func (m *Manager) reconcile(ctx context.Context) error {
 			slogctx.Error(ctx, "failed to get job to be reconciled", "error", err)
 			return err
 		}
-		if job.ID == uuid.Nil {
+		if job.ID == uuid.Nil() {
 			slogctx.Log(ctx, logger.LevelTrace, "no jobs ready for reconciliation")
 			return nil
 		}
@@ -887,7 +887,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 
 	if task.ReconcileCount >= m.Config.MaxPendingReconciles {
 		slogctx.Debug(ctx, "max reconcile count for task exceeded")
-		task.ETag = uuid.NewString()
+		task.ETag = uuid.New().String()
 		task.Status = TaskStatusFailed
 		repo.updateTask(ctx, task) //nolint:errcheck
 		return
@@ -896,7 +896,7 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 	mgrTarget, err := m.getTargetManager(task.Target)
 	if err != nil {
 		slogctx.Error(ctx, "getting manager target", "error", err)
-		task.ETag = uuid.NewString()
+		task.ETag = uuid.New().String()
 		task.Status = TaskStatusFailed
 		task.ErrorMessage = err.Error()
 		repo.updateTask(ctx, task) //nolint:errcheck
@@ -1036,7 +1036,7 @@ func (m *Manager) processResponse(ctx context.Context, resp TaskResponse) error 
 		}
 
 		task.WorkingState = resp.WorkingState
-		task.ETag = uuid.NewString() // Generate a new ETag for the updated task
+		task.ETag = uuid.New().String() // Generate a new ETag for the updated task
 		task.Status = TaskStatus(resp.Status)
 		task.ReconcileAfterSec = resp.ReconcileAfterSec
 		task.LastReconciledAt = clock.NowUnixNano() // Update the last reconciled time to now unix to reset it.

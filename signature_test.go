@@ -6,8 +6,8 @@ import (
 	"crypto/rsa"
 	"maps"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/openkcm/common-sdk/pkg/jwtsigning"
 	"github.com/stretchr/testify/assert"
 

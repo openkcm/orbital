@@ -3,8 +3,8 @@ package codec
 import (
 	"errors"
 	"fmt"
+	"uuid"
 
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/openkcm/orbital"

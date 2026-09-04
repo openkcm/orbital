@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -279,7 +279,7 @@ func TestListenAndRespond_WorkingState(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			taskReq := orbital.TaskRequest{
 				TaskID:       uuid.New(),
-				ETag:         uuid.NewString(),
+				ETag:         uuid.New().String(),
 				Type:         tt.name,
 				WorkingState: tt.rawWorkingState,
 			}

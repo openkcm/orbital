@@ -1,7 +1,7 @@
 package orbital
 
 import (
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // Possible Task status.
@@ -64,7 +64,7 @@ func newTask(jobID uuid.UUID, info TaskInfo) Task {
 		Type:         info.Type,
 		Data:         info.Data,
 		WorkingState: make([]byte, 0),
-		ETag:         uuid.NewString(),
+		ETag:         uuid.New().String(),
 		Status:       TaskStatusCreated,
 		Target:       info.Target,
 	}

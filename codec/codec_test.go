@@ -1,7 +1,7 @@
 package codec_test
 
 import (
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/openkcm/orbital"
 )

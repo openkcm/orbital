@@ -3,8 +3,7 @@ package orbital
 import (
 	"context"
 	"maps"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // TaskRequest is the request object that will be sent to the operator.

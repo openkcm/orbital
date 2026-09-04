@@ -1,14 +1,13 @@
 package sql
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/openkcm/orbital"
 	"github.com/openkcm/orbital/store/query"
@@ -36,10 +35,8 @@ type selectQueryBuilder struct {
 // newSelectQueryBuilder creates a new SELECT query builder.
 func newSelectQueryBuilder() *selectQueryBuilder {
 	return &selectQueryBuilder{
-		baseQueryBuilder: baseQueryBuilder{
-			params:     []any{},
-			paramIndex: 1,
-		},
+		params:     []any{},
+		paramIndex: 1,
 	}
 }
 
@@ -126,7 +123,7 @@ func (sqb *selectQueryBuilder) buildContainsCondition(clause query.Clause) strin
 		return ""
 	}
 
-	jsonBytes, err := json.Marshal(labels)
+	jsonBytes, err := json.Marshal(labels, json.Deterministic(true))
 	if err != nil {
 		return ""
 	}
@@ -137,7 +134,7 @@ func (sqb *selectQueryBuilder) buildContainsCondition(clause query.Clause) strin
 
 // buildCursorCondition builds the cursor-based pagination condition.
 func (sqb *selectQueryBuilder) buildCursorCondition(cursor query.Cursor) string {
-	if cursor.Timestamp <= 0 || cursor.ID == uuid.Nil {
+	if cursor.Timestamp <= 0 || cursor.ID == uuid.Nil() {
 		return ""
 	}
 
@@ -198,10 +195,8 @@ type insertQueryBuilder struct {
 // newInsertQueryBuilder creates a new INSERT query builder.
 func newInsertQueryBuilder() *insertQueryBuilder {
 	return &insertQueryBuilder{
-		baseQueryBuilder: baseQueryBuilder{
-			params:     []any{},
-			paramIndex: 1,
-		},
+		params:     []any{},
+		paramIndex: 1,
 	}
 }
 
@@ -262,10 +257,8 @@ type updateQueryBuilder struct {
 // newUpdateQueryBuilder creates a new UPDATE query builder.
 func newUpdateQueryBuilder() *updateQueryBuilder {
 	return &updateQueryBuilder{
-		baseQueryBuilder: baseQueryBuilder{
-			params:     []any{},
-			paramIndex: 1,
-		},
+		params:     []any{},
+		paramIndex: 1,
 	}
 }
 

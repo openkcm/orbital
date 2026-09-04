@@ -1,7 +1,7 @@
 package performance
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"os"
 	"time"
 

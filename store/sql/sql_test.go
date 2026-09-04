@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
 	stdsql "database/sql"
@@ -582,7 +582,7 @@ func TestList(t *testing.T) {
 		assert.Len(t, result.Entities, 2)
 		assert.Equal(t, expEntities[1:], result.Entities)
 		assert.Equal(t, int64(0), result.Cursor.Timestamp)
-		assert.Equal(t, uuid.Nil, result.Cursor.ID)
+		assert.Equal(t, uuid.Nil(), result.Cursor.ID)
 	})
 
 	t.Run("should return entities ordered by created_at", func(t *testing.T) {
@@ -590,14 +590,14 @@ func TestList(t *testing.T) {
 		ctx := t.Context()
 		q := query.Query{
 			EntityName: query.EntityNameJobCursor,
-		}
-		q.OrderBy = []query.OrderBy{
-			{
-				Field:       "created_at",
-				IsAscending: false,
+
+			OrderBy: []query.OrderBy{
+				{
+					Field:       "created_at",
+					IsAscending: false,
+				},
 			},
-		}
-		q.Limit = 1
+			Limit: 1}
 
 		// when
 		result, err := store.List(ctx, q)
@@ -617,18 +617,18 @@ func TestList(t *testing.T) {
 		ctx := t.Context()
 		q := query.Query{
 			EntityName: query.EntityNameJobCursor,
-		}
-		q.Clauses = []query.Clause{
-			{
-				Operator: "IN",
-				Field:    "id",
-				Value: []any{
-					expEntities[0].ID.String(),
-					expEntities[1].ID.String(),
-					expEntities[2].ID.String(),
+
+			Clauses: []query.Clause{
+				{
+					Operator: "IN",
+					Field:    "id",
+					Value: []any{
+						expEntities[0].ID.String(),
+						expEntities[1].ID.String(),
+						expEntities[2].ID.String(),
+					},
 				},
-			},
-		}
+			}}
 
 		// when
 		result, err := store.List(ctx, q)

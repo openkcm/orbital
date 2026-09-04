@@ -6,14 +6,14 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
+	"encoding/json/v2"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/openkcm/common-sdk/pkg/jwtsigning"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -341,8 +341,8 @@ func execSigningReconciliation(t *testing.T, env *testEnvironment, initiatorHand
 
 	store := createStore(ctx, t, &env.postgres)
 
-	tasksQueue := "tasks-minimal-" + uuid.NewString()
-	responsesQueue := "responses-minimal-" + uuid.NewString()
+	tasksQueue := "tasks-minimal-" + uuid.New().String()
+	responsesQueue := "responses-minimal-" + uuid.New().String()
 
 	managerClient, err := createAMQPClient(ctx, env.rabbitMQ.url, tasksQueue, responsesQueue)
 	require.NoError(t, err)
@@ -622,7 +622,7 @@ func generateJWKS(t *testing.T, leafCert *x509.Certificate, intCert *x509.Certif
 		Alg:    "PS256",
 		Use:    "sign",
 		KeyOps: []string{"verify"},
-		Kid:    uuid.NewString(),
+		Kid:    uuid.New().String(),
 		X509Certs: []x509.Certificate{
 			*leafCert,
 			*intCert,

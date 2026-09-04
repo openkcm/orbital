@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // Possible job group statuses.

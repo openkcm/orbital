@@ -4,8 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	slogctx "github.com/veqryn/slog-context"
 
@@ -254,7 +253,7 @@ func (r *Repository) listTasks(ctx context.Context, tasksQuery ListTasksQuery) (
 		q.Clauses = append(q.Clauses, query.ClauseWithStatuses(statuses...))
 	}
 
-	if tasksQuery.JobID != uuid.Nil {
+	if tasksQuery.JobID != uuid.Nil() {
 		q.Clauses = append(q.Clauses, query.ClauseWithJobID(tasksQuery.JobID))
 	}
 
@@ -340,7 +339,7 @@ func (r *Repository) getJobEvent(ctx context.Context, eventQuery JobEventQuery) 
 	if eventQuery.IsNotified != nil {
 		q.Clauses = append(q.Clauses, query.ClauseWithIsNotified(*eventQuery.IsNotified))
 	}
-	if eventQuery.ID != uuid.Nil {
+	if eventQuery.ID != uuid.Nil() {
 		q.Clauses = append(q.Clauses, query.ClauseWithID(eventQuery.ID))
 	}
 	if eventQuery.OrderByUpdatedAt {
@@ -569,7 +568,7 @@ func (r *Repository) getJobGroupEvent(ctx context.Context, eventQuery ListJobGro
 	if eventQuery.IsNotified != nil {
 		q.Clauses = append(q.Clauses, query.ClauseWithIsNotified(*eventQuery.IsNotified))
 	}
-	if eventQuery.ID != uuid.Nil {
+	if eventQuery.ID != uuid.Nil() {
 		q.Clauses = append(q.Clauses, query.ClauseWithID(eventQuery.ID))
 	}
 	if eventQuery.OrderByUpdatedAt {

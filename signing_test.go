@@ -6,8 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -66,7 +66,7 @@ func TestManager_Signing(t *testing.T) {
 				expTarget := "target-1"
 				job := orbital.Job{
 					ID:         uuid.New(),
-					ExternalID: uuid.NewString(),
+					ExternalID: uuid.New().String(),
 				}
 
 				task := orbital.Task{
@@ -224,7 +224,7 @@ func TestManager_Verification(t *testing.T) {
 				taskResponseChan := make(chan orbital.TaskResponse, 1)
 				expTaskResponse := orbital.TaskResponse{
 					TaskID:     task.ID,
-					ExternalID: uuid.NewString(),
+					ExternalID: uuid.New().String(),
 					ETag:       task.ETag,
 					Status:     string(orbital.TaskStatusDone),
 					MetaData:   orbital.MetaData{"value": "signature", "type": "jwt"},

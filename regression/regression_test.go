@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -34,7 +34,7 @@ func TestNewRegression(t *testing.T) {
 			"NO OF MANAGERS", noOfManager,
 			"NO OF OPERATORS", noOfOperator,
 			"TEST TIMEOUT", testTimeout.Minutes())
-		env, err := setupEnv(ctx, t, "db"+strings.ReplaceAll(uuid.NewString(), "-", ""))
+		env, err := setupEnv(ctx, t, "db"+strings.ReplaceAll(uuid.New().String(), "-", ""))
 		require.NoError(t, err, "failed to set up test environment")
 		defer func() {
 			err := env.Cleanup(ctx)

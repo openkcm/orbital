@@ -2,8 +2,7 @@ package orbital
 
 import (
 	"context"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/openkcm/orbital/store/query"
 )

@@ -1,7 +1,7 @@
 package query
 
 import (
-	"github.com/google/uuid"
+	"uuid"
 )
 
 const (

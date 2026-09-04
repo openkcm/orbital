@@ -6,8 +6,8 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/openkcm/common-sdk/pkg/jwtsigning"
 )
 
@@ -160,7 +160,7 @@ func toCanonicalData[T TaskRequest | TaskResponse](in T) ([]byte, error) {
 	switch v := any(in).(type) {
 	case TaskRequest:
 		taskID := v.TaskID.String()
-		if v.TaskID == uuid.Nil {
+		if v.TaskID == uuid.Nil() {
 			taskID = ""
 		}
 		return concatStringToBytes(
@@ -173,7 +173,7 @@ func toCanonicalData[T TaskRequest | TaskResponse](in T) ([]byte, error) {
 		)
 	case TaskResponse:
 		taskID := v.TaskID.String()
-		if v.TaskID == uuid.Nil {
+		if v.TaskID == uuid.Nil() {
 			taskID = ""
 		}
 		return concatStringToBytes(
