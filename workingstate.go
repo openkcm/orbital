@@ -110,7 +110,9 @@ func (w *WorkingState) encode() ([]byte, error) {
 	if w.s == nil {
 		return []byte{}, nil
 	}
-	bytes, err := json.Marshal(w.s)
+	// Deterministic keeps the key order stable, matching encoding/json v1,
+	// so an unchanged working state re-encodes to identical bytes.
+	bytes, err := json.Marshal(w.s, json.Deterministic(true))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrWorkingStateInvalid, err)
 	}

@@ -29,10 +29,10 @@ func (l Labels) Validate() error {
 }
 
 // ToJSONString converts Labels to a JSON string for storage.
-// Nil labels are encoded as JSON null, matching the format already
-// persisted by encoding/json v1.
+// Nil labels are encoded as JSON null and keys are sorted, matching the
+// format already persisted by encoding/json v1.
 func (l Labels) ToJSONString() (string, error) {
-	b, err := json.Marshal(l, json.FormatNilMapAsNull(true))
+	b, err := json.Marshal(l, json.FormatNilMapAsNull(true), json.Deterministic(true))
 	if err != nil {
 		return "", err
 	}

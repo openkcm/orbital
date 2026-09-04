@@ -123,7 +123,7 @@ func (sqb *selectQueryBuilder) buildContainsCondition(clause query.Clause) strin
 		return ""
 	}
 
-	jsonBytes, err := json.Marshal(labels)
+	jsonBytes, err := json.Marshal(labels, json.Deterministic(true))
 	if err != nil {
 		return ""
 	}

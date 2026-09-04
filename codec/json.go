@@ -12,10 +12,11 @@ type JSON struct{}
 var _ orbital.Codec = JSON{}
 
 // marshalOpts keeps the wire format compatible with encoding/json v1,
-// where nil maps and slices are encoded as JSON null.
+// where nil maps and slices are encoded as JSON null and map keys are sorted.
 var marshalOpts = json.JoinOptions(
 	json.FormatNilMapAsNull(true),
 	json.FormatNilSliceAsNull(true),
+	json.Deterministic(true),
 )
 
 // EncodeTaskRequest encodes a TaskRequest into JSON format.
