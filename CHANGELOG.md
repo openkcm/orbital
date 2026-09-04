@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.2](https://github.com/openkcm/orbital/compare/v0.6.1...v0.6.2) (2026-09-04)
+
+
+### Bug Fixes
+
+* **deps:** bump actions/checkout from 6.0.2 to 7.0.1 ([#189](https://github.com/openkcm/orbital/issues/189)) ([2c39849](https://github.com/openkcm/orbital/commit/2c39849681ba38c06993ea5c5fb23a0092a346dc))
+* **deps:** bump actions/setup-go from 6.4.0 to 7.0.0 ([#190](https://github.com/openkcm/orbital/issues/190)) ([4e0ecb5](https://github.com/openkcm/orbital/commit/4e0ecb524be598599ac006bc9f980e8a12f6b7f7))
+* **deps:** bump github.com/moby/go-archive from 0.2.0 to 0.3.0 ([#199](https://github.com/openkcm/orbital/issues/199)) ([fa18d9d](https://github.com/openkcm/orbital/commit/fa18d9dd61e387cf7ac6195153ae177953707d1c))
+* **deps:** bump google.golang.org/grpc from 1.83.0 to 1.83.1 in the gomod-group group ([#203](https://github.com/openkcm/orbital/issues/203)) ([346fce3](https://github.com/openkcm/orbital/commit/346fce37b98218543922efa4c5f3759948a9315b))
+* **deps:** bump google.golang.org/protobuf from 1.36.12-0.20260120151049-f2248ac996af to 1.36.12 ([#204](https://github.com/openkcm/orbital/issues/204)) ([041e6df](https://github.com/openkcm/orbital/commit/041e6df1e286b4b06284cb73c76ff5c7dac42c83))
+* **deps:** bump the gomod-group group across 1 directory with 11 updates ([#200](https://github.com/openkcm/orbital/issues/200)) ([5a3de7d](https://github.com/openkcm/orbital/commit/5a3de7dc43b7586e51b2cf167d391c898f80541d))
+* guard from orphaned jobs ([#195](https://github.com/openkcm/orbital/issues/195)) ([4c3cd11](https://github.com/openkcm/orbital/commit/4c3cd1188e7a4c061957bff4b6e6c5991b6b359a))
+
 ## [0.6.1](https://github.com/openkcm/orbital/compare/v0.6.0...v0.6.1) (2026-08-04)
 
 
