@@ -12,6 +12,7 @@ import (
 	"uuid"
 
 	"github.com/openkcm/common-sdk/pkg/logger"
+	"go.opentelemetry.io/otel/attribute"
 
 	slogctx "github.com/veqryn/slog-context"
 
@@ -42,6 +43,7 @@ type (
 		jobGroupCanceledEventFunc JobGroupTerminatedEventFunc
 		jobGroupFailedEventFunc   JobGroupTerminatedEventFunc
 		targets                   map[string]TargetManager
+		metricsCollector          MetricCollector
 	}
 
 	// JobTerminatedEventFunc defines a callback function type for sending job events.
@@ -181,6 +183,13 @@ func WithJobConfirmFunc(f JobConfirmFunc) ManagerOptsFunc {
 func WithTargets(targets map[string]TargetManager) ManagerOptsFunc {
 	return func(m *Manager) {
 		m.targets = targets
+	}
+}
+
+// WithManagerMetrics instruments every target Initiator with the given MetricsCollector.
+func WithManagerMetrics(c MetricCollector) ManagerOptsFunc {
+	return func(m *Manager) {
+		m.metricsCollector = c
 	}
 }
 
@@ -437,7 +446,6 @@ func (m *Manager) PrepareJobGroup(ctx context.Context, group JobGroup) (JobGroup
 
 		return nil
 	})
-
 	if err != nil {
 		return JobGroup{}, err
 	}
@@ -890,6 +898,12 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 		task.ETag = uuid.New().String()
 		task.Status = TaskStatusFailed
 		repo.updateTask(ctx, task) //nolint:errcheck
+		if m.metricsCollector != nil {
+			m.metricsCollector.RecordError(ctx, "MaxReconcileExceeded",
+				attribute.String("task.type", task.Type),
+				attribute.String("task.target", task.Target),
+			)
+		}
 		return
 	}
 
@@ -900,6 +914,12 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 		task.Status = TaskStatusFailed
 		task.ErrorMessage = err.Error()
 		repo.updateTask(ctx, task) //nolint:errcheck
+		if m.metricsCollector != nil {
+			m.metricsCollector.RecordError(ctx, "TargetNotFound",
+				attribute.String("task.type", task.Type),
+				attribute.String("task.target", task.Target),
+			)
+		}
 		return
 	}
 
@@ -936,7 +956,15 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 
 	slogctx.Debug(ctx, "sending task request", slog.Any("request", req))
 
-	if err := mgrTarget.Client.SendTaskRequest(ctx, req); err != nil {
+	start := time.Now()
+	err = mgrTarget.Client.SendTaskRequest(ctx, req)
+	if m.metricsCollector != nil {
+		m.metricsCollector.RecordOperation(ctx, "SendTaskRequest", time.Since(start), err != nil,
+			attribute.String("task.type", task.Type),
+			attribute.String("task.target", task.Target),
+		)
+	}
+	if err != nil {
 		slogctx.Error(ctx, "failed to send task request", "error", err)
 		repo.updateTask(ctx, task) //nolint:errcheck
 		return
@@ -981,6 +1009,8 @@ func (m *Manager) startResponseReaders(ctx context.Context) {
 }
 
 // handleResponses continuously reads TaskResponse messages from a client.
+//
+//nolint:cyclop
 func (m *Manager) handleResponses(ctx context.Context, mgrTarget TargetManager, target string) {
 	for {
 		select {
@@ -996,6 +1026,11 @@ func (m *Manager) handleResponses(ctx context.Context, mgrTarget TargetManager, 
 			}
 			resp, err := cli.ReceiveTaskResponse(ctx)
 			if err != nil {
+				if m.metricsCollector != nil {
+					m.metricsCollector.RecordError(ctx, "ReceiveTaskResponse",
+						attribute.String("task.target", target),
+					)
+				}
 				slogctx.Error(ctx, "error receiving task response from target", "error", err, "target", target)
 				continue
 			}
