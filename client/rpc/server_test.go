@@ -260,7 +260,7 @@ func TestServer_Close(t *testing.T) {
 		cancel()
 
 		select {
-		case <-errCh:
+		case <-errCh: //nolint:errcheck
 		case <-time.After(5 * time.Second):
 			t.Fatal("server did not stop after context cancellation")
 		}

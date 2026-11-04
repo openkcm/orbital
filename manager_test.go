@@ -1396,7 +1396,7 @@ func TestManagerStop_GracefulShutdown(t *testing.T) {
 		}()
 
 		select {
-		case <-stopDone:
+		case <-stopDone: //nolint:errcheck
 			t.Fatal("Stop returned before work completed")
 		default:
 		}
