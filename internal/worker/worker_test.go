@@ -244,7 +244,7 @@ func TestStop(t *testing.T) {
 		}()
 
 		select {
-		case <-stopDone:
+		case <-stopDone: //nolint:errcheck
 			t.Fatal("Stop() returned before worker finished - it should have waited")
 		default:
 		}
