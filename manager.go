@@ -12,6 +12,7 @@ import (
 	"uuid"
 
 	"github.com/openkcm/common-sdk/pkg/logger"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 
 	slogctx "github.com/veqryn/slog-context"
@@ -956,6 +957,10 @@ func (m *Manager) handleTask(ctx context.Context, wg *sync.WaitGroup, repo Repos
 
 	slogctx.Debug(ctx, "sending task request", slog.Any("request", req))
 
+	if m.metricsCollector != nil {
+		otel.GetTextMapPropagator().Inject(ctx, metadataCarrier(req.MetaData))
+	}
+
 	start := time.Now()
 	err = mgrTarget.Client.SendTaskRequest(ctx, req)
 	if m.metricsCollector != nil {
@@ -1009,8 +1014,6 @@ func (m *Manager) startResponseReaders(ctx context.Context) {
 }
 
 // handleResponses continuously reads TaskResponse messages from a client.
-//
-//nolint:cyclop
 func (m *Manager) handleResponses(ctx context.Context, mgrTarget TargetManager, target string) {
 	for {
 		select {

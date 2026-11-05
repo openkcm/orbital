@@ -55,3 +55,22 @@ func (c *metricsCollector) RecordOperation(ctx context.Context, op string, d tim
 		c.RecordError(ctx, op, attrs...)
 	}
 }
+
+// metadataCarrier adapts MetaData to the otel TextMapCarrier interface.
+type metadataCarrier MetaData
+
+func (m metadataCarrier) Get(key string) string {
+	return m[key]
+}
+
+func (m metadataCarrier) Set(key, val string) {
+	m[key] = val
+}
+
+func (m metadataCarrier) Keys() []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}

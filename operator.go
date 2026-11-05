@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 
 	slogctx "github.com/veqryn/slog-context"
@@ -150,6 +151,10 @@ func (o *Operator) process(ctx context.Context, req TaskRequest) (TaskResponse, 
 }
 
 func (o *Operator) doProcess(ctx context.Context, req TaskRequest) (TaskResponse, error) {
+	if o.metricsCollector != nil {
+		ctx = otel.GetTextMapPropagator().Extract(ctx, metadataCarrier(req.MetaData))
+	}
+
 	logCtx := slogctx.With(ctx,
 		"externalId", req.ExternalID,
 		"taskId", req.TaskID,
