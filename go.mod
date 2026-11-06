@@ -12,8 +12,8 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/rabbitmq v0.44.0
 	github.com/veqryn/slog-context v0.9.0
-	golang.org/x/sync v0.23.0
-	google.golang.org/grpc v1.84.0
+	golang.org/x/sync v0.24.0
+	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 	solace.dev/go/messaging v1.10.1
 )
