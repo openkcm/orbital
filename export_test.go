@@ -151,3 +151,7 @@ func RecordJobGroupTerminatedEvent(m *Manager) func(ctx context.Context, repo Re
 func SendJobGroupTerminatedEvent(m *Manager) func(ctx context.Context) error {
 	return m.sendJobGroupTerminatedEvent
 }
+
+func NewMetadataCarrier(m MetaData) metadataCarrier {
+	return metadataCarrier(m)
+}
