@@ -5,6 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 
 	slogctx "github.com/veqryn/slog-context"
 )
@@ -17,8 +21,9 @@ type (
 	// Option is a function that modifies the config parameter of the Operator.
 	Option func(*config) error
 	config struct {
-		bufferSize      int
-		numberOfWorkers int
+		bufferSize       int
+		numberOfWorkers  int
+		metricsCollector MetricCollector
 	}
 
 	handlerRegistry struct {
@@ -28,10 +33,11 @@ type (
 
 	// Operator handles task requests and responses.
 	Operator struct {
-		target          TargetOperator
-		handlerRegistry handlerRegistry
-		requests        chan TaskRequest
-		numberOfWorkers int
+		target           TargetOperator
+		handlerRegistry  handlerRegistry
+		requests         chan TaskRequest
+		numberOfWorkers  int
+		metricsCollector MetricCollector
 	}
 )
 
@@ -65,10 +71,11 @@ func NewOperator(target TargetOperator, opts ...Option) (*Operator, error) {
 	}
 
 	return &Operator{
-		target:          target,
-		handlerRegistry: handlerRegistry{r: make(map[string]HandlerFunc)},
-		requests:        make(chan TaskRequest, c.bufferSize),
-		numberOfWorkers: c.numberOfWorkers,
+		target:           target,
+		handlerRegistry:  handlerRegistry{r: make(map[string]HandlerFunc)},
+		requests:         make(chan TaskRequest, c.bufferSize),
+		numberOfWorkers:  c.numberOfWorkers,
+		metricsCollector: c.metricsCollector,
 	}, nil
 }
 
@@ -96,6 +103,14 @@ func WithNumberOfWorkers(num int) Option {
 	}
 }
 
+// WithOperatorMetrics instruments the Operator with the given MetricCollector.
+func WithOperatorMetrics(collector MetricCollector) Option {
+	return func(c *config) error {
+		c.metricsCollector = collector
+		return nil
+	}
+}
+
 // RegisterHandler registers a handler for a specific task type.
 // It returns an error if the handler is nil.
 func (o *Operator) RegisterHandler(taskType string, h HandlerFunc) error {
@@ -117,7 +132,6 @@ func (o *Operator) ListenAndRespond(ctx context.Context) error {
 	case AsyncResponder:
 		o.startWorkers(ctx, r)
 		o.startListening(ctx, r)
-
 		return ctx.Err()
 	default:
 		return ErrUnsupportedResponder
@@ -125,6 +139,22 @@ func (o *Operator) ListenAndRespond(ctx context.Context) error {
 }
 
 func (o *Operator) process(ctx context.Context, req TaskRequest) (TaskResponse, error) {
+	start := time.Now()
+	resp, err := o.doProcess(ctx, req)
+	if o.metricsCollector != nil {
+		o.metricsCollector.RecordOperation(ctx, "ProcessTaskRequest", time.Since(start), err != nil,
+			attribute.String("task.type", req.Type),
+			attribute.String("task.status", resp.Status),
+		)
+	}
+	return resp, err
+}
+
+func (o *Operator) doProcess(ctx context.Context, req TaskRequest) (TaskResponse, error) {
+	if o.metricsCollector != nil {
+		ctx = otel.GetTextMapPropagator().Extract(ctx, metadataCarrier(req.MetaData))
+	}
+
 	logCtx := slogctx.With(ctx,
 		"externalId", req.ExternalID,
 		"taskId", req.TaskID,
