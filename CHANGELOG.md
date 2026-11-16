@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.0 (2026-11-16)
+
+## What's Changed
+* fix(deps): bump the gomod-group group with 4 updates by @dependabot[bot] in https://github.com/openkcm/orbital/pull/210
+* feat: metrics by @jmpTeixeira02 in https://github.com/openkcm/orbital/pull/211
+
+## New Contributors
+* @jmpTeixeira02 made their first contribution in https://github.com/openkcm/orbital/pull/211
+
+**Full Changelog**: https://github.com/openkcm/orbital/compare/v0.6.2...v0.7.0
+
 ## [0.6.2](https://github.com/openkcm/orbital/compare/v0.6.1...v0.6.2) (2026-09-04)
 
 
