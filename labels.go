@@ -11,6 +11,13 @@ import (
 // LabelPrefixReserved is the prefix reserved for internal orbital labels.
 const LabelPrefixReserved = "orbital/"
 
+// LabelTraceparent and LabelTracestate are the conventional job label keys for
+// storing W3C trace context across the async job creation → processing boundary.
+const (
+	LabelTraceparent = "traceparent"
+	LabelTracestate  = "tracestate"
+)
+
 // ErrReservedLabelPrefix is returned when a label key uses the reserved prefix.
 var ErrReservedLabelPrefix = errors.New("label key with 'orbital/' prefix is reserved for internal use")
 

@@ -23,7 +23,7 @@ type JobEvent struct {
 // and updates the event in the repository.
 // Returns an error if any repository operation fails.
 func (m *Manager) recordJobTerminatedEvent(ctx context.Context, repo Repository, job Job) error {
-	eventFunc := m.eventFunc(job)
+	eventFunc := m.eventFunc(ctx, job)
 	if eventFunc == nil {
 		return nil
 	}
@@ -76,7 +76,7 @@ func (m *Manager) sendJobTerminatedEvent(ctx context.Context) error {
 			return repo.updateJobEvent(ctx, event)
 		}
 
-		eventFunc := m.eventFunc(job)
+		eventFunc := m.eventFunc(ctx, job)
 		if eventFunc == nil {
 			return repo.updateJobEvent(ctx, event)
 		}
@@ -89,7 +89,7 @@ func (m *Manager) sendJobTerminatedEvent(ctx context.Context) error {
 // job states.
 //
 //nolint:exhaustive
-func (m *Manager) eventFunc(job Job) JobTerminatedEventFunc {
+func (m *Manager) eventFunc(ctx context.Context, job Job) JobTerminatedEventFunc {
 	switch job.Status {
 	case JobStatusDone:
 		return m.jobDoneEventFunc
@@ -98,7 +98,9 @@ func (m *Manager) eventFunc(job Job) JobTerminatedEventFunc {
 	case JobStatusFailed:
 		return m.jobFailedEventFunc
 	default:
-		slog.Debug("no job event function set for job status", slog.String("jobId", job.ID.String()), slog.String("status", string(job.Status)))
+		slogctx.Debug(ctx, "no job event function set for job status",
+			slog.String("jobId", job.ID.String()),
+			slog.String("status", string(job.Status)))
 		return nil
 	}
 }
