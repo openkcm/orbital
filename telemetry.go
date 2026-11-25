@@ -4,8 +4,11 @@ import (
 	"context"
 	"time"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const meterName = "github.com/openkcm/orbital"
@@ -73,4 +76,38 @@ func (m metadataCarrier) Keys() []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// InjectTraceContext extracts the active span's W3C traceparent and tracestate from ctx.
+// Both values are empty when no span is active. Use LabelTraceparent / LabelTracestate as
+// the job label keys when storing the returned values.
+func InjectTraceContext(ctx context.Context) (string, string) {
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+	return carrier.Get(LabelTraceparent), carrier.Get(LabelTracestate)
+}
+
+// StartLinkedSpan starts a new span whose link points to the trace identified by
+// traceparent and tracestate. When traceparent is empty or invalid no link is added.
+// The caller is responsible for ending the returned span.
+func StartLinkedSpan(ctx context.Context, name, traceparent, tracestate string) (context.Context, trace.Span) {
+	var opts []trace.SpanStartOption
+	if link, ok := extractSpanLink(traceparent, tracestate); ok {
+		opts = append(opts, trace.WithLinks(link))
+	}
+	ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, name, opts...) //nolint:spancheck // returned to caller
+	return ctx, span                                                           //nolint:spancheck // caller owns the span
+}
+
+func extractSpanLink(traceparent, tracestate string) (trace.Link, bool) {
+	if traceparent == "" {
+		return trace.Link{}, false
+	}
+	carrier := propagation.MapCarrier{LabelTraceparent: traceparent, LabelTracestate: tracestate}
+	ctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if !spanCtx.IsValid() {
+		return trace.Link{}, false
+	}
+	return trace.Link{SpanContext: spanCtx}, true
 }
